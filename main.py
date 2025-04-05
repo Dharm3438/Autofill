@@ -55,47 +55,24 @@ replacements = {
     "${NO_OF_PANEL}$": "6",
     "${PANEL_SR_NO}$": "5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757,5167516757",
     "${PANEL_COMPANY}$": "Fujiyama Power System Private Limited",
-    "${CELL_MANUFACTURER}$": "Mundra Solar Private Limited"
+    "${CELL_MANUFACTURER}$": "Mundra Solar Private Limited",
+    "${PANEL_WATT}$": "525",
+    "${CONSUMER_NO}$": "123456789",
+    "${CONSUMER_PHONE}$": "7588647905",
+    "${CONSUMER_EMAIL}$": "dharmesh@gmail.com",
+    "${SANCTIONED_CAPACITY}$": "3",
+    "${INSTALLATION_DATE}$": "01/01/2025",
+    "${INVERTER_CAPACITY}$": "5",
+    "${INVERTER_MAKE}$": "UTL",
+    "${INSTALLATION_CITY}$": "Chalisgaon",
+    "${INSTALLATION_DISTRICT}$": "Jalgaon",
+    "${CONSUMER_AADHAR}$": "1234567890",
+    "${SANCTION_NUMBER}$": "785267856725",
+    "${PANEL_GURANTEE}$": "25 Years",
+    "${INVERTER_GURANTEE}$": "21 Years"
 }
 
 fill_template("DOCS\DCR.docx", "res_DCR.docx", replacements)
-
-# # Read Excel file with the first row as headers (keys)
-# df = pd.read_excel("input_data.xlsx", header=0, dtype=str)
-# # Optional: print the keys to verify they are read correctly
-# keys = df.columns.tolist()
-# print("Excel Keys:", keys)
-
-# # Iterate over each data row to build a replacements dictionary
-# for index, row in df.iterrows():
-#     # Build dictionary: wrap each key in ${} and map to its corresponding row value
-#     replacements = {f"${{{col}}}$": row[col] for col in keys}
-#     print(replacements)
-#     # For naming the output file, use the value from the CONSUMER_NAME column
-#     # consumer_name = row["CONSUMER_NAME"].replace(" ", "_")
-#     output_filename = f"Dharmesh_DSR.docx"
-    
-#     # Call the fill_template function (assumed to be defined elsewhere)
-#     fill_template("DOCS\DCR.docx", output_filename, replacements)
-    
-#     # Debug: print the dictionary to verify its contents
-#     # print("Row dictionary:", replacements)
-
-# # for index, row in df.iterrows():
-# #     # Convert row data into a dictionary for replacements
-# #     # replacements = {col: str(row[col]) for col in df.columns}
-# #     # replacements = {f"${{{col}}}$": str(row[col]) for col in df.columns}
-# #     # replacements = {f"${{{key}}}$": str(row[key]) for key in columns}
-# #     # replacements = {f"${{{col}}}$": str(row[col]) for col in df.columns}
-# #     replacements = {f"${{{keys[i]}}}$": str(row[i]) for i in range(len(keys))}
-
-# #     print(replacements)
-# #     # Generate filename using the CONSUMER_NAME column
-# #     # consumer_name = row["#(CONSUMER_NAME)#"].replace(" ", "_")  # Replace spaces for safety
-# #     consumer_name = "INDRESH_DEVJI_POLADIYA"
-# #     output_filename = f"{consumer_name}_DSR.docx"
-
-# #     # Call the function to fill the template
-# #     fill_template("DOCS\DCR.docx", output_filename, replacements)
-
-print("Documents generated successfully!")
+fill_template("DOCS\TEMPELATE_Annexure.docx", "res_Annexure.docx", replacements)
+fill_template("DOCS\Aadhar.docx", "res_Aadhar.docx", replacements)
+fill_template("DOCS\WCR.docx", "res_WCR.docx", replacements)
