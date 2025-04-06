@@ -69,10 +69,13 @@ replacements = {
     "${CONSUMER_AADHAR}$": "1234567890",
     "${SANCTION_NUMBER}$": "785267856725",
     "${PANEL_GURANTEE}$": "25 Years",
-    "${INVERTER_GURANTEE}$": "21 Years"
+    "${INVERTER_GURANTEE}$": "21 Years",
+
+    "${DISCOM_REGISTERED_OFFICE}$": "Chalisgaon-U",
 }
 
 fill_template("DOCS\DCR.docx", "res_DCR.docx", replacements)
 fill_template("DOCS\TEMPELATE_Annexure.docx", "res_Annexure.docx", replacements)
 fill_template("DOCS\Aadhar.docx", "res_Aadhar.docx", replacements)
 fill_template("DOCS\WCR.docx", "res_WCR.docx", replacements)
+# fill_template("DOCS\Annexure-3-Net-Metering.docx", "res_Annexure.docx", replacements)
