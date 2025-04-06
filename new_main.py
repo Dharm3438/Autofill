@@ -8,12 +8,34 @@ def sanitize_filename(name):
     """Sanitize strings to be safe for filenames"""
     return re.sub(r'[\\/*?:"<>|]', "_", str(name)).strip()
 
+# def create_replacements_dict(row):
+#     """Create replacement dictionary from Excel row data"""
+#     return {
+#         f"${{{key}}}$": str(value) if pd.notna(value) else ""
+#         for key, value in row.items()
+#     }
+
 def create_replacements_dict(row):
-    """Create replacement dictionary from Excel row data"""
-    return {
-        f"${{{key}}}$": str(value) if pd.notna(value) else ""
-        for key, value in row.items()
-    }
+    """Create replacement dictionary from Excel row data with date formatting"""
+    replacements = {}
+    date_fields = {'CONSUMER_APP_DATE', 'INSTALLATION_DATE'}  # Add all date field names here
+    
+    for key, value in row.items():
+        if key in date_fields and pd.notna(value):
+            # Convert datetime to DD-MM-YYYY format
+            if hasattr(value, 'strftime'):  # Check if it's a datetime object
+                formatted_date = value.strftime('%d-%m-%Y')
+            else:
+                # Fallback for string dates
+                try:
+                    formatted_date = pd.to_datetime(value).strftime('%d-%m-%Y')
+                except:
+                    formatted_date = str(value)
+            replacements[f"${{{key}}}$"] = formatted_date
+        else:
+            replacements[f"${{{key}}}$"] = str(value) if pd.notna(value) else ""
+    
+    return replacements
 
 def process_paragraph(paragraph, replacements):
     """Process a single paragraph with replacements"""
@@ -86,7 +108,7 @@ def generate_documents():
         consumer_dir.mkdir(exist_ok=True)
         
         replacements = create_replacements_dict(row)
-        
+        print(replacements)
         # Generate all documents
         for doc_type, template_file in TEMPLATES.items():
             template_path = Path(TEMPLATE_DIR) / template_file
