@@ -3,17 +3,30 @@ import re
 import pandas as pd
 import os
 from pathlib import Path
+from docx2pdf import convert
+import os
+
+MAX_PDF_SIZE_MB = 1
 
 def sanitize_filename(name):
     """Sanitize strings to be safe for filenames"""
     return re.sub(r'[\\/*?:"<>|]', "_", str(name)).strip()
 
-# def create_replacements_dict(row):
-#     """Create replacement dictionary from Excel row data"""
-#     return {
-#         f"${{{key}}}$": str(value) if pd.notna(value) else ""
-#         for key, value in row.items()
-#     }
+def convert_to_pdf(docx_path, pdf_path, max_size_mb=10):
+    """Convert DOCX to PDF with size limit check"""
+    try:
+        # Convert to PDF
+        convert(docx_path, pdf_path)
+        
+        # Check file size
+        pdf_size = os.path.getsize(pdf_path) / (1024 * 1024)  # Size in MB
+        if pdf_size > max_size_mb:
+            print(f"Warning: PDF {pdf_path} exceeds {max_size_mb}MB ({pdf_size:.2f}MB)")
+            return False
+        return True
+    except Exception as e:
+        print(f"PDF conversion failed for {docx_path}: {str(e)}")
+        return False
 
 def create_replacements_dict(row):
     """Create replacement dictionary from Excel row data with date formatting"""
@@ -110,14 +123,34 @@ def generate_documents():
         replacements = create_replacements_dict(row)
         print(replacements)
         # Generate all documents
+        # for doc_type, template_file in TEMPLATES.items():
+        #     template_path = Path(TEMPLATE_DIR) / template_file
+        #     output_filename = f"{safe_consumer_name}_{doc_type}.docx"
+        #     output_path = consumer_dir / output_filename
+            
+        #     try:
+        #         process_template(template_path, output_path, replacements)
+        #         print(f"Generated {doc_type} for {safe_consumer_name}")
+        #     except Exception as e:
+        #         print(f"Error generating {doc_type} for {safe_consumer_name}: {str(e)}")
+
         for doc_type, template_file in TEMPLATES.items():
             template_path = Path(TEMPLATE_DIR) / template_file
-            output_filename = f"{safe_consumer_name}_{doc_type}.docx"
-            output_path = consumer_dir / output_filename
-            
+            base_filename = f"{safe_consumer_name}_{doc_type}"
+
+            # Generate DOCX
+            docx_path = consumer_dir / f"{base_filename}.docx"
             try:
-                process_template(template_path, output_path, replacements)
-                print(f"Generated {doc_type} for {safe_consumer_name}")
+                process_template(template_path, docx_path, replacements)
+                print(f"Generated DOCX {doc_type} for {safe_consumer_name}")
+
+                # Generate PDF - ADD THIS SECTION
+                pdf_path = consumer_dir / f"{base_filename}.pdf"
+                if convert_to_pdf(docx_path, pdf_path, MAX_PDF_SIZE_MB):
+                    print(f"Generated PDF {doc_type} for {safe_consumer_name}")
+                else:
+                    print(f"PDF generation failed for {doc_type} ({safe_consumer_name})")
+
             except Exception as e:
                 print(f"Error generating {doc_type} for {safe_consumer_name}: {str(e)}")
         
