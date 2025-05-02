@@ -93,12 +93,12 @@ def generate_documents():
     
     # Template files to process (key: display name, value: filename)
     TEMPLATES = {
-        "Annexure-1": "TEMPELATE_Annexure.docx",
+        "Annexure_1": "TEMPELATE_Annexure.docx",
         "Aadhar": "Aadhar.docx",
         "WCR": "WCR.docx",
-        "Annexure-3": "Annexure-3-Net-Metering.docx",
-        "NP-Agreement": "np_agreement.docx",
-        "Meter Testing Letter": "Meter Testing Letter.docx"
+        "Annexure_3": "Annexure-3-Net-Metering.docx",
+        "NP_Agreement": "np_agreement.docx",
+        "Meter_testing_letter": "Meter Testing Letter.docx"
     }
 
     # Read input data
@@ -125,9 +125,9 @@ def generate_documents():
 
         serial_numbers_string = replacements['${PANEL_SR_NO}$']
         serial_number_list = [serial_number.strip() for serial_number in serial_numbers_string.split(',')]
-        df = pd.DataFrame({'Serial No': serial_number_list})
-        excel_file_name = consumer_dir / 'panel_serial_numbers.xlsx'
-        df.to_excel(excel_file_name, index=False)
+        df = pd.DataFrame(serial_number_list)
+        excel_file_name = consumer_dir / f"{safe_consumer_name}_panel_serial_numbers.xlsx"
+        df.to_excel(excel_file_name, index=False, header=False)
         print(f"Excel file '{excel_file_name}' has been created successfully.")
 
         for doc_type, template_file in TEMPLATES.items():
