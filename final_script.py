@@ -31,7 +31,7 @@ def convert_to_pdf(docx_path, pdf_path, max_size_mb=10):
 def create_replacements_dict(row):
     """Create replacement dictionary from Excel row data with date formatting"""
     replacements = {}
-    date_fields = {'CONSUMER_APP_DATE', 'INSTALLATION_DATE'}  # Add all date field names here
+    date_fields = {'CONSUMER_APP_DATE', 'INSTALLATION_DATE', 'METER_TESTING_DATE'}  # Add all date field names here
     
     for key, value in row.items():
         if key in date_fields and pd.notna(value):
@@ -66,7 +66,7 @@ def process_paragraph(paragraph, replacements):
         new_run = paragraph.add_run(part if part not in replacements else replacements[part])
         if part in replacements:
             new_run.bold = True
-            new_run.underline = True
+            # new_run.underline = True
 
 def process_template(template_path, output_path, replacements):
     """Process a single template file with replacements"""
@@ -93,12 +93,12 @@ def generate_documents():
     
     # Template files to process (key: display name, value: filename)
     TEMPLATES = {
-        "DCR": "DCR.docx",
         "Annexure-1": "TEMPELATE_Annexure.docx",
         "Aadhar": "Aadhar.docx",
         "WCR": "WCR.docx",
         "Annexure-3": "Annexure-3-Net-Metering.docx",
         "NP-Agreement": "np_agreement.docx",
+        "Meter Testing Letter": "Meter Testing Letter.docx"
     }
 
     # Read input data
@@ -122,17 +122,6 @@ def generate_documents():
         
         replacements = create_replacements_dict(row)
         print(replacements)
-        # Generate all documents
-        # for doc_type, template_file in TEMPLATES.items():
-        #     template_path = Path(TEMPLATE_DIR) / template_file
-        #     output_filename = f"{safe_consumer_name}_{doc_type}.docx"
-        #     output_path = consumer_dir / output_filename
-            
-        #     try:
-        #         process_template(template_path, output_path, replacements)
-        #         print(f"Generated {doc_type} for {safe_consumer_name}")
-        #     except Exception as e:
-        #         print(f"Error generating {doc_type} for {safe_consumer_name}: {str(e)}")
 
         for doc_type, template_file in TEMPLATES.items():
             template_path = Path(TEMPLATE_DIR) / template_file
@@ -145,11 +134,11 @@ def generate_documents():
                 print(f"Generated DOCX {doc_type} for {safe_consumer_name}")
 
                 # Generate PDF - ADD THIS SECTION
-                pdf_path = consumer_dir / f"{base_filename}.pdf"
-                if convert_to_pdf(docx_path, pdf_path, MAX_PDF_SIZE_MB):
-                    print(f"Generated PDF {doc_type} for {safe_consumer_name}")
-                else:
-                    print(f"PDF generation failed for {doc_type} ({safe_consumer_name})")
+                # pdf_path = consumer_dir / f"{base_filename}.pdf"
+                # if convert_to_pdf(docx_path, pdf_path, MAX_PDF_SIZE_MB):
+                #     print(f"Generated PDF {doc_type} for {safe_consumer_name}")
+                # else:
+                #     print(f"PDF generation failed for {doc_type} ({safe_consumer_name})")
 
             except Exception as e:
                 print(f"Error generating {doc_type} for {safe_consumer_name}: {str(e)}")
