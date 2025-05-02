@@ -123,6 +123,13 @@ def generate_documents():
         replacements = create_replacements_dict(row)
         print(replacements)
 
+        serial_numbers_string = replacements['${PANEL_SR_NO}$']
+        serial_number_list = [serial_number.strip() for serial_number in serial_numbers_string.split(',')]
+        df = pd.DataFrame({'Serial No': serial_number_list})
+        excel_file_name = consumer_dir / 'panel_serial_numbers.xlsx'
+        df.to_excel(excel_file_name, index=False)
+        print(f"Excel file '{excel_file_name}' has been created successfully.")
+
         for doc_type, template_file in TEMPLATES.items():
             template_path = Path(TEMPLATE_DIR) / template_file
             base_filename = f"{safe_consumer_name}_{doc_type}"
