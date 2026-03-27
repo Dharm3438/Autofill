@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Document Signing Portal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #0f1117;
+    --ink-muted: #5a5f72;
+    --ink-faint: #9399aa;
+    --surface: #f7f7f5;
+    --surface-2: #eeecea;
+    --white: #ffffff;
+    --accent: #1a3a2a;
+    --accent-light: #2d6647;
+    --accent-glow: #4CAF7D;
+    --danger: #c0392b;
+    --border: #dddbd8;
+    --radius: 12px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--surface);
+    color: var(--ink);
+    min-height: 100vh;
+    padding-bottom: 80px;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: var(--accent);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+  }
+  .header-brand {
+    font-family: 'DM Serif Display', serif;
+    color: #fff;
+    font-size: 1.25rem;
+    letter-spacing: 0.01em;
+  }
+  .header-badge {
+    background: rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.85);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 99px;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
+  /* ── Progress bar ── */
+  .progress-bar-wrap {
+    background: var(--accent);
+    padding: 0 32px 18px;
+  }
+  .progress-steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    max-width: 560px;
+    margin: 0 auto;
+  }
+  .step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+  }
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    width: 100%;
+    height: 2px;
+    background: rgba(255,255,255,0.2);
+    transition: background 0.4s;
+  }
+  .step.done:not(:last-child)::after { background: var(--accent-glow); }
+  .step-dot {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    border: 2px solid rgba(255,255,255,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.6);
+    transition: all 0.3s;
+    position: relative;
+    z-index: 1;
+  }
+  .step.active .step-dot {
+    background: var(--white);
+    border-color: var(--white);
+    color: var(--accent);
+  }
+  .step.done .step-dot {
+    background: var(--accent-glow);
+    border-color: var(--accent-glow);
+    color: white;
+  }
+  .step-label {
+    font-size: 0.65rem;
+    color: rgba(255,255,255,0.5);
+    margin-top: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .step.active .step-label, .step.done .step-label {
+    color: rgba(255,255,255,0.9);
+  }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 32px 20px;
+  }
+
+  /* ── Panels ── */
+  .panel {
+    display: none;
+    animation: fadeUp 0.35s ease both;
+  }
+  .panel.active { display: block; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Section heading ── */
+  .section-eyebrow {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent-light);
+    margin-bottom: 6px;
+  }
+  .section-title {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.9rem;
+    line-height: 1.2;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+  .section-subtitle {
+    font-size: 0.92rem;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    margin-bottom: 28px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Document list ── */
+  .doc-list { display: flex; flex-direction: column; gap: 10px; }
+  .doc-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    transition: border-color 0.2s;
+  }
+  .doc-item:hover { border-color: var(--accent-light); }
+  .doc-icon {
+    width: 38px; height: 38px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .doc-icon svg { width: 18px; height: 18px; fill: none; stroke: #fff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .doc-name { font-size: 0.88rem; font-weight: 500; color: var(--ink); }
+  .doc-meta { font-size: 0.75rem; color: var(--ink-faint); margin-top: 2px; }
+  .doc-status {
+    margin-left: auto;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 99px;
+    background: var(--surface-2);
+    color: var(--ink-faint);
+  }
+  .doc-status.reviewed { background: #e6f4ed; color: var(--accent-light); }
+
+  /* ── Customer info ── */
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .info-field { padding: 12px 14px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); }
+  .info-field-label { font-size: 0.68rem; font-weight: 600; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+  .info-field-value { font-size: 0.9rem; font-weight: 500; color: var(--ink); }
+
+  /* ── OTP ── */
+  .otp-wrap { display: flex; gap: 10px; justify-content: center; margin: 24px 0; }
+  .otp-input {
+    width: 52px; height: 60px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    text-align: center;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--ink);
+    background: var(--white);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .otp-input:focus { border-color: var(--accent-light); box-shadow: 0 0 0 3px rgba(45,102,71,0.12); }
+
+  /* ── Signature pad ── */
+  .sig-wrap {
+    background: var(--white);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  .sig-wrap.has-sig { border-style: solid; border-color: var(--accent-light); }
+  .sig-wrap canvas { display: block; width: 100%; height: 220px; touch-action: none; cursor: crosshair; }
+  .sig-wrap { min-height: 280px; }
+  .sig-hint {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    gap: 8px;
+    transition: opacity 0.3s;
+  }
+  .sig-hint svg { width: 32px; height: 32px; stroke: var(--ink-faint); fill: none; stroke-width: 1.5; }
+  .sig-hint-text { font-size: 0.82rem; color: var(--ink-faint); }
+  .sig-hint.hidden { opacity: 0; }
+  .sig-baseline {
+    position: absolute;
+    bottom: 52px;
+    left: 24px; right: 24px;
+    height: 1px;
+    background: var(--border);
+  }
+  .sig-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .sig-toolbar-info { font-size: 0.75rem; color: var(--ink-faint); }
+  .btn-clear {
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--danger);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+  .btn-clear:hover { background: #fde8e6; }
+
+  /* ── Sig method tabs ── */
+  .sig-tabs {
+    display: flex;
+    background: var(--surface-2);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 16px;
+    gap: 4px;
+  }
+  .sig-tab {
+    flex: 1;
+    padding: 10px 8px;
+    border: none;
+    background: transparent;
+    border-radius: 7px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .sig-tab.active {
+    background: var(--white);
+    color: var(--ink);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  }
+  .sig-tab-panel { display: none; }
+  .sig-tab-panel.active { display: block; }
+
+  /* ── Upload area ── */
+  .upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--white);
+    position: relative;
+  }
+  .upload-area:hover, .upload-area.dragover {
+    border-color: var(--accent-light);
+    background: #f0f8f4;
+  }
+  .upload-area input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+  .upload-icon {
+    width: 48px; height: 48px;
+    background: var(--surface-2);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 12px;
+  }
+  .upload-icon svg { width: 22px; height: 22px; stroke: var(--ink-muted); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .upload-title { font-size: 0.9rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .upload-sub { font-size: 0.78rem; color: var(--ink-faint); }
+  .upload-preview {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .upload-preview.show { display: block; }
+  .upload-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+  }
+  .upload-preview img {
+    display: block;
+    max-width: 100%;
+    max-height: 160px;
+    margin: 16px auto;
+    object-fit: contain;
+  }
+
+  /* ── Photo capture ── */
+  .photo-tabs { margin-bottom: 16px; }
+  .camera-wrap {
+    position: relative;
+    background: #0f1117;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 3/4;
+    max-height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .camera-wrap video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .camera-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.82rem;
+    pointer-events: none;
+  }
+  .camera-overlay svg { width: 40px; height: 40px; stroke: rgba(255,255,255,0.5); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  /* passport guide frame */
+  .camera-guide {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -54%);
+    width: 52%;
+    aspect-ratio: 1;
+    border: 2px solid rgba(255,255,255,0.5);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .camera-guide::before {
+    content: 'Position face here';
+    position: absolute;
+    bottom: -24px;
+    left: 50%; transform: translateX(-50%);
+    font-size: 0.68rem;
+    color: rgba(255,255,255,0.6);
+    white-space: nowrap;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .camera-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+  .btn-capture {
+    width: 58px; height: 58px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--white);
+    box-shadow: 0 0 0 2px var(--accent);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn-capture:hover { background: var(--accent-light); transform: scale(1.05); }
+  .btn-capture svg { width: 22px; height: 22px; stroke: white; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .btn-cam-switch {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.15);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s;
+  }
+  .btn-cam-switch:hover { background: var(--surface-2); }
+  .btn-cam-switch svg { width: 18px; height: 18px; stroke: var(--ink-muted); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* photo preview */
+  .photo-result {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .photo-result.show { display: block; }
+  .photo-result-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem; color: var(--ink-muted);
+  }
+  .photo-result-body {
+    background: #0f1117;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .photo-result-body img {
+    max-height: 220px;
+    border-radius: 8px;
+    border: 3px solid white;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    object-fit: cover;
+    aspect-ratio: 3/4;
+    width: auto;
+  }
+  .photo-tips {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 14px;
+  }
+  .photo-tip {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 0.8rem; color: var(--ink-muted);
+  }
+  .photo-tip-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--surface-2);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+  }
+
+  /* ── Document review ── */
+  .doc-review-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .doc-review-header {
+    padding: 14px 20px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .doc-review-title { font-size: 0.88rem; font-weight: 600; color: white; }
+  .doc-review-num { font-size: 0.72rem; color: rgba(255,255,255,0.6); }
+  .doc-preview {
+    min-height: 180px;
+    padding: 20px;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    color: var(--ink-muted);
+    background: #fafaf8;
+    border-bottom: 1px solid var(--border);
+    max-height: 240px;
+    overflow-y: auto;
+    font-family: 'Georgia', serif;
+  }
+  .doc-preview p { margin-bottom: 10px; }
+  .doc-preview strong { color: var(--ink); font-family: 'DM Sans', sans-serif; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .doc-review-footer {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+  .review-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82rem;
+    color: var(--ink-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .review-check input { accent-color: var(--accent-light); width: 16px; height: 16px; cursor: pointer; }
+  .sig-preview-small {
+    height: 36px;
+    opacity: 0.5;
+    display: none;
+  }
+  .sig-preview-small.show { display: block; opacity: 1; }
+
+  /* ── Consent ── */
+  .consent-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-size: 0.85rem;
+    color: var(--ink-muted);
+    line-height: 1.7;
+    margin-bottom: 20px;
+  }
+  .consent-box strong { color: var(--ink); }
+  .consent-check-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+    background: var(--white);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .consent-check-wrap:has(input:checked) { border-color: var(--accent-light); background: #f0f8f4; }
+  .consent-check-wrap input { accent-color: var(--accent-light); width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; cursor: pointer; }
+  .consent-check-text { font-size: 0.85rem; color: var(--ink); line-height: 1.6; }
+
+  /* ── Final sig preview ── */
+  .final-sig-preview {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .final-sig-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    padding: 8px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .final-sig-img { padding: 12px 14px; background: white; min-height: 60px; display: flex; align-items: center; }
+  .final-sig-img img { max-height: 60px; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 28px;
+    border-radius: 10px;
+    font-size: 0.92rem;
+    font-weight: 600;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    letter-spacing: 0.01em;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 2px 8px rgba(26,58,42,0.25);
+  }
+  .btn-primary:hover { background: var(--accent-light); transform: translateY(-1px); box-shadow: 0 4px 16px rgba(26,58,42,0.3); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    background: var(--surface-2);
+    color: var(--ink-muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { background: var(--border); color: var(--ink); }
+  .btn-full { width: 100%; }
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+
+  /* ── Success ── */
+  .success-icon {
+    width: 72px; height: 72px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-light));
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
+    box-shadow: 0 8px 24px rgba(26,58,42,0.3);
+  }
+  .success-icon svg { width: 34px; height: 34px; stroke: white; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .success-center { text-align: center; }
+  .doc-done-list { margin: 24px 0; display: flex; flex-direction: column; gap: 8px; }
+  .doc-done-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    background: #f0f8f4;
+    border: 1px solid #c3e0cf;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .doc-done-item svg { width: 16px; height: 16px; stroke: var(--accent-glow); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+  .audit-meta {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 0.78rem;
+    color: var(--ink-faint);
+    line-height: 1.8;
+    text-align: left;
+    margin: 20px 0;
+  }
+  .audit-meta span { color: var(--ink); font-weight: 500; }
+
+  /* ── Misc ── */
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+  .text-center { text-align: center; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .mb-16 { margin-bottom: 16px; }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 99px;
+  }
+  .tag-green { background: #e6f4ed; color: var(--accent-light); }
+  .resend-link { font-size: 0.82rem; color: var(--accent-light); cursor: pointer; text-decoration: underline; margin-top: 12px; display: inline-block; }
+
+  @media (max-width: 480px) {
+    .header { padding: 14px 18px; }
+    .progress-bar-wrap { padding: 0 18px 16px; }
+    .container { padding: 20px 14px; }
+    .info-grid { grid-template-columns: 1fr; }
+    .section-title { font-size: 1.5rem; }
+    .otp-input { width: 42px; height: 52px; font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-brand">LegalSign</div>
+  <div class="header-badge">🔒 Secure Signing</div>
+</div>
+
+<!-- Progress -->
+<div class="progress-bar-wrap">
+  <div class="progress-steps">
+    <div class="step active" id="step-1">
+      <div class="step-dot">1</div>
+      <div class="step-label">Verify</div>
+    </div>
+    <div class="step" id="step-2">
+      <div class="step-dot">2</div>
+      <div class="step-label">Sign</div>
+    </div>
+    <div class="step" id="step-3">
+      <div class="step-dot">3</div>
+      <div class="step-label">Photo</div>
+    </div>
+    <div class="step" id="step-4">
+      <div class="step-dot">4</div>
+      <div class="step-label">Review</div>
+    </div>
+    <div class="step" id="step-5">
+      <div class="step-dot">5</div>
+      <div class="step-label">Consent</div>
+    </div>
+    <div class="step" id="step-6">
+      <div class="step-dot">✓</div>
+      <div class="step-label">Done</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ══════════════════════════════════════
+       PANEL 1 — OTP VERIFICATION
+  ══════════════════════════════════════ -->
+  <div class="panel active" id="panel-1">
+    <div class="section-eyebrow">Step 1 of 4</div>
+    <div class="section-title">Verify your identity</div>
+    <div class="section-subtitle">We've sent a 6-digit OTP to your registered email address. Check your inbox.</div>
+
+    <div class="card">
+      <div class="info-grid mb-16">
+        <div class="info-field">
+          <div class="info-field-label">Full Name</div>
+          <div class="info-field-value" data-customer-name>Loading…</div>
+        </div>
+        <div class="info-field">
+          <div class="info-field-label">Application No.</div>
+          <div class="info-field-value" data-app-no>—</div>
+        </div>
+        <div class="info-field">
+          <div class="info-field-label">Email</div>
+          <div class="info-field-value" data-customer-email>—</div>
+        </div>
+        <div class="info-field">
+          <div class="info-field-label">Issued by</div>
+          <div class="info-field-value">Solar Docs Platform</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <p style="font-size:0.82rem;color:var(--ink-muted);text-align:center;margin-bottom:4px;">Enter the OTP sent to your mobile</p>
+      <div class="otp-wrap">
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-0"/>
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-1"/>
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-2"/>
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-3"/>
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-4"/>
+        <input class="otp-input" type="text" maxlength="1" inputmode="numeric" id="otp-5"/>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-verify" disabled onclick="verifyOtpAndContinue()">Verify & Continue</button>
+      <div class="text-center">
+        <span class="resend-link" onclick="sendOtp()">Resend OTP</span>
+      </div>
+    </div>
+
+    <p style="font-size:0.75rem;color:var(--ink-faint);text-align:center;margin-top:16px;">
+      🔒 This link is unique to you and expires in 48 hours
+    </p>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 2 — SIGNATURE CAPTURE
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-2">
+    <div class="section-eyebrow">Step 2 of 5</div>
+    <div class="section-title">Provide your signature</div>
+    <div class="section-subtitle">Draw your signature or upload an image of it. This will be applied to all your documents.</div>
+
+    <div class="card">
+      <!-- Method tabs -->
+      <div class="sig-tabs">
+        <button class="sig-tab active" id="tab-draw" onclick="switchSigTab('draw')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          Draw Signature
+        </button>
+        <button class="sig-tab" id="tab-upload" onclick="switchSigTab('upload')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload Image
+        </button>
+      </div>
+
+      <!-- Draw tab -->
+      <div class="sig-tab-panel active" id="tabpanel-draw">
+        <div class="sig-wrap" id="sig-wrap">
+          <canvas id="sig-canvas" height="220"></canvas>
+          <div class="sig-hint" id="sig-hint">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#9399aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+            <div class="sig-hint-text">Click and drag to sign</div>
+          </div>
+          <div class="sig-baseline"></div>
+          <div class="sig-toolbar">
+            <span class="sig-toolbar-info" id="sig-status">Use finger or mouse to sign</span>
+            <button class="btn-clear" onclick="clearSig()">✕ Clear</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload tab -->
+      <div class="sig-tab-panel" id="tabpanel-upload">
+        <div class="upload-area" id="upload-area">
+          <input type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" onchange="handleUpload(this)"/>
+          <div class="upload-icon">
+            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          </div>
+          <div class="upload-title">Upload your signature</div>
+          <div class="upload-sub">PNG, JPG or GIF · Max 2MB · Transparent background preferred</div>
+        </div>
+        <div class="upload-preview" id="upload-preview">
+          <div class="upload-preview-header">
+            <span id="upload-filename">signature.png</span>
+            <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
+          </div>
+          <img id="upload-preview-img" src="" alt="Uploaded signature"/>
+        </div>
+        <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+          💡 Tip: A signature on white paper photographed clearly works well. Transparent PNG gives the cleanest result.
+        </p>
+      </div>
+
+      <div class="mt-16 btn-row">
+        <button class="btn btn-secondary" onclick="goTo(1)">← Back</button>
+        <button class="btn btn-primary" id="btn-sig-next" disabled onclick="goTo(3)">Continue →</button>
+      </div>
+    </div>
+
+    <div class="card" style="background:#f0f8f4;border-color:#c3e0cf;">
+      <p style="font-size:0.82rem;color:var(--accent);line-height:1.6;">
+        <strong>ℹ️ About your signature</strong><br>
+        Your signature will be securely stored and embedded on each document. By signing, you confirm you are <strong>Rahul Sharma</strong> and authorise its use across your documents.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 3 — PHOTO CAPTURE
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-3">
+    <div class="section-eyebrow">Step 3 of 5</div>
+    <div class="section-title">Your passport photo</div>
+    <div class="section-subtitle">Take a live photo or upload one. It will appear on your documents wherever a photo is required.</div>
+
+    <div class="card">
+      <!-- Method tabs -->
+      <div class="sig-tabs photo-tabs">
+        <button class="sig-tab active" id="photo-tab-camera" onclick="switchPhotoTab('camera')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Use Camera
+        </button>
+        <button class="sig-tab" id="photo-tab-upload" onclick="switchPhotoTab('upload')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload Photo
+        </button>
+      </div>
+
+      <!-- Camera tab -->
+      <div class="sig-tab-panel active" id="photo-tabpanel-camera">
+        <!-- Live camera view (hidden when photo taken) -->
+        <div id="camera-live-wrap">
+          <div class="camera-wrap" id="camera-wrap">
+            <video id="camera-video" autoplay playsinline muted></video>
+            <div class="camera-overlay" id="camera-overlay">
+              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Click below to start camera</span>
+            </div>
+            <div class="camera-guide" id="camera-guide" style="display:none"></div>
+            <canvas id="camera-canvas" style="display:none"></canvas>
+          </div>
+          <div class="camera-toolbar">
+            <button class="btn-cam-switch" title="Switch camera" onclick="switchCamera()">
+              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            </button>
+            <button class="btn-capture" id="btn-capture" onclick="capturePhoto()" title="Take photo">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="btn-cam-switch" title="Start / stop camera" onclick="toggleCamera()" id="btn-cam-toggle">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+        </div>
+        <!-- Captured photo preview -->
+        <div class="photo-result" id="photo-result-camera">
+          <div class="photo-result-header">
+            <span>📸 Photo captured</span>
+            <button class="btn-clear" onclick="retakePhoto()">↺ Retake</button>
+          </div>
+          <div class="photo-result-body">
+            <img id="photo-captured-img" src="" alt="Captured photo"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload tab -->
+      <div class="sig-tab-panel" id="photo-tabpanel-upload">
+        <div class="upload-area" id="photo-upload-area">
+          <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onchange="handlePhotoUpload(this)"/>
+          <div class="upload-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+          <div class="upload-title">Upload passport photo</div>
+          <div class="upload-sub">JPG or PNG · Max 5MB · Clear face, plain background</div>
+        </div>
+        <div class="photo-result" id="photo-result-upload">
+          <div class="photo-result-header">
+            <span id="photo-upload-filename">photo.jpg</span>
+            <button class="btn-clear" onclick="clearPhotoUpload()">✕ Remove</button>
+          </div>
+          <div class="photo-result-body">
+            <img id="photo-uploaded-img" src="" alt="Uploaded photo"/>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div class="photo-tips mt-16">
+        <div class="photo-tip"><div class="photo-tip-icon">💡</div> Plain white or light background works best</div>
+        <div class="photo-tip"><div class="photo-tip-icon">👤</div> Face should be centred, clearly visible, no sunglasses</div>
+        <div class="photo-tip"><div class="photo-tip-icon">🔒</div> Photo is stored securely and only used on your documents</div>
+      </div>
+
+      <div class="mt-16 btn-row">
+        <button class="btn btn-secondary" onclick="goTo(2); stopCamera();">← Back</button>
+        <button class="btn btn-primary" id="btn-photo-next" disabled onclick="goTo(4); stopCamera();">Continue →</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 4 — DOCUMENT REVIEW
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-4">
+    <div class="section-eyebrow">Step 4 of 5</div>
+    <div class="section-title">Review your documents</div>
+    <div class="section-subtitle">Please read each document carefully. Check the box once you've reviewed it.</div>
+
+    <div id="doc-review-list"></div>
+
+    <div class="card" style="background:#fff8e6;border-color:#f0d070;">
+      <p style="font-size:0.82rem;color:#7a5c00;line-height:1.6;">
+        ⚠️ Please review all documents before proceeding. You must confirm each one individually.
+      </p>
+    </div>
+
+    <div class="mt-16 btn-row">
+      <button class="btn btn-secondary" onclick="goTo(3)">← Back</button>
+      <button class="btn btn-primary" id="btn-review-next" disabled onclick="goTo(5)">Proceed to Consent →</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 5 — CONSENT & FINAL SIGN
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-5">
+    <div class="section-eyebrow">Step 5 of 5</div>
+    <div class="section-title">Final consent</div>
+    <div class="section-subtitle">Review your signature and confirm consent for all documents.</div>
+
+    <div class="final-sig-preview">
+      <div class="final-sig-label">Your Signature</div>
+      <div class="final-sig-img"><img id="consent-sig-img" src="" alt="Your signature"/></div>
+    </div>
+
+    <div class="final-sig-preview" id="consent-photo-wrap" style="display:none;">
+      <div class="final-sig-label">Your Photo</div>
+      <div class="final-sig-img" style="justify-content:flex-start;">
+        <img id="consent-photo-img" src="" alt="Your photo" style="max-height:80px;border-radius:6px;border:2px solid var(--border);"/>
+      </div>
+    </div>
+
+    <div class="consent-box">
+      I, <strong>Rahul Sharma</strong>, confirm that I have personally reviewed all <strong>3 documents</strong> listed below and agree that my signature above shall be applied to each of them as my lawful electronic signature. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
+      <br/><br/>
+      Documents included:<br/>
+      <strong>1.</strong> Loan Agreement · <strong>2.</strong> KYC Declaration · <strong>3.</strong> Terms of Service
+    </div>
+
+    <label class="consent-check-wrap">
+      <input type="checkbox" id="chk-consent-1" onchange="checkConsent()"/>
+      <div class="consent-check-text">I have read and understood all 3 documents and consent to my signature being applied to each.</div>
+    </label>
+    <label class="consent-check-wrap">
+      <input type="checkbox" id="chk-consent-2" onchange="checkConsent()"/>
+      <div class="consent-check-text">I confirm that I am <strong>Rahul Sharma</strong> and that I am signing these documents of my own free will.</div>
+    </label>
+
+    <div style="font-size:0.75rem;color:var(--ink-faint);margin-bottom:20px;padding:10px 14px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
+      🕐 Signing session: <span id="session-time"></span>&nbsp;&nbsp;|&nbsp;&nbsp;
+      Session ID: <span>SES-<span id="session-id"></span></span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goTo(4)">← Back</button>
+      <button class="btn btn-primary" id="btn-final-sign" disabled onclick="finalSign()">✍️ Sign All Documents</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 6 — SUCCESS
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-6">
+    <div class="card text-center" style="padding:40px 24px;">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="section-title" style="margin-bottom:8px;">All documents signed!</div>
+      <p style="font-size:0.9rem;color:var(--ink-muted);line-height:1.6;">
+        Your signature has been successfully applied to all 3 documents. A confirmation has been sent to your registered contact.
+      </p>
+
+      <div class="doc-done-list" id="done-list"></div>
+
+      <div class="audit-meta">
+        Signed by: <span>Rahul Sharma</span><br/>
+        Date &amp; Time: <span id="done-time"></span><br/>
+        Session ID: <span id="done-session"></span><br/>
+        Documents sealed &amp; tamper-evident: <span>✓ Yes</span>
+      </div>
+
+      <button class="btn btn-primary btn-full" onclick="downloadAll()">
+        ⬇️ Download All Documents
+      </button>
+      <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:12px;">Documents will be available for 30 days</p>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+  // ── API config ─────────────────────────
+  const TOKEN = new URLSearchParams(window.location.search).get('token');
+  const API   = '/api';
+
+  // ── State ──────────────────────────────
+  const state = {
+    currentPanel: 1,
+    signatureDataURL: null,
+    photoDataURL: null,
+    reviewedDocs: new Set(),
+    sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
+    customerName: '',
+    customerEmail: '',
+    appNo: '',
+  };
+
+  // ── Mock documents ─────────────────────
+  const DOCUMENTS = [
+    {
+      id: 'doc-1',
+      name: 'Loan Agreement',
+      meta: 'Personal Loan · ₹5,00,000',
+      preview: `
+        <strong>Loan Agreement</strong>
+        <p>This Loan Agreement ("Agreement") is entered into on the date of signing between Your Company Private Limited, hereinafter referred to as the "Lender", and Rahul Sharma, hereinafter referred to as the "Borrower".</p>
+        <p><strong>Loan Amount</strong></p>
+        <p>The Lender agrees to disburse a sum of ₹5,00,000 (Rupees Five Lakhs only) to the Borrower, subject to the terms and conditions contained herein.</p>
+        <p><strong>Repayment Terms</strong></p>
+        <p>The Borrower agrees to repay the loan amount in 36 equal monthly installments (EMIs) of ₹16,607 each, commencing from the 1st of the month following disbursement. The applicable rate of interest is 12% per annum (reducing balance).</p>
+        <p><strong>Default</strong></p>
+        <p>In the event of default in payment of any EMI for a period exceeding 30 days, the Lender reserves the right to initiate recovery proceedings as per applicable law.</p>
+      `
+    },
+    {
+      id: 'doc-2',
+      name: 'KYC Declaration',
+      meta: 'Know Your Customer · Mandatory',
+      preview: `
+        <strong>KYC Declaration</strong>
+        <p>I, Rahul Sharma, hereby declare that the information provided by me for the purpose of Know Your Customer (KYC) compliance is true, accurate, and complete to the best of my knowledge.</p>
+        <p><strong>Declaration of Source of Funds</strong></p>
+        <p>I further declare that the funds used for the purpose of this transaction are derived from legitimate sources and do not constitute proceeds of any unlawful activity as defined under the Prevention of Money Laundering Act, 2002.</p>
+        <p><strong>Consent for Verification</strong></p>
+        <p>I consent to the verification of my identity and address by the Lender through any legally permissible means, including but not limited to Aadhaar-based verification and CKYC registry.</p>
+      `
+    },
+    {
+      id: 'doc-3',
+      name: 'Terms of Service',
+      meta: 'General Terms · v2.1',
+      preview: `
+        <strong>Terms of Service</strong>
+        <p>These Terms of Service govern your use of services provided by Your Company Private Limited. By signing this document, you agree to be bound by these terms.</p>
+        <p><strong>Data Processing</strong></p>
+        <p>You authorise Your Company to collect, store, and process your personal data in accordance with the Information Technology (Reasonable Security Practices) Rules, 2011, and applicable data protection regulations.</p>
+        <p><strong>Dispute Resolution</strong></p>
+        <p>Any disputes arising out of or in connection with these terms shall be subject to the exclusive jurisdiction of courts in Mumbai, Maharashtra, and shall be resolved through arbitration in accordance with the Arbitration and Conciliation Act, 1996.</p>
+        <p><strong>Amendments</strong></p>
+        <p>Your Company reserves the right to amend these terms at any time with 30 days prior notice to the customer.</p>
+      `
+    }
+  ];
+
+  // ── Panel navigation ───────────────────
+  function goTo(n) {
+    document.getElementById(`panel-${state.currentPanel}`).classList.remove('active');
+    document.querySelectorAll('.step').forEach((s, i) => {
+      s.classList.remove('active');
+      if (i + 1 < n) s.classList.add('done');
+      else s.classList.remove('done');
+    });
+    state.currentPanel = n;
+    document.getElementById(`panel-${n}`).classList.add('active');
+    document.getElementById(`step-${n}`)?.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (n === 2 && activeTab === 'draw') setTimeout(initSigPad, 80);
+    if (n === 3) setTimeout(autoStartCamera, 100);
+    if (n === 4) renderDocReview();
+    if (n === 5) renderConsent();
+    if (n === 6) renderSuccess();
+  }
+
+  // ── OTP logic ─────────────────────────
+  const otpInputs = document.querySelectorAll('.otp-input');
+  otpInputs.forEach((inp, i) => {
+    inp.addEventListener('input', () => {
+      if (inp.value && i < otpInputs.length - 1) otpInputs[i+1].focus();
+      checkOtp();
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace' && !inp.value && i > 0) otpInputs[i-1].focus();
+    });
+  });
+  function checkOtp() {
+    const full = [...document.querySelectorAll('.otp-input')].map(x => x.value).join('');
+    document.getElementById('btn-verify').disabled = full.length < 6;
+  }
+
+  // ── Sig tab state ──────────────────────
+  let activeTab = 'draw'; // 'draw' | 'upload'
+
+  function switchSigTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.sig-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.sig-tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.getElementById(`tabpanel-${tab}`).classList.add('active');
+
+    // Clear sig state from other tab
+    if (tab === 'draw') {
+      // keep upload data in state but don't enable next unless draw is also signed
+      updateSigNextBtn();
+    } else {
+      updateSigNextBtn();
+    }
+
+    if (tab === 'draw') setTimeout(initSigPad, 50);
+  }
+
+  // ── Signature pad ──────────────────────
+  let sigPad = null;
+
+  function initSigPad() {
+    const canvas = document.getElementById('sig-canvas');
+    if (!canvas) return;
+
+    // Get actual rendered width of parent
+    const wrap = document.getElementById('sig-wrap');
+    const W = wrap.clientWidth || 600;
+    const H = 220;
+    const ratio = window.devicePixelRatio || 1;
+
+    // Set canvas pixel dimensions explicitly
+    canvas.width = W * ratio;
+    canvas.height = H * ratio;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.getContext('2d').scale(ratio, ratio);
+
+    if (sigPad) sigPad.off();
+    sigPad = new SignaturePad(canvas, {
+      minWidth: 1.5,
+      maxWidth: 3.5,
+      penColor: '#0f1117',
+      backgroundColor: 'rgba(255,255,255,0)',
+    });
+
+    sigPad.addEventListener('beginStroke', () => {
+      document.getElementById('sig-hint').classList.add('hidden');
+    });
+    sigPad.addEventListener('endStroke', () => {
+      const empty = sigPad.isEmpty();
+      document.getElementById('sig-wrap').classList.toggle('has-sig', !empty);
+      document.getElementById('sig-status').textContent = empty ? 'Use finger or mouse to sign' : '✓ Signature captured';
+      if (!empty) state.signatureDataURL = sigPad.toDataURL('image/png');
+      else state.signatureDataURL = null;
+      updateSigNextBtn();
+    });
+  }
+
+  function updateSigNextBtn() {
+    document.getElementById('btn-sig-next').disabled = !state.signatureDataURL;
+  }
+
+  // ── Init on load ──────────────────────
+  window.addEventListener('load', async () => {
+    setTimeout(initSigPad, 100);
+
+    if (!TOKEN) {
+      showError('Invalid link. No token provided.');
+      return;
+    }
+
+    // Verify token and load customer info
+    try {
+      const res = await fetch(`${API}/signing/verify/${TOKEN}`);
+      const data = await res.json();
+      if (!res.ok) { showError(data.detail || 'This link is invalid or has expired.'); return; }
+
+      state.customerName  = data.data.customer_name  || '';
+      state.customerEmail = data.data.customer_email || '';
+      state.appNo         = data.data.app_no         || '';
+
+      // Fill in customer info on panel 1
+      document.querySelectorAll('[data-customer-name]').forEach(el => el.textContent = state.customerName);
+      document.querySelectorAll('[data-customer-email]').forEach(el => el.textContent = state.customerEmail);
+      document.querySelectorAll('[data-app-no]').forEach(el => el.textContent = state.appNo || '—');
+
+      // Auto-send OTP
+      await sendOtp();
+    } catch (e) {
+      showError('Failed to load signing page. Please try again.');
+    }
+  });
+
+  function showError(msg) {
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f7f5;">
+        <div style="background:white;border:1px solid #dddbd8;border-radius:16px;padding:40px 32px;text-align:center;max-width:400px;">
+          <div style="font-size:2.5rem;margin-bottom:16px;">⚠️</div>
+          <h2 style="color:#0f1117;font-size:1.1rem;margin-bottom:8px;">Link Error</h2>
+          <p style="color:#5a5f72;font-size:0.9rem;">${msg}</p>
+        </div>
+      </div>`;
+  }
+
+  // ── Send OTP ───────────────────────────
+  async function sendOtp() {
+    try {
+      const res = await fetch(`${API}/signing/send-otp/${TOKEN}`, { method: 'POST' });
+      if (!res.ok) {
+        const d = await res.json();
+        console.warn('OTP send failed:', d.detail);
+      }
+    } catch(e) {
+      console.warn('OTP send error:', e);
+    }
+  }
+
+  // ── Verify OTP (real API) ─────────────
+  async function verifyOtpAndContinue() {
+    const full = [...document.querySelectorAll('.otp-input')].map(x => x.value).join('');
+    if (full.length < 6) return;
+
+    const btn = document.getElementById('btn-verify');
+    btn.disabled = true;
+    btn.textContent = '⏳ Verifying…';
+
+    try {
+      const res = await fetch(`${API}/signing/verify-otp/${TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: full }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = 'Verify & Continue';
+        alert(data.detail || 'Invalid OTP. Please try again.');
+        return;
+      }
+      goTo(2);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Verify & Continue';
+      alert('Verification failed. Please try again.');
+    }
+  }
+
+  window.addEventListener('resize', () => {
+    if (activeTab === 'draw') initSigPad();
+  });
+
+  function clearSig() {
+    if (sigPad) sigPad.clear();
+    document.getElementById('sig-hint').classList.remove('hidden');
+    document.getElementById('sig-wrap').classList.remove('has-sig');
+    document.getElementById('sig-status').textContent = 'Use finger or mouse to sign';
+    if (activeTab === 'draw') state.signatureDataURL = null;
+    updateSigNextBtn();
+  }
+
+  // ── Upload handler ─────────────────────
+  function handleUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('File too large. Please upload an image under 2MB.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      state.signatureDataURL = e.target.result;
+      document.getElementById('upload-preview-img').src = e.target.result;
+      document.getElementById('upload-filename').textContent = file.name;
+      document.getElementById('upload-area').style.display = 'none';
+      document.getElementById('upload-preview').classList.add('show');
+      updateSigNextBtn();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearUpload() {
+    state.signatureDataURL = null;
+    document.getElementById('upload-preview-img').src = '';
+    document.getElementById('upload-area').style.display = 'block';
+    document.getElementById('upload-preview').classList.remove('show');
+    updateSigNextBtn();
+  }
+
+  // Drag & drop on upload area
+  document.addEventListener('DOMContentLoaded', () => {
+    const area = document.getElementById('upload-area');
+    if (!area) return;
+    area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', (e) => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        area.querySelector('input[type=file]').files = dt.files;
+        handleUpload(area.querySelector('input[type=file]'));
+      }
+    });
+  });
+
+  // ══════════════════════════════════════
+  // PHOTO LOGIC
+  // ══════════════════════════════════════
+  let photoTab = 'camera';
+  let cameraStream = null;
+  let facingMode = 'user'; // front cam default for selfie
+
+  function switchPhotoTab(tab) {
+    photoTab = tab;
+    document.getElementById('photo-tab-camera').classList.toggle('active', tab === 'camera');
+    document.getElementById('photo-tab-upload').classList.toggle('active', tab === 'upload');
+    document.getElementById('photo-tabpanel-camera').classList.toggle('active', tab === 'camera');
+    document.getElementById('photo-tabpanel-upload').classList.toggle('active', tab === 'upload');
+    if (tab === 'camera') setTimeout(autoStartCamera, 80);
+    else stopCamera();
+  }
+
+  async function autoStartCamera() {
+    // Only start if no photo taken yet and camera tab active
+    if (state.photoDataURL) return; // already have a photo
+    if (photoTab !== 'camera') return;
+    await startCamera();
+  }
+
+  async function startCamera() {
+    try {
+      if (cameraStream) stopCamera();
+      const constraints = { video: { facingMode, width: { ideal: 640 }, height: { ideal: 853 } }, audio: false };
+      cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const video = document.getElementById('camera-video');
+      video.srcObject = cameraStream;
+      video.play();
+      document.getElementById('camera-overlay').style.display = 'none';
+      document.getElementById('camera-guide').style.display = 'block';
+    } catch (err) {
+      const overlay = document.getElementById('camera-overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" stroke="rgba(255,255,255,0.4)" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span style="font-size:0.8rem;color:rgba(255,255,255,0.6);text-align:center;padding:0 20px;">Camera access denied.<br/>Please use the Upload tab instead.</span>`;
+    }
+  }
+
+  function stopCamera() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+      cameraStream = null;
+    }
+    const video = document.getElementById('camera-video');
+    if (video) video.srcObject = null;
+  }
+
+  async function switchCamera() {
+    facingMode = facingMode === 'user' ? 'environment' : 'user';
+    await startCamera();
+  }
+
+  async function toggleCamera() {
+    if (cameraStream) stopCamera();
+    else await startCamera();
+  }
+
+  function capturePhoto() {
+    const video = document.getElementById('camera-video');
+    if (!video.srcObject) { startCamera(); return; }
+    const canvas = document.getElementById('camera-canvas');
+    const W = video.videoWidth || 480;
+    const H = video.videoHeight || 640;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    // Mirror if front cam
+    if (facingMode === 'user') {
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, W, H);
+    const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+    state.photoDataURL = dataURL;
+    document.getElementById('photo-captured-img').src = dataURL;
+    document.getElementById('camera-live-wrap').style.display = 'none';
+    document.getElementById('photo-result-camera').classList.add('show');
+    stopCamera();
+    updatePhotoNextBtn();
+  }
+
+  function retakePhoto() {
+    state.photoDataURL = null;
+    document.getElementById('photo-captured-img').src = '';
+    document.getElementById('camera-live-wrap').style.display = 'block';
+    document.getElementById('photo-result-camera').classList.remove('show');
+    updatePhotoNextBtn();
+    startCamera();
+  }
+
+  function handlePhotoUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { alert('File too large. Max 5MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      state.photoDataURL = e.target.result;
+      document.getElementById('photo-uploaded-img').src = e.target.result;
+      document.getElementById('photo-upload-filename').textContent = file.name;
+      document.getElementById('photo-upload-area').style.display = 'none';
+      document.getElementById('photo-result-upload').classList.add('show');
+      updatePhotoNextBtn();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function clearPhotoUpload() {
+    state.photoDataURL = null;
+    document.getElementById('photo-uploaded-img').src = '';
+    document.getElementById('photo-upload-area').style.display = 'block';
+    document.getElementById('photo-result-upload').classList.remove('show');
+    updatePhotoNextBtn();
+  }
+
+  function updatePhotoNextBtn() {
+    document.getElementById('btn-photo-next').disabled = !state.photoDataURL;
+  }
+
+  // ── Document review render ─────────────
+  function renderDocReview() {
+    const container = document.getElementById('doc-review-list');
+    container.innerHTML = '';
+    DOCUMENTS.forEach((doc, idx) => {
+      const reviewed = state.reviewedDocs.has(doc.id);
+      container.innerHTML += `
+        <div class="doc-review-card">
+          <div class="doc-review-header">
+            <span class="doc-review-title">${doc.name}</span>
+            <span class="doc-review-num">Document ${idx+1} of ${DOCUMENTS.length}</span>
+          </div>
+          <div class="doc-preview">${doc.preview}</div>
+          <div class="doc-review-footer">
+            <label class="review-check">
+              <input type="checkbox" ${reviewed ? 'checked' : ''} onchange="toggleReview('${doc.id}', this.checked)"/>
+              I have read this document
+            </label>
+            ${state.signatureDataURL ? `<img class="sig-preview-small ${reviewed ? 'show' : ''}" id="sig-prev-${doc.id}" src="${state.signatureDataURL}" alt="sig"/>` : ''}
+          </div>
+        </div>
+      `;
+    });
+    checkAllReviewed();
+  }
+  function toggleReview(docId, checked) {
+    if (checked) state.reviewedDocs.add(docId);
+    else state.reviewedDocs.delete(docId);
+    const img = document.getElementById(`sig-prev-${docId}`);
+    if (img) img.classList.toggle('show', checked);
+    checkAllReviewed();
+  }
+  function checkAllReviewed() {
+    const allDone = DOCUMENTS.every(d => state.reviewedDocs.has(d.id));
+    document.getElementById('btn-review-next').disabled = !allDone;
+  }
+
+  // ── Consent render ─────────────────────
+  function renderConsent() {
+    if (state.signatureDataURL) document.getElementById('consent-sig-img').src = state.signatureDataURL;
+    if (state.photoDataURL) {
+      document.getElementById('consent-photo-img').src = state.photoDataURL;
+      document.getElementById('consent-photo-wrap').style.display = 'block';
+    }
+    document.getElementById('session-time').textContent = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+    document.getElementById('session-id').textContent = state.sessionId;
+    document.getElementById('chk-consent-1').checked = false;
+    document.getElementById('chk-consent-2').checked = false;
+    document.getElementById('btn-final-sign').disabled = true;
+  }
+  function checkConsent() {
+    const c1 = document.getElementById('chk-consent-1').checked;
+    const c2 = document.getElementById('chk-consent-2').checked;
+    document.getElementById('btn-final-sign').disabled = !(c1 && c2);
+  }
+
+  // ── Final sign (real API) ──────────────
+  async function finalSign() {
+    const btn = document.getElementById('btn-final-sign');
+    btn.disabled = true;
+    btn.textContent = '⏳ Submitting…';
+
+    try {
+      const res = await fetch(`${API}/signing/submit/${TOKEN}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signature: state.signatureDataURL,
+          photo: state.photoDataURL,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        btn.disabled = false;
+        btn.textContent = '✍️ Sign All Documents';
+        alert(data.detail || 'Submission failed. Please try again.');
+        return;
+      }
+      goTo(6);
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = '✍️ Sign All Documents';
+      alert('Submission failed. Please try again.');
+    }
+  }
+
+  // ── Success render ─────────────────────
+  function renderSuccess() {
+    const doneList = document.getElementById('done-list');
+    doneList.innerHTML = DOCUMENTS.map(d => `
+      <div class="doc-done-item">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        ${d.name} — <span style="font-size:0.78rem;color:var(--accent-light)">${d.meta}</span>
+      </div>
+    `).join('');
+    document.getElementById('done-time').textContent = new Date().toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'medium' });
+    document.getElementById('done-session').textContent = 'SES-' + state.sessionId;
+  }
+  function downloadAll() {
+    alert('In production, this triggers the backend to finalize PDFs with the embedded signature and serve a ZIP download.');
+  }
+</script>
+</body>
+</html>
