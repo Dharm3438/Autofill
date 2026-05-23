@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil } from 'lucide-react'
 import { createCustomer, updateCustomer } from '../api/customers'
 import toast from 'react-hot-toast'
 
 const SECTIONS = [
   {
     title: 'Consumer Information',
+    icon: User2,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
     fields: [
       { key: 'CONSUMER_NAME',    label: 'Consumer Name',    required: true },
       { key: 'CONSUMER_ADDRESS', label: 'Address',          required: true, span: 2 },
@@ -20,6 +23,9 @@ const SECTIONS = [
   },
   {
     title: 'Solar System',
+    icon: Zap,
+    color: 'text-amber-600',
+    bg: 'bg-amber-50',
     fields: [
       { key: 'SOLAR_CAPACITY',      label: 'Solar Capacity (kW)' },
       { key: 'INVERTER_MAKE',       label: 'Inverter Make' },
@@ -37,6 +43,9 @@ const SECTIONS = [
   },
   {
     title: 'Installation',
+    icon: MapPin,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
     fields: [
       { key: 'INSTALLATION_DATE',        label: 'Installation Date',     type: 'date' },
       { key: 'INSTALLATION_CITY',        label: 'City' },
@@ -47,6 +56,9 @@ const SECTIONS = [
   },
   {
     title: 'Meter Details',
+    icon: Gauge,
+    color: 'text-purple-600',
+    bg: 'bg-purple-50',
     fields: [
       { key: 'METER_TESTING_DATE',   label: 'Meter Testing Date', type: 'date' },
       { key: 'METER_RECIPT_NO',      label: 'Meter Receipt No' },
@@ -95,62 +107,86 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 overflow-y-auto py-8 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-6 px-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl ring-1 ring-black/10 my-auto">
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#eeecea] sticky top-0 bg-white rounded-t-2xl z-10">
-          <h2 className="font-semibold text-[#0f1117] text-lg">
-            {isEdit ? 'Edit Customer' : 'Add New Customer'}
-          </h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
-            <X className="w-5 h-5 text-[#5a5f72]" />
+        <div className="flex items-center justify-between px-6 py-5 bg-[#1a3a2a] rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+              {isEdit
+                ? <Pencil className="w-5 h-5 text-white" />
+                : <UserPlus className="w-5 h-5 text-white" />}
+            </div>
+            <div>
+              <h2 className="font-semibold text-white text-base leading-tight">
+                {isEdit ? 'Edit Customer' : 'Add New Customer'}
+              </h2>
+              <p className="text-white/60 text-xs mt-0.5">
+                {isEdit ? 'Update the customer details below' : 'Fill in the customer details below'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+          >
+            <X className="w-4 h-4 text-white" />
           </button>
         </div>
 
-        {/* Form */}
+        {/* Form Body */}
         <form onSubmit={handleSubmit}>
-          <div className="px-6 py-5 space-y-8">
-            {SECTIONS.map(section => (
-              <div key={section.title}>
-                <h3 className="text-xs font-semibold text-[#1a3a2a] uppercase tracking-wider mb-3">
-                  {section.title}
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {section.fields.map(field => (
-                    <div key={field.key} className={field.span === 2 ? 'col-span-2' : ''}>
-                      <label className="block text-xs font-medium text-[#5a5f72] mb-1">
-                        {field.label}
-                        {field.required && <span className="text-red-500 ml-0.5">*</span>}
-                      </label>
-                      <input
-                        type={field.type || 'text'}
-                        required={field.required}
-                        value={form[field.key]}
-                        onChange={e => set(field.key, e.target.value)}
-                        placeholder={field.hint || ''}
-                        className="w-full px-3 py-2 rounded-lg border border-[#dddbd8] bg-[#f7f7f5] text-sm focus:outline-none focus:ring-2 focus:ring-[#1a3a2a] focus:border-transparent"
-                      />
+          <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
+            {SECTIONS.map(section => {
+              const Icon = section.icon
+              return (
+                <div key={section.title} className="rounded-xl border border-gray-200 overflow-hidden">
+                  {/* Section Header */}
+                  <div className={`flex items-center gap-2.5 px-4 py-3 ${section.bg} border-b border-gray-200`}>
+                    <div className={`w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-sm`}>
+                      <Icon className={`w-4 h-4 ${section.color}`} />
                     </div>
-                  ))}
+                    <h3 className="text-sm font-semibold text-gray-800">{section.title}</h3>
+                  </div>
+
+                  {/* Section Fields */}
+                  <div className="p-4 bg-white grid grid-cols-2 gap-x-4 gap-y-3">
+                    {section.fields.map(field => (
+                      <div key={field.key} className={field.span === 2 ? 'col-span-2' : ''}>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                          {field.label}
+                          {field.required && <span className="text-red-500 ml-0.5 normal-case">*</span>}
+                        </label>
+                        <input
+                          type={field.type || 'text'}
+                          required={field.required}
+                          value={form[field.key]}
+                          onChange={e => set(field.key, e.target.value)}
+                          placeholder={field.hint || ''}
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 focus:border-[#1a3a2a] focus:bg-white transition-all"
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#eeecea] sticky bottom-0 bg-white rounded-b-2xl">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-[#5a5f72] hover:text-[#0f1117] transition-colors"
+              className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-5 py-2 bg-[#1a3a2a] text-white text-sm font-medium rounded-xl hover:bg-[#2d6647] disabled:opacity-60 transition-colors"
+              className="px-6 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] disabled:opacity-60 transition-colors shadow-sm"
             >
               {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Customer'}
             </button>

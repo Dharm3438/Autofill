@@ -43,8 +43,7 @@ async def me(current_user=Depends(get_current_user)):
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: UserCreate):
-    """One-time use: create the first admin account."""
+async def register(body: UserCreate, response: Response):
     db = get_db()
     if await db.users.find_one({"email": body.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -56,4 +55,13 @@ async def register(body: UserCreate):
         "role": "admin",
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"success": True, "data": {"id": str(result.inserted_id)}}
+    user = await db.users.find_one({"_id": result.inserted_id})
+    token = create_access_token({"sub": str(result.inserted_id)})
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        httponly=True,
+        samesite="lax",
+        max_age=86400,
+    )
+    return {"success": True, "data": user_to_out(user)}
