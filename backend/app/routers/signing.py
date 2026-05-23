@@ -3,7 +3,7 @@ import random
 import string
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.deps import get_current_user
@@ -118,7 +118,7 @@ class SubmitBody(BaseModel):
     photo: str       # base64 data URL
 
 @router.post("/submit/{token}")
-async def submit_signing(token: str, body: SubmitBody):
+async def submit_signing(token: str, body: SubmitBody, background_tasks: BackgroundTasks):
     db = get_db()
     submission = await db.signing_submissions.find_one({"token": token})
     if not submission:
@@ -155,7 +155,36 @@ async def submit_signing(token: str, body: SubmitBody):
         {"$set": {"signing_status": "signed"}}
     )
 
+    # Regenerate docs so they embed the freshly-saved signature & photo
+    if docs_folder:
+        await db.customers.update_one(
+            {"_id": ObjectId(customer_id)},
+            {"$set": {"doc_status": "generating"}}
+        )
+        background_tasks.add_task(_regen_after_signing, customer_id)
+
     return {"success": True, "message": "Documents signed successfully"}
+
+
+async def _regen_after_signing(customer_id: str):
+    from ..services.doc_generation import generate_for_customer
+    db = get_db()
+    try:
+        customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+        if not customer:
+            return
+        folder = await generate_for_customer(customer)
+        await db.customers.update_one(
+            {"_id": ObjectId(customer_id)},
+            {"$set": {"doc_status": "complete", "docs_folder": folder}}
+        )
+        print(f"Re-generated signed docs for {customer_id}")
+    except Exception as e:
+        print(f"Regen after signing failed for {customer_id}: {e}")
+        await db.customers.update_one(
+            {"_id": ObjectId(customer_id)},
+            {"$set": {"doc_status": "failed"}}
+        )
 
 
 def _save_base64_image(data_url: str, path: Path):

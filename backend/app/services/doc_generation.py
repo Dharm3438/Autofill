@@ -6,6 +6,7 @@ import re
 import asyncio
 from pathlib import Path
 from docx import Document
+from docx.shared import Inches
 from docx2pdf import convert
 
 TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
@@ -19,6 +20,12 @@ TEMPLATES = {
     "NP_Agreement":         "np_agreement.docx",
     "Meter_testing_letter": "Meter Testing Letter.docx",
     "DCR":                  "DCR.docx",
+}
+
+# placeholder -> (image-key, render width)
+IMAGE_PLACEHOLDERS = {
+    "${CUSTOMER_SIGN}$":  ("signature", Inches(2.0)),
+    "${CUSTOMER_PHOTO}$": ("photo",     Inches(2.5)),
 }
 
 
@@ -35,28 +42,43 @@ def build_replacements(customer: dict) -> dict:
     return replacements
 
 
-def process_paragraph(paragraph, replacements: dict):
+def process_paragraph(paragraph, replacements: dict, images: dict):
+    all_keys = list(replacements.keys()) + list(IMAGE_PLACEHOLDERS.keys())
     original = "".join(r.text for r in paragraph.runs)
-    if not any(k in original for k in replacements):
+    if not any(k in original for k in all_keys):
         return
     for run in paragraph.runs:
         run.text = ""
-    parts = re.split(f"({'|'.join(re.escape(k) for k in replacements)})", original)
+
+    pattern = "|".join(re.escape(k) for k in all_keys)
+    parts = re.split(f"({pattern})", original)
     for part in parts:
-        new_run = paragraph.add_run(replacements.get(part, part))
-        if part in replacements:
+        if part in IMAGE_PLACEHOLDERS:
+            img_key, width = IMAGE_PLACEHOLDERS[part]
+            img_path = images.get(img_key)
+            if img_path and img_path.exists():
+                try:
+                    new_run = paragraph.add_run()
+                    new_run.add_picture(str(img_path), width=width)
+                except Exception as e:
+                    print(f"Failed to embed image {img_path}: {e}")
+            # else: leave blank — image not available yet
+        elif part in replacements:
+            new_run = paragraph.add_run(replacements[part])
             new_run.bold = True
+        else:
+            paragraph.add_run(part)
 
 
-def fill_template(template_path: Path, output_path: Path, replacements: dict):
+def fill_template(template_path: Path, output_path: Path, replacements: dict, images: dict):
     doc = Document(template_path)
     for para in doc.paragraphs:
-        process_paragraph(para, replacements)
+        process_paragraph(para, replacements, images)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
-                    process_paragraph(para, replacements)
+                    process_paragraph(para, replacements, images)
     doc.save(output_path)
 
 
@@ -78,6 +100,15 @@ async def generate_for_customer(customer: dict) -> str:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     replacements = build_replacements(customer)
+
+    # Auto-detect signature / photo from prior signing submission
+    sig_file   = output_dir / "signature.png"
+    photo_file = output_dir / "photo.jpg"
+    images = {
+        "signature": sig_file   if sig_file.exists()   else None,
+        "photo":     photo_file if photo_file.exists() else None,
+    }
+
     loop = asyncio.get_event_loop()
 
     for doc_type, template_file in TEMPLATES.items():
@@ -88,7 +119,7 @@ async def generate_for_customer(customer: dict) -> str:
 
         docx_path = output_dir / f"{safe_name}_{doc_type}.docx"
 
-        await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements)
+        await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements, images)
         print(f"DOCX generated: {docx_path.name}")
 
         success = await loop.run_in_executor(None, convert_docx_to_pdf, docx_path)
