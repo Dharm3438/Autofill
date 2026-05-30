@@ -67,7 +67,7 @@ async def verify_token(token: str):
 # ── Public: send OTP to customer email ───────────────────────────────────────
 
 @router.post("/send-otp/{token}")
-async def send_otp(token: str):
+async def send_otp(token: str, force: bool = False):
     db = get_db()
     submission = await db.signing_submissions.find_one({"token": token})
     if not submission:
@@ -80,11 +80,21 @@ async def send_otp(token: str):
     now = datetime.now(timezone.utc).isoformat()
     existing_otp = submission.get("otp")
     existing_expiry = submission.get("otp_expiry")
+    has_valid_otp = (
+        existing_otp
+        and not submission.get("otp_verified")
+        and existing_expiry
+        and existing_expiry > now
+    )
 
-    # Reuse an unexpired, unverified code so reloads/resends don't invalidate
-    # the OTP already sitting in the customer's inbox.
-    if existing_otp and not submission.get("otp_verified") and existing_expiry and existing_expiry > now:
+    if has_valid_otp:
+        # A live code already exists. Don't email again on auto-sends (page
+        # reloads / re-clicking the email link) — only when the user explicitly
+        # asks to resend. Either way we keep the same code so the OTP already in
+        # their inbox stays valid.
         otp = existing_otp
+        if not force:
+            return {"success": True, "message": "OTP already sent"}
     else:
         otp = "".join(random.choices(string.digits, k=6))
         otp_expiry = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()

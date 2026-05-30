@@ -1550,17 +1550,10 @@
       const sigConfirm = document.getElementById('sig-confirm-name');
       if (sigConfirm) sigConfirm.textContent = state.customerName;
 
-      // Send OTP automatically — but only once per token within the validity
-      // window. Mail apps open this link in an in-app browser that reloads the
-      // page when you switch to the inbox and back; without this guard each
-      // reload would send a brand-new code and invalidate the one you just read.
-      const lastSent = Number(localStorage.getItem(`otp_sent_${TOKEN}`) || 0);
-      if (Date.now() - lastSent > 9 * 60 * 1000) {
-        await sendOtp();
-      } else {
-        document.querySelector('.section-subtitle').innerHTML =
-          `We've sent a 6-digit code to <strong>${state.customerName}</strong>'s registered email`;
-      }
+      // Send OTP automatically. The backend only emails one code per 10-min
+      // window, so page reloads or re-clicking the email link won't trigger
+      // extra OTP emails — a new code is only sent on explicit resend/expiry.
+      await sendOtp(false);
     } catch (e) {
       showLinkError('Failed to load signing page. Please try again.');
     }
@@ -1576,10 +1569,9 @@
   }
 
   // ── API: send OTP ──────────────────────
-  async function sendOtp() {
+  async function sendOtp(force = false) {
     try {
-      await fetch(`${API_BASE}/signing/send-otp/${TOKEN}`, { method: 'POST' });
-      localStorage.setItem(`otp_sent_${TOKEN}`, String(Date.now()));
+      await fetch(`${API_BASE}/signing/send-otp/${TOKEN}?force=${force}`, { method: 'POST' });
       document.querySelector('.section-subtitle').innerHTML =
         `We've sent a 6-digit code to <strong>${state.customerName}</strong>'s registered email`;
     } catch (e) {
@@ -1617,7 +1609,7 @@
   // ── API: resend OTP ────────────────────
   document.querySelector('.resend-link').onclick = async function () {
     this.textContent = 'Sending...';
-    await sendOtp();
+    await sendOtp(true);
     this.textContent = 'OTP resent!';
     setTimeout(() => { this.textContent = 'Resend OTP'; }, 3000);
   };
