@@ -857,7 +857,7 @@
             <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           </div>
           <div class="upload-title">Upload your signature</div>
-          <div class="upload-sub">PNG, JPG or GIF · Max 2MB · Transparent background preferred</div>
+          <div class="upload-sub">PNG, JPG or GIF · Max 5MB · Transparent background preferred</div>
         </div>
         <div class="upload-preview" id="upload-preview">
           <div class="upload-preview-header">
@@ -1259,22 +1259,43 @@
     updateSigNextBtn();
   }
 
+  // ── Image compression helper ───────────
+  function compressImage(dataURL, maxW, maxH, format, quality, callback) {
+    const img = new window.Image();
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxW || h > maxH) {
+        const scale = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+      callback(canvas.toDataURL(mime, quality));
+    };
+    img.src = dataURL;
+  }
+
   // ── Upload handler ─────────────────────
   function handleUpload(input) {
     const file = input.files[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      alert('File too large. Please upload an image under 2MB.');
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File too large. Please upload an image under 5MB.');
       return;
     }
     const reader = new FileReader();
     reader.onload = (e) => {
-      state.signatureDataURL = e.target.result;
-      document.getElementById('upload-preview-img').src = e.target.result;
-      document.getElementById('upload-filename').textContent = file.name;
-      document.getElementById('upload-area').style.display = 'none';
-      document.getElementById('upload-preview').classList.add('show');
-      updateSigNextBtn();
+      compressImage(e.target.result, 800, 400, 'png', 1.0, (compressed) => {
+        state.signatureDataURL = compressed;
+        document.getElementById('upload-preview-img').src = compressed;
+        document.getElementById('upload-filename').textContent = file.name;
+        document.getElementById('upload-area').style.display = 'none';
+        document.getElementById('upload-preview').classList.add('show');
+        updateSigNextBtn();
+      });
     };
     reader.readAsDataURL(file);
   }
@@ -1405,12 +1426,14 @@
     if (file.size > 5 * 1024 * 1024) { alert('File too large. Max 5MB.'); return; }
     const reader = new FileReader();
     reader.onload = (e) => {
-      state.photoDataURL = e.target.result;
-      document.getElementById('photo-uploaded-img').src = e.target.result;
-      document.getElementById('photo-upload-filename').textContent = file.name;
-      document.getElementById('photo-upload-area').style.display = 'none';
-      document.getElementById('photo-result-upload').classList.add('show');
-      updatePhotoNextBtn();
+      compressImage(e.target.result, 1200, 1600, 'jpeg', 0.85, (compressed) => {
+        state.photoDataURL = compressed;
+        document.getElementById('photo-uploaded-img').src = compressed;
+        document.getElementById('photo-upload-filename').textContent = file.name;
+        document.getElementById('photo-upload-area').style.display = 'none';
+        document.getElementById('photo-result-upload').classList.add('show');
+        updatePhotoNextBtn();
+      });
     };
     reader.readAsDataURL(file);
   }

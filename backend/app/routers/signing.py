@@ -1,6 +1,7 @@
 import base64
 import io
 import asyncio
+from PIL import Image
 import random
 import string
 import zipfile
@@ -161,8 +162,10 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
     sig_bytes = _decode_base64_image(body.signature)
     photo_bytes = _decode_base64_image(body.photo)
     if sig_bytes:
+        sig_bytes = _compress_signature(sig_bytes)
         await asyncio.to_thread(storage.upload_bytes, sig_bytes, prefix + SIGNATURE_KEY, "image/png")
     if photo_bytes:
+        photo_bytes = _compress_photo(photo_bytes)
         await asyncio.to_thread(storage.upload_bytes, photo_bytes, prefix + PHOTO_KEY, "image/jpeg")
 
     now = datetime.now(timezone.utc)
@@ -250,7 +253,6 @@ async def _regen_after_signing(customer_id: str):
 
 
 def _decode_base64_image(data_url: str) -> bytes | None:
-    # data_url: "data:image/png;base64,xxxxxx"
     if not data_url:
         return None
     try:
@@ -259,3 +261,28 @@ def _decode_base64_image(data_url: str) -> bytes | None:
     except Exception as e:
         print(f"Failed to decode image: {e}")
         return None
+
+
+def _compress_signature(raw: bytes, max_bytes: int = 5 * 1024 * 1024) -> bytes:
+    """Resize signature to max 800×400 px and re-encode as PNG."""
+    img = Image.open(io.BytesIO(raw)).convert("RGBA")
+    img.thumbnail((800, 400), Image.LANCZOS)
+    out = io.BytesIO()
+    img.save(out, format="PNG", optimize=True)
+    return out.getvalue()
+
+
+def _compress_photo(raw: bytes, max_bytes: int = 5 * 1024 * 1024) -> bytes:
+    """Resize photo to max 1200×1600 px and re-encode as JPEG, reducing quality until under max_bytes."""
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    img.thumbnail((1200, 1600), Image.LANCZOS)
+    quality = 85
+    while quality >= 50:
+        out = io.BytesIO()
+        img.save(out, format="JPEG", quality=quality, optimize=True)
+        if out.tell() <= max_bytes:
+            return out.getvalue()
+        quality -= 10
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=50, optimize=True)
+    return out.getvalue()
