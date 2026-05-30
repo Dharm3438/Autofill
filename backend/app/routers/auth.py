@@ -25,7 +25,8 @@ async def login(body: UserLogin, response: Response):
         key="access_token",
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite="none",
+        secure=True,
         max_age=86400,
     )
     return {"success": True, "data": user_to_out(user)}
@@ -33,7 +34,7 @@ async def login(body: UserLogin, response: Response):
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token")
+    response.delete_cookie("access_token", samesite="none", secure=True)
     return {"success": True, "message": "Logged out"}
 
 
@@ -61,7 +62,8 @@ async def register(body: UserCreate, response: Response):
         key="access_token",
         value=token,
         httponly=True,
-        samesite="lax",
+        samesite="none",
+        secure=True,
         max_age=86400,
     )
     return {"success": True, "data": user_to_out(user)}
