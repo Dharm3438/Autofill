@@ -1,13 +1,15 @@
 """
 Document generation service.
-Fills DOCX templates with customer data and converts to PDF via docx2pdf (uses MS Word on Windows).
+Fills DOCX templates with customer data and converts to PDF.
+Windows: uses MS Word via docx2pdf. Linux: uses LibreOffice headless via subprocess.
 """
 import re
+import sys
 import asyncio
+import subprocess
 from pathlib import Path
 from docx import Document
 from docx.shared import Inches
-from docx2pdf import convert
 
 TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
 OUTPUT_DIR = Path(__file__).parent.parent.parent / "generated_docs"
@@ -85,7 +87,18 @@ def fill_template(template_path: Path, output_path: Path, replacements: dict, im
 def convert_docx_to_pdf(docx_path: Path) -> bool:
     try:
         pdf_path = docx_path.with_suffix(".pdf")
-        convert(str(docx_path), str(pdf_path))
+        if sys.platform == "win32":
+            from docx2pdf import convert
+            convert(str(docx_path), str(pdf_path))
+        else:
+            result = subprocess.run(
+                ["libreoffice", "--headless", "--convert-to", "pdf",
+                 "--outdir", str(docx_path.parent), str(docx_path)],
+                capture_output=True, text=True, timeout=60
+            )
+            if result.returncode != 0:
+                print(f"LibreOffice error: {result.stderr}")
+                return False
         return pdf_path.exists()
     except Exception as e:
         print(f"PDF conversion failed [{docx_path.name}]: {e}")
