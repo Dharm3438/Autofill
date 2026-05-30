@@ -77,13 +77,21 @@ async def send_otp(token: str):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    otp = "".join(random.choices(string.digits, k=6))
-    otp_expiry = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    existing_otp = submission.get("otp")
+    existing_expiry = submission.get("otp_expiry")
 
-    await db.signing_submissions.update_one(
-        {"token": token},
-        {"$set": {"otp": otp, "otp_expiry": otp_expiry, "otp_verified": False}}
-    )
+    # Reuse an unexpired, unverified code so reloads/resends don't invalidate
+    # the OTP already sitting in the customer's inbox.
+    if existing_otp and not submission.get("otp_verified") and existing_expiry and existing_expiry > now:
+        otp = existing_otp
+    else:
+        otp = "".join(random.choices(string.digits, k=6))
+        otp_expiry = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+        await db.signing_submissions.update_one(
+            {"token": token},
+            {"$set": {"otp": otp, "otp_expiry": otp_expiry, "otp_verified": False}}
+        )
 
     from ..services.signing import send_otp_email
     send_otp_email(customer, otp)

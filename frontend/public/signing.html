@@ -1550,8 +1550,17 @@
       const sigConfirm = document.getElementById('sig-confirm-name');
       if (sigConfirm) sigConfirm.textContent = state.customerName;
 
-      // Send OTP automatically on page load
-      await sendOtp();
+      // Send OTP automatically — but only once per token within the validity
+      // window. Mail apps open this link in an in-app browser that reloads the
+      // page when you switch to the inbox and back; without this guard each
+      // reload would send a brand-new code and invalidate the one you just read.
+      const lastSent = Number(localStorage.getItem(`otp_sent_${TOKEN}`) || 0);
+      if (Date.now() - lastSent > 9 * 60 * 1000) {
+        await sendOtp();
+      } else {
+        document.querySelector('.section-subtitle').innerHTML =
+          `We've sent a 6-digit code to <strong>${state.customerName}</strong>'s registered email`;
+      }
     } catch (e) {
       showLinkError('Failed to load signing page. Please try again.');
     }
@@ -1570,6 +1579,7 @@
   async function sendOtp() {
     try {
       await fetch(`${API_BASE}/signing/send-otp/${TOKEN}`, { method: 'POST' });
+      localStorage.setItem(`otp_sent_${TOKEN}`, String(Date.now()));
       document.querySelector('.section-subtitle').innerHTML =
         `We've sent a 6-digit code to <strong>${state.customerName}</strong>'s registered email`;
     } catch (e) {
