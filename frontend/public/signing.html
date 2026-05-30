@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Document Signing Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -386,6 +388,106 @@
     object-fit: contain;
   }
 
+  /* ── Cropper ── */
+  .cropper-wrap {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--white);
+  }
+  .cropper-wrap.show { display: block; }
+  .cropper-wrap-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+  }
+  .cropper-image-container {
+    background: #1a1d24;
+    max-height: 360px;
+    overflow: hidden;
+  }
+  .cropper-image-container img {
+    display: block;
+    max-width: 100%;
+  }
+  .cropper-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .cropper-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--ink-muted);
+    font-size: 0.78rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .cropper-tool-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .cropper-tool-btn.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+    margin-left: auto;
+  }
+  .cropper-tool-btn.primary:hover { background: var(--accent-light); }
+  .cropper-tool-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* limit cropper's crop box visual to our aspect ratio */
+  .cropper-view-box,
+  .cropper-face { border-radius: 0; }
+
+  /* ── Processed signature preview ── */
+  .sig-processed {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--white);
+  }
+  .sig-processed.show { display: block; }
+  .sig-processed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+  }
+  .sig-processed-body {
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: repeating-conic-gradient(#f7f7f5 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;
+  }
+  .sig-processed-body img {
+    display: block;
+    width: 250px;
+    height: 100px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+
   /* ── Photo capture ── */
   .photo-tabs { margin-bottom: 16px; }
   .camera-wrap {
@@ -398,6 +500,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+  .camera-wrap.landscape {
+    aspect-ratio: 4/3;
+    max-height: 320px;
   }
   .camera-wrap video {
     width: 100%;
@@ -825,55 +931,121 @@
       <div class="sig-tabs">
         <button class="sig-tab active" id="tab-draw" onclick="switchSigTab('draw')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
-          Draw Signature
+          Draw
         </button>
         <button class="sig-tab" id="tab-upload" onclick="switchSigTab('upload')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload Image
+          Upload
+        </button>
+        <button class="sig-tab" id="tab-sig-camera" onclick="switchSigTab('camera')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Camera
         </button>
       </div>
 
-      <!-- Draw tab -->
-      <div class="sig-tab-panel active" id="tabpanel-draw">
-        <div class="sig-wrap" id="sig-wrap">
-          <canvas id="sig-canvas" height="220"></canvas>
-          <div class="sig-hint" id="sig-hint">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#9399aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
-            <div class="sig-hint-text">Click and drag to sign</div>
+      <!-- Tab content area (hidden when cropping or showing processed preview) -->
+      <div id="sig-tab-content">
+        <!-- Draw tab -->
+        <div class="sig-tab-panel active" id="tabpanel-draw">
+          <div class="sig-wrap" id="sig-wrap">
+            <canvas id="sig-canvas" height="220"></canvas>
+            <div class="sig-hint" id="sig-hint">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#9399aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+              <div class="sig-hint-text">Click and drag to sign</div>
+            </div>
+            <div class="sig-baseline"></div>
+            <div class="sig-toolbar">
+              <span class="sig-toolbar-info" id="sig-status">Use finger or mouse to sign</span>
+              <button class="btn-clear" onclick="clearSig()">✕ Clear</button>
+            </div>
           </div>
-          <div class="sig-baseline"></div>
-          <div class="sig-toolbar">
-            <span class="sig-toolbar-info" id="sig-status">Use finger or mouse to sign</span>
-            <button class="btn-clear" onclick="clearSig()">✕ Clear</button>
+        </div>
+
+        <!-- Upload tab -->
+        <div class="sig-tab-panel" id="tabpanel-upload">
+          <div class="upload-area" id="upload-area">
+            <input type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" onchange="handleUpload(this)"/>
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="upload-title">Upload your signature</div>
+            <div class="upload-sub">PNG, JPG or GIF · Max 2MB · You'll position it in the crop box on the next step.</div>
           </div>
+          <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+            💡 Position your signature inside the crop box, then tap <strong>Apply</strong>. We'll clean it to pure black on white automatically.
+          </p>
+        </div>
+
+        <!-- Camera tab -->
+        <div class="sig-tab-panel" id="tabpanel-camera">
+          <div class="camera-wrap landscape" id="sig-camera-wrap">
+            <video id="sig-camera-video" autoplay playsinline muted></video>
+            <canvas id="sig-camera-canvas" style="display:none"></canvas>
+            <div class="camera-overlay" id="sig-camera-overlay">
+              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Starting camera…</span>
+            </div>
+          </div>
+          <div class="camera-toolbar">
+            <button class="btn-cam-switch" title="Switch camera" onclick="sigSwitchCamera()">
+              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            </button>
+            <button class="btn-capture" id="btn-sig-capture" onclick="sigCapturePhoto()" title="Capture signature">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="btn-cam-switch" title="Start / stop camera" onclick="sigToggleCamera()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+          <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+            📷 Photograph your signature on paper. You'll position it in the crop box next, then we'll clean it to pure black on white.
+          </p>
         </div>
       </div>
 
-      <!-- Upload tab -->
-      <div class="sig-tab-panel" id="tabpanel-upload">
-        <div class="upload-area" id="upload-area">
-          <input type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" onchange="handleUpload(this)"/>
-          <div class="upload-icon">
-            <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          </div>
-          <div class="upload-title">Upload your signature</div>
-          <div class="upload-sub">PNG, JPG or GIF · Max 2MB · Transparent background preferred</div>
+      <!-- Shared cropper editor (visible after upload or camera capture) -->
+      <div class="cropper-wrap" id="cropper-wrap">
+        <div class="cropper-wrap-header">
+          <span id="cropper-filename">signature.png</span>
+          <button class="btn-clear" onclick="cancelCrop()">✕ Cancel</button>
         </div>
-        <div class="upload-preview" id="upload-preview">
-          <div class="upload-preview-header">
-            <span id="upload-filename">signature.png</span>
-            <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
-          </div>
-          <img id="upload-preview-img" src="" alt="Uploaded signature"/>
+        <div class="cropper-image-container">
+          <img id="cropper-img" alt="To crop"/>
         </div>
-        <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
-          💡 Tip: A signature on white paper photographed clearly works well. Transparent PNG gives the cleanest result.
-        </p>
+        <div class="cropper-toolbar">
+          <button type="button" class="cropper-tool-btn" onclick="cropperZoom(0.1)" title="Zoom in">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom In
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="cropperZoom(-0.1)" title="Zoom out">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom Out
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="cropperReset()" title="Reset">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button type="button" class="cropper-tool-btn primary" onclick="applyCrop()" title="Apply crop">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Apply
+          </button>
+        </div>
+      </div>
+
+      <!-- Shared processed BW signature preview -->
+      <div class="sig-processed" id="upload-preview">
+        <div class="sig-processed-header">
+          <span><strong style="color:var(--ink);">Processed signature</strong> · <span id="upload-filename">signature.png</span></span>
+          <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
+        </div>
+        <div class="sig-processed-body">
+          <img id="upload-preview-img" src="" alt="Processed signature"/>
+        </div>
       </div>
 
       <div class="mt-16 btn-row">
-        <button class="btn btn-secondary" onclick="goTo(1)">← Back</button>
-        <button class="btn btn-primary" id="btn-sig-next" disabled onclick="goTo(3)">Continue →</button>
+        <button class="btn btn-secondary" onclick="sigStopCamera(); goTo(1);">← Back</button>
+        <button class="btn btn-primary" id="btn-sig-next" disabled onclick="sigStopCamera(); goTo(3);">Continue →</button>
       </div>
     </div>
 
@@ -1159,8 +1331,12 @@
     document.getElementById(`step-${n}`)?.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (n === 2 && activeTab === 'draw') setTimeout(initSigPad, 80);
+    if (n === 2) {
+      if (activeTab === 'draw') setTimeout(initSigPad, 80);
+      else if (activeTab === 'camera') setTimeout(sigStartCamera, 80);
+    }
     if (n === 3) setTimeout(autoStartCamera, 100);
+    if (state.currentPanel !== 2) sigStopCamera();
     if (n === 4) renderDocReview();
     if (n === 5) renderConsent();
     if (n === 6) renderSuccess();
@@ -1187,20 +1363,25 @@
 
   function switchSigTab(tab) {
     activeTab = tab;
-    document.querySelectorAll('.sig-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.sig-tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById(`tab-${tab}`).classList.add('active');
+    document.querySelectorAll('.sig-tabs .sig-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#sig-tab-content .sig-tab-panel').forEach(p => p.classList.remove('active'));
+    const tabBtn = document.getElementById(tab === 'camera' ? 'tab-sig-camera' : `tab-${tab}`);
+    if (tabBtn) tabBtn.classList.add('active');
     document.getElementById(`tabpanel-${tab}`).classList.add('active');
 
-    // Clear sig state from other tab
     if (tab === 'draw') {
-      // keep upload data in state but don't enable next unless draw is also signed
-      updateSigNextBtn();
+      sigStopCamera();
+      setTimeout(initSigPad, 50);
+    } else if (tab === 'camera') {
+      setTimeout(sigStartCamera, 80);
     } else {
-      updateSigNextBtn();
+      sigStopCamera();
     }
+    updateSigNextBtn();
+  }
 
-    if (tab === 'draw') setTimeout(initSigPad, 50);
+  function setSigSourceVisible(visible) {
+    document.getElementById('sig-tab-content').style.display = visible ? '' : 'none';
   }
 
   // ── Signature pad ──────────────────────
@@ -1238,8 +1419,15 @@
       const empty = sigPad.isEmpty();
       document.getElementById('sig-wrap').classList.toggle('has-sig', !empty);
       document.getElementById('sig-status').textContent = empty ? 'Use finger or mouse to sign' : '✓ Signature captured';
-      if (!empty) state.signatureDataURL = sigPad.toDataURL('image/png');
-      else state.signatureDataURL = null;
+      if (!empty) {
+        // Trim/center/BW into a 500x200 PNG; fall back to raw if anything fails
+        let processed = null;
+        try { processed = processDrawnSignature(canvas); }
+        catch (err) { console.error('Draw processing failed:', err); }
+        state.signatureDataURL = processed || sigPad.toDataURL('image/png');
+      } else {
+        state.signatureDataURL = null;
+      }
       updateSigNextBtn();
     });
   }
@@ -1346,32 +1534,297 @@
     updateSigNextBtn();
   }
 
-  // ── Upload handler ─────────────────────
+  // ══════════════════════════════════════
+  // SIGNATURE IMAGE PROCESSING
+  // Final output: 500x200 PNG, pure black ink on pure white
+  // ══════════════════════════════════════
+  const SIG_OUT_W = 500;
+  const SIG_OUT_H = 200;
+
+  // Otsu's method — auto-pick the best B/W split point from a grayscale histogram.
+  function otsuThreshold(hist, total) {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let sumB = 0, wB = 0, maxVar = 0, threshold = 127;
+    for (let i = 0; i < 256; i++) {
+      wB += hist[i];
+      if (wB === 0) continue;
+      const wF = total - wB;
+      if (wF === 0) break;
+      sumB += i * hist[i];
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+      const between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > maxVar) { maxVar = between; threshold = i; }
+    }
+    return threshold;
+  }
+
+  // Apply B/W threshold to a canvas, in place. Composites alpha onto white first
+  // so that drawn signatures (transparent bg) and uploaded photos (opaque)
+  // share the same logic.
+  // Returns {minX, minY, maxX, maxY} ink-bounds, or null if no ink found.
+  function applyBWAndFindBounds(canvas) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.getImageData(0, 0, W, H);
+    const data = img.data;
+
+    // Pass 1: composite onto white + build grayscale histogram
+    const hist = new Array(256).fill(0);
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i+3] / 255;
+      const r = Math.round(data[i]   * a + 255 * (1 - a));
+      const g = Math.round(data[i+1] * a + 255 * (1 - a));
+      const b = Math.round(data[i+2] * a + 255 * (1 - a));
+      data[i] = r; data[i+1] = g; data[i+2] = b; data[i+3] = 255;
+      const gray = (0.299*r + 0.587*g + 0.114*b) | 0;
+      hist[gray]++;
+    }
+    const total = (data.length / 4) | 0;
+    const T = otsuThreshold(hist, total);
+
+    // Pass 2: threshold + bounds
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        const gray = (0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2]) | 0;
+        if (gray < T) {
+          data[idx] = data[idx+1] = data[idx+2] = 0;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        } else {
+          data[idx] = data[idx+1] = data[idx+2] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return maxX < 0 ? null : { minX, minY, maxX, maxY };
+  }
+
+  // For drawn signatures: BW + trim whitespace + center on 500x200 white canvas.
+  function processDrawnSignature(srcCanvas) {
+    // Copy to a working canvas at native pixel size
+    const work = document.createElement('canvas');
+    work.width  = srcCanvas.width;
+    work.height = srcCanvas.height;
+    work.getContext('2d').drawImage(srcCanvas, 0, 0);
+
+    const bounds = applyBWAndFindBounds(work);
+    if (!bounds) return null;
+
+    const inkW = bounds.maxX - bounds.minX + 1;
+    const inkH = bounds.maxY - bounds.minY + 1;
+
+    // Letterbox-fit ink into 500x200 with a small margin
+    const margin = 12;
+    const targetW = SIG_OUT_W - margin * 2;
+    const targetH = SIG_OUT_H - margin * 2;
+    const scale = Math.min(targetW / inkW, targetH / inkH);
+    const drawW = inkW * scale;
+    const drawH = inkH * scale;
+    const dx = (SIG_OUT_W - drawW) / 2;
+    const dy = (SIG_OUT_H - drawH) / 2;
+
+    const out = document.createElement('canvas');
+    out.width = SIG_OUT_W;
+    out.height = SIG_OUT_H;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(work, bounds.minX, bounds.minY, inkW, inkH, dx, dy, drawW, drawH);
+    return out.toDataURL('image/png');
+  }
+
+  // For uploaded signatures already cropped by Cropper.js to 500x200:
+  // just apply BW threshold over the cropped canvas.
+  function processCroppedSignature(croppedCanvas) {
+    const out = document.createElement('canvas');
+    out.width = SIG_OUT_W;
+    out.height = SIG_OUT_H;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    octx.drawImage(croppedCanvas, 0, 0, SIG_OUT_W, SIG_OUT_H);
+    applyBWAndFindBounds(out);
+    return out.toDataURL('image/png');
+  }
+
+  // ══════════════════════════════════════
+  // UPLOAD + CROPPER
+  // ══════════════════════════════════════
+  let cropperInstance = null;
+  let uploadedFilename = 'signature.png';
+
   function handleUpload(input) {
     const file = input.files[0];
     if (!file) return;
     if (file.size > 2 * 1024 * 1024) {
       alert('File too large. Please upload an image under 2MB.');
+      input.value = '';
       return;
     }
+    uploadedFilename = file.name;
     const reader = new FileReader();
     reader.onload = (e) => {
-      state.signatureDataURL = e.target.result;
-      document.getElementById('upload-preview-img').src = e.target.result;
-      document.getElementById('upload-filename').textContent = file.name;
-      document.getElementById('upload-area').style.display = 'none';
-      document.getElementById('upload-preview').classList.add('show');
-      updateSigNextBtn();
+      openCropper(e.target.result);
     };
     reader.readAsDataURL(file);
+    input.value = ''; // allow re-selecting same file later
+  }
+
+  function openCropper(dataUrl) {
+    sigStopCamera();                    // free the webcam while user crops
+    setSigSourceVisible(false);         // hide draw / upload / camera panels
+    document.getElementById('upload-area').style.display = 'block';
+    document.getElementById('upload-preview').classList.remove('show');
+    document.getElementById('cropper-filename').textContent = uploadedFilename;
+
+    const wrap = document.getElementById('cropper-wrap');
+    wrap.classList.add('show');
+
+    const img = document.getElementById('cropper-img');
+    img.src = dataUrl;
+
+    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+
+    // Wait for the image to actually load so Cropper measures it correctly
+    img.onload = () => {
+      cropperInstance = new Cropper(img, {
+        aspectRatio: SIG_OUT_W / SIG_OUT_H,   // 2.5 : 1
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 0.85,
+        background: false,
+        responsive: true,
+        zoomable: true,
+        scalable: false,
+        rotatable: false,
+        wheelZoomRatio: 0.1,
+        guides: true,
+        center: true,
+        movable: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+      });
+    };
+  }
+
+  function cropperZoom(delta) {
+    if (cropperInstance) cropperInstance.zoom(delta);
+  }
+
+  function cropperReset() {
+    if (cropperInstance) cropperInstance.reset();
+  }
+
+  function cancelCrop() {
+    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+    document.getElementById('cropper-wrap').classList.remove('show');
+    setSigSourceVisible(true);
+    // Restart camera if user was on the camera tab
+    if (activeTab === 'camera') setTimeout(sigStartCamera, 80);
+  }
+
+  function applyCrop() {
+    if (!cropperInstance) return;
+    const cropped = cropperInstance.getCroppedCanvas({
+      width: SIG_OUT_W,
+      height: SIG_OUT_H,
+      fillColor: '#ffffff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    if (!cropped) { alert('Could not crop. Please try again.'); return; }
+
+    const dataUrl = processCroppedSignature(cropped);
+    state.signatureDataURL = dataUrl;
+
+    document.getElementById('upload-preview-img').src = dataUrl;
+    document.getElementById('upload-filename').textContent = uploadedFilename;
+    document.getElementById('upload-preview').classList.add('show');
+
+    cropperInstance.destroy();
+    cropperInstance = null;
+    document.getElementById('cropper-wrap').classList.remove('show');
+    // Keep the tab panels hidden — the processed preview is the focus now.
+
+    updateSigNextBtn();
   }
 
   function clearUpload() {
     state.signatureDataURL = null;
     document.getElementById('upload-preview-img').src = '';
-    document.getElementById('upload-area').style.display = 'block';
     document.getElementById('upload-preview').classList.remove('show');
+    setSigSourceVisible(true);
+    if (activeTab === 'camera') setTimeout(sigStartCamera, 80);
     updateSigNextBtn();
+  }
+
+  // ══════════════════════════════════════
+  // SIGNATURE CAMERA (parallel to the photo-step camera; isolated state)
+  // ══════════════════════════════════════
+  let sigCameraStream = null;
+  let sigFacingMode = 'environment';   // rear cam by default — better for paper
+
+  async function sigStartCamera() {
+    if (activeTab !== 'camera') return;
+    try {
+      if (sigCameraStream) sigStopCamera();
+      const constraints = { video: { facingMode: sigFacingMode, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false };
+      sigCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const video = document.getElementById('sig-camera-video');
+      video.srcObject = sigCameraStream;
+      video.play();
+      document.getElementById('sig-camera-overlay').style.display = 'none';
+    } catch (err) {
+      const overlay = document.getElementById('sig-camera-overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" stroke="rgba(255,255,255,0.4)" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span style="font-size:0.8rem;color:rgba(255,255,255,0.6);text-align:center;padding:0 20px;">Camera access denied.<br/>Please use the Upload tab instead.</span>`;
+    }
+  }
+
+  function sigStopCamera() {
+    if (sigCameraStream) {
+      sigCameraStream.getTracks().forEach(t => t.stop());
+      sigCameraStream = null;
+    }
+    const video = document.getElementById('sig-camera-video');
+    if (video) video.srcObject = null;
+  }
+
+  async function sigSwitchCamera() {
+    sigFacingMode = sigFacingMode === 'user' ? 'environment' : 'user';
+    await sigStartCamera();
+  }
+
+  async function sigToggleCamera() {
+    if (sigCameraStream) sigStopCamera();
+    else await sigStartCamera();
+  }
+
+  function sigCapturePhoto() {
+    const video = document.getElementById('sig-camera-video');
+    if (!video || !video.srcObject) { sigStartCamera(); return; }
+    const canvas = document.getElementById('sig-camera-canvas');
+    const W = video.videoWidth || 1280;
+    const H = video.videoHeight || 960;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (sigFacingMode === 'user') {
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, W, H);
+    const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+    uploadedFilename = 'signature-photo.jpg';
+    openCropper(dataURL);   // openCropper itself stops the camera
   }
 
   // Drag & drop on upload area

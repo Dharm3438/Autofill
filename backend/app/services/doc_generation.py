@@ -24,7 +24,7 @@ TEMPLATES = {
 
 # placeholder -> (image-key, render width)
 IMAGE_PLACEHOLDERS = {
-    "${CUSTOMER_SIGN}$":  ("signature", Inches(2.0)),
+    "${CUSTOMER_SIGN}$":  ("signature", Inches(2.5)),
     "${CUSTOMER_PHOTO}$": ("photo",     Inches(2.5)),
 }
 
