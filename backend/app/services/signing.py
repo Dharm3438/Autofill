@@ -1,21 +1,17 @@
+import resend
 import secrets
 from datetime import datetime, timedelta, timezone
-from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 from ..core.config import settings
 
 
-def _mail_config():
-    return ConnectionConfig(
-        MAIL_USERNAME=settings.SMTP_USER,
-        MAIL_PASSWORD=settings.SMTP_PASSWORD,
-        MAIL_FROM=settings.FROM_EMAIL,
-        MAIL_FROM_NAME=settings.FROM_NAME,
-        MAIL_PORT=settings.SMTP_PORT,
-        MAIL_SERVER=settings.SMTP_HOST,
-        MAIL_STARTTLS=True,
-        MAIL_SSL_TLS=False,
-        USE_CREDENTIALS=True,
-    )
+def _send_email(to: str, subject: str, html: str):
+    resend.api_key = settings.RESEND_API_KEY
+    resend.Emails.send({
+        "from": f"{settings.FROM_NAME} <{settings.FROM_EMAIL}>",
+        "to": [to],
+        "subject": subject,
+        "html": html,
+    })
 
 
 async def create_signing_token(db, customer_id: str) -> str:
@@ -34,7 +30,7 @@ async def create_signing_token(db, customer_id: str) -> str:
     return token
 
 
-async def send_signing_email(customer: dict, token: str):
+def send_signing_email(customer: dict, token: str):
     signing_url = f"{settings.FRONTEND_URL}/signing.html?token={token}"
     customer_name = customer.get("CONSUMER_NAME", "Customer")
 
@@ -63,18 +59,14 @@ async def send_signing_email(customer: dict, token: str):
     </div>
     """
 
-    message = MessageSchema(
+    _send_email(
+        to=customer["CONSUMER_EMAIL"],
         subject="Your Solar Installation Documents – Action Required",
-        recipients=[customer["CONSUMER_EMAIL"]],
-        body=html,
-        subtype="html",
+        html=html,
     )
 
-    fm = FastMail(_mail_config())
-    await fm.send_message(message)
 
-
-async def send_otp_email(customer: dict, otp: str):
+def send_otp_email(customer: dict, otp: str):
     customer_name = customer.get("CONSUMER_NAME", "Customer")
 
     html = f"""
@@ -100,12 +92,8 @@ async def send_otp_email(customer: dict, otp: str):
     </div>
     """
 
-    message = MessageSchema(
+    _send_email(
+        to=customer["CONSUMER_EMAIL"],
         subject="Your OTP for Document Signing",
-        recipients=[customer["CONSUMER_EMAIL"]],
-        body=html,
-        subtype="html",
+        html=html,
     )
-
-    fm = FastMail(_mail_config())
-    await fm.send_message(message)

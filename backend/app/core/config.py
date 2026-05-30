@@ -8,11 +8,8 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_EXPIRE_HOURS: int = 24
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    FROM_EMAIL: str = ""
+    RESEND_API_KEY: str = ""
+    FROM_EMAIL: str = "onboarding@resend.dev"
     FROM_NAME: str = "Solar Docs Platform"
 
     FRONTEND_URL: str = "http://localhost:5173"

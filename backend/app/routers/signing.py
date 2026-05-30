@@ -26,7 +26,7 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
 
     from ..services.signing import create_signing_token, send_signing_email
     token = await create_signing_token(db, customer_id)
-    await send_signing_email(customer, token)
+    send_signing_email(customer, token)
 
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
@@ -81,7 +81,7 @@ async def send_otp(token: str):
     )
 
     from ..services.signing import send_otp_email
-    await send_otp_email(customer, otp)
+    send_otp_email(customer, otp)
 
     return {"success": True, "message": "OTP sent to customer email"}
 
