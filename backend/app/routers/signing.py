@@ -1,9 +1,12 @@
 import base64
+import io
 import random
 import string
+import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.deps import get_current_user
@@ -164,6 +167,50 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
         background_tasks.add_task(_regen_after_signing, customer_id)
 
     return {"success": True, "message": "Documents signed successfully"}
+
+
+# ── Public: download finalized documents (after signing) ─────────────────────
+
+@router.get("/download/{token}")
+async def download_signed_docs(token: str):
+    db = get_db()
+    submission = await db.signing_submissions.find_one({"token": token})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Invalid link")
+    if not submission.get("submitted"):
+        raise HTTPException(status_code=403, detail="Documents have not been signed yet")
+
+    customer = await db.customers.find_one({"_id": ObjectId(submission["customer_id"])})
+    if not customer or not customer.get("docs_folder"):
+        raise HTTPException(status_code=404, detail="No documents found")
+
+    if customer.get("doc_status") == "generating":
+        raise HTTPException(status_code=425, detail="Your documents are still being finalized. Please try again in a few seconds.")
+
+    folder = OUTPUT_DIR / customer["docs_folder"]
+    if not folder.exists():
+        raise HTTPException(status_code=404, detail="Documents folder not found on server")
+
+    pdfs = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() == ".pdf"]
+    files = pdfs if pdfs else [
+        f for f in folder.iterdir()
+        if f.is_file() and f.name not in ("signature.png", "photo.jpg")
+    ]
+    if not files:
+        raise HTTPException(status_code=404, detail="No finalized documents available")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in files:
+            zf.write(f, f.name)
+    buf.seek(0)
+
+    safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={safe_name}_signed_docs.zip"},
+    )
 
 
 async def _regen_after_signing(customer_id: str):

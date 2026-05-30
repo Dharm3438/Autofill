@@ -880,7 +880,7 @@
     <div class="card" style="background:#f0f8f4;border-color:#c3e0cf;">
       <p style="font-size:0.82rem;color:var(--accent);line-height:1.6;">
         <strong>ℹ️ About your signature</strong><br>
-        Your signature will be securely stored and embedded on each document. By signing, you confirm you are <strong>Rahul Sharma</strong> and authorise its use across your documents.
+        Your signature will be securely stored and embedded on each document. By signing, you confirm you are <strong id="sig-confirm-name">Rahul Sharma</strong> and authorise its use across your documents.
       </p>
     </div>
   </div>
@@ -1023,16 +1023,11 @@
       </div>
     </div>
 
-    <div class="consent-box">
-      I, <strong>Rahul Sharma</strong>, confirm that I have personally reviewed all <strong>3 documents</strong> listed below and agree that my signature above shall be applied to each of them as my lawful electronic signature. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
-      <br/><br/>
-      Documents included:<br/>
-      <strong>1.</strong> Loan Agreement · <strong>2.</strong> KYC Declaration · <strong>3.</strong> Terms of Service
-    </div>
+    <div class="consent-box" id="consent-box"></div>
 
     <label class="consent-check-wrap">
       <input type="checkbox" id="chk-consent-1" onchange="checkConsent()"/>
-      <div class="consent-check-text">I have read and understood all 3 documents and consent to my signature being applied to each.</div>
+      <div class="consent-check-text" id="consent-check-text-1">I have read and understood all documents and consent to my signature being applied to each.</div>
     </label>
     <label class="consent-check-wrap">
       <input type="checkbox" id="chk-consent-2" onchange="checkConsent()"/>
@@ -1060,14 +1055,14 @@
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
       <div class="section-title" style="margin-bottom:8px;">All documents signed!</div>
-      <p style="font-size:0.9rem;color:var(--ink-muted);line-height:1.6;">
-        Your signature has been successfully applied to all 3 documents. A confirmation has been sent to your registered contact.
+      <p style="font-size:0.9rem;color:var(--ink-muted);line-height:1.6;" id="done-subtitle">
+        Your signature has been successfully applied to all documents. A confirmation has been sent to your registered contact.
       </p>
 
       <div class="doc-done-list" id="done-list"></div>
 
       <div class="audit-meta">
-        Signed by: <span>Rahul Sharma</span><br/>
+        Signed by: <span id="done-signed-by">—</span><br/>
         Date &amp; Time: <span id="done-time"></span><br/>
         Session ID: <span id="done-session"></span><br/>
         Documents sealed &amp; tamper-evident: <span>✓ Yes</span>
@@ -1084,7 +1079,7 @@
 
 <script>
   // ── API config ─────────────────────────
-  const API_BASE = 'https://solar-docs-api.onrender.com/api';
+  const API_BASE = 'https://autofill-blgf.onrender.com/api';
   const TOKEN = new URLSearchParams(window.location.search).get('token');
 
   // ── State ──────────────────────────────
@@ -1098,50 +1093,35 @@
     appNo: '',
   };
 
-  // ── Mock documents ─────────────────────
+  // ── Solar installation documents (matches backend templates) ───
   const DOCUMENTS = [
     {
-      id: 'doc-1',
-      name: 'Loan Agreement',
-      meta: 'Personal Loan · ₹5,00,000',
-      preview: `
-        <strong>Loan Agreement</strong>
-        <p>This Loan Agreement ("Agreement") is entered into on the date of signing between Your Company Private Limited, hereinafter referred to as the "Lender", and Rahul Sharma, hereinafter referred to as the "Borrower".</p>
-        <p><strong>Loan Amount</strong></p>
-        <p>The Lender agrees to disburse a sum of ₹5,00,000 (Rupees Five Lakhs only) to the Borrower, subject to the terms and conditions contained herein.</p>
-        <p><strong>Repayment Terms</strong></p>
-        <p>The Borrower agrees to repay the loan amount in 36 equal monthly installments (EMIs) of ₹16,607 each, commencing from the 1st of the month following disbursement. The applicable rate of interest is 12% per annum (reducing balance).</p>
-        <p><strong>Default</strong></p>
-        <p>In the event of default in payment of any EMI for a period exceeding 30 days, the Lender reserves the right to initiate recovery proceedings as per applicable law.</p>
-      `
+      id: 'annexure-1', name: 'Annexure-1', meta: 'Solar Installation Declaration',
+      preview: `<strong>Annexure-1</strong><p>This document is generated with your solar installation details. Your signature and photo will be embedded where required before it is finalized.</p>`
     },
     {
-      id: 'doc-2',
-      name: 'KYC Declaration',
-      meta: 'Know Your Customer · Mandatory',
-      preview: `
-        <strong>KYC Declaration</strong>
-        <p>I, Rahul Sharma, hereby declare that the information provided by me for the purpose of Know Your Customer (KYC) compliance is true, accurate, and complete to the best of my knowledge.</p>
-        <p><strong>Declaration of Source of Funds</strong></p>
-        <p>I further declare that the funds used for the purpose of this transaction are derived from legitimate sources and do not constitute proceeds of any unlawful activity as defined under the Prevention of Money Laundering Act, 2002.</p>
-        <p><strong>Consent for Verification</strong></p>
-        <p>I consent to the verification of my identity and address by the Lender through any legally permissible means, including but not limited to Aadhaar-based verification and CKYC registry.</p>
-      `
+      id: 'aadhar', name: 'Aadhar Declaration', meta: 'Identity Declaration',
+      preview: `<strong>Aadhar Declaration</strong><p>Confirms your identity details for the solar net-metering application. Generated from your registered information.</p>`
     },
     {
-      id: 'doc-3',
-      name: 'Terms of Service',
-      meta: 'General Terms · v2.1',
-      preview: `
-        <strong>Terms of Service</strong>
-        <p>These Terms of Service govern your use of services provided by Your Company Private Limited. By signing this document, you agree to be bound by these terms.</p>
-        <p><strong>Data Processing</strong></p>
-        <p>You authorise Your Company to collect, store, and process your personal data in accordance with the Information Technology (Reasonable Security Practices) Rules, 2011, and applicable data protection regulations.</p>
-        <p><strong>Dispute Resolution</strong></p>
-        <p>Any disputes arising out of or in connection with these terms shall be subject to the exclusive jurisdiction of courts in Mumbai, Maharashtra, and shall be resolved through arbitration in accordance with the Arbitration and Conciliation Act, 1996.</p>
-        <p><strong>Amendments</strong></p>
-        <p>Your Company reserves the right to amend these terms at any time with 30 days prior notice to the customer.</p>
-      `
+      id: 'wcr', name: 'Work Completion Report', meta: 'Installation Completion',
+      preview: `<strong>Work Completion Report (WCR)</strong><p>Certifies completion of your rooftop solar installation as per the sanctioned capacity and specifications on record.</p>`
+    },
+    {
+      id: 'annexure-3', name: 'Annexure-3 — Net Metering', meta: 'Net Metering',
+      preview: `<strong>Annexure-3 (Net Metering)</strong><p>Net-metering declaration submitted to the DISCOM for your solar connection.</p>`
+    },
+    {
+      id: 'np-agreement', name: 'Net-Metering Agreement', meta: 'Power Purchase / Net Metering',
+      preview: `<strong>Net-Metering Agreement</strong><p>Agreement between you and the DISCOM governing export/import of solar energy under the net-metering scheme.</p>`
+    },
+    {
+      id: 'meter-testing', name: 'Meter Testing Letter', meta: 'Meter Testing',
+      preview: `<strong>Meter Testing Letter</strong><p>Request/declaration for testing and installation of the generation meter for your solar system.</p>`
+    },
+    {
+      id: 'dcr', name: 'DCR Declaration', meta: 'Domestic Content Requirement',
+      preview: `<strong>DCR Declaration</strong><p>Declaration confirming use of Domestic Content Requirement compliant solar cells and modules.</p>`
     }
   ];
 
@@ -1472,6 +1452,14 @@
 
   // ── Consent render ─────────────────────
   function renderConsent() {
+    const name = state.customerName || 'the customer';
+    const n = DOCUMENTS.length;
+    const docList = DOCUMENTS.map((d, i) => `<strong>${i+1}.</strong> ${d.name}`).join(' · ');
+    document.getElementById('consent-box').innerHTML = `
+      I, <strong>${name}</strong>, confirm that I have personally reviewed all <strong>${n} documents</strong> listed below and agree that my signature above shall be applied to each of them as my lawful electronic signature. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
+      <br/><br/>Documents included:<br/>${docList}`;
+    document.getElementById('consent-check-text-1').textContent =
+      `I have read and understood all ${n} documents and consent to my signature being applied to each.`;
     if (state.signatureDataURL) document.getElementById('consent-sig-img').src = state.signatureDataURL;
     if (state.photoDataURL) {
       document.getElementById('consent-photo-img').src = state.photoDataURL;
@@ -1502,9 +1490,35 @@
     `).join('');
     document.getElementById('done-time').textContent = new Date().toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'medium' });
     document.getElementById('done-session').textContent = 'SES-' + state.sessionId;
+    document.getElementById('done-signed-by').textContent = state.customerName || 'Customer';
+    document.getElementById('done-subtitle').textContent =
+      `Your signature has been successfully applied to all ${DOCUMENTS.length} documents. A confirmation has been sent to your registered contact.`;
   }
-  function downloadAll() {
-    alert('Documents have been signed and saved. Your company will provide the final copies.');
+  async function downloadAll() {
+    const btn = document.querySelector('#panel-6 .btn-primary');
+    const original = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing...'; }
+    try {
+      const res = await fetch(`${API_BASE}/signing/download/${TOKEN}`);
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        alert(d.detail || 'Your documents are still being finalized. Please try again in a few seconds.');
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(state.customerName || 'signed').replace(/\s+/g, '_')}_documents.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert('Download failed. Please check your connection and try again.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
   }
 
   // ── API: initialise page ───────────────
@@ -1526,13 +1540,15 @@
       // Fill in customer info on panel 1
       document.querySelectorAll('.info-field-value')[0].textContent = state.customerName;
       document.querySelectorAll('.info-field-value')[1].textContent = state.appNo;
-      document.querySelectorAll('.info-field-value')[2].textContent = '7 documents';
+      document.querySelectorAll('.info-field-value')[2].textContent = `${DOCUMENTS.length} documents`;
       document.querySelectorAll('.info-field-value')[3].textContent = 'Solar Docs Platform';
 
-      // Update consent text with real name
+      // Update remaining hardcoded names with the real customer name
       document.querySelectorAll('.consent-check-text').forEach(el => {
         el.innerHTML = el.innerHTML.replace(/Rahul Sharma/g, state.customerName);
       });
+      const sigConfirm = document.getElementById('sig-confirm-name');
+      if (sigConfirm) sigConfirm.textContent = state.customerName;
 
       // Send OTP automatically on page load
       await sendOtp();
