@@ -1,16 +1,18 @@
 import base64
 import io
+import asyncio
 import random
 import string
 import zipfile
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from ..core.config import settings
 from ..core.database import get_db
 from ..core.deps import get_current_user
-from ..services.doc_generation import OUTPUT_DIR
+from ..services import storage
+from ..services.doc_generation import SIGNATURE_KEY, PHOTO_KEY
 from bson import ObjectId
 
 router = APIRouter(prefix="/signing", tags=["signing"])
@@ -136,35 +138,32 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Save signature and photo files to customer's docs folder
-    docs_folder = customer.get("docs_folder")
-    if docs_folder:
-        folder = OUTPUT_DIR / docs_folder
-        folder.mkdir(parents=True, exist_ok=True)
+    # Save signature and photo to R2 under the customer's prefix
+    prefix = storage.customer_prefix(customer_id)
+    sig_bytes = _decode_base64_image(body.signature)
+    photo_bytes = _decode_base64_image(body.photo)
+    if sig_bytes:
+        await asyncio.to_thread(storage.upload_bytes, sig_bytes, prefix + SIGNATURE_KEY, "image/png")
+    if photo_bytes:
+        await asyncio.to_thread(storage.upload_bytes, photo_bytes, prefix + PHOTO_KEY, "image/jpeg")
 
-        sig_path   = folder / "signature.png"
-        photo_path = folder / "photo.jpg"
-
-        _save_base64_image(body.signature, sig_path)
-        _save_base64_image(body.photo, photo_path)
-
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    download_expires_at = (now + timedelta(days=settings.DOWNLOAD_WINDOW_DAYS)).isoformat()
     await db.signing_submissions.update_one(
         {"token": token},
-        {"$set": {"submitted": True, "submitted_at": now}}
+        {"$set": {
+            "submitted": True,
+            "submitted_at": now.isoformat(),
+            "download_expires_at": download_expires_at,
+        }}
     )
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
-        {"$set": {"signing_status": "signed"}}
+        {"$set": {"signing_status": "signed", "doc_status": "generating"}}
     )
 
     # Regenerate docs so they embed the freshly-saved signature & photo
-    if docs_folder:
-        await db.customers.update_one(
-            {"_id": ObjectId(customer_id)},
-            {"$set": {"doc_status": "generating"}}
-        )
-        background_tasks.add_task(_regen_after_signing, customer_id)
+    background_tasks.add_task(_regen_after_signing, customer_id)
 
     return {"success": True, "message": "Documents signed successfully"}
 
@@ -180,29 +179,27 @@ async def download_signed_docs(token: str):
     if not submission.get("submitted"):
         raise HTTPException(status_code=403, detail="Documents have not been signed yet")
 
+    expires_at = submission.get("download_expires_at")
+    if expires_at and expires_at < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=410, detail="The download window for these documents has expired.")
+
     customer = await db.customers.find_one({"_id": ObjectId(submission["customer_id"])})
-    if not customer or not customer.get("docs_folder"):
+    if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
     if customer.get("doc_status") == "generating":
         raise HTTPException(status_code=425, detail="Your documents are still being finalized. Please try again in a few seconds.")
 
-    folder = OUTPUT_DIR / customer["docs_folder"]
-    if not folder.exists():
-        raise HTTPException(status_code=404, detail="Documents folder not found on server")
-
-    pdfs = [f for f in folder.iterdir() if f.is_file() and f.suffix.lower() == ".pdf"]
-    files = pdfs if pdfs else [
-        f for f in folder.iterdir()
-        if f.is_file() and f.name not in ("signature.png", "photo.jpg")
-    ]
-    if not files:
+    objects = [o for o in await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
+               if o["name"].lower().endswith(".pdf")]
+    if not objects:
         raise HTTPException(status_code=404, detail="No finalized documents available")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
-            zf.write(f, f.name)
+        for o in objects:
+            data = await asyncio.to_thread(storage.download_bytes, o["key"])
+            zf.writestr(o["name"], data)
     buf.seek(0)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")
@@ -220,10 +217,10 @@ async def _regen_after_signing(customer_id: str):
         customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
         if not customer:
             return
-        folder = await generate_for_customer(customer)
+        prefix = await generate_for_customer(customer)
         await db.customers.update_one(
             {"_id": ObjectId(customer_id)},
-            {"$set": {"doc_status": "complete", "docs_folder": folder}}
+            {"$set": {"doc_status": "complete", "r2_prefix": prefix}}
         )
         print(f"Re-generated signed docs for {customer_id}")
     except Exception as e:
@@ -234,11 +231,13 @@ async def _regen_after_signing(customer_id: str):
         )
 
 
-def _save_base64_image(data_url: str, path: Path):
+def _decode_base64_image(data_url: str) -> bytes | None:
     # data_url: "data:image/png;base64,xxxxxx"
+    if not data_url:
+        return None
     try:
-        header, encoded = data_url.split(",", 1)
-        img_bytes = base64.b64decode(encoded)
-        path.write_bytes(img_bytes)
+        encoded = data_url.split(",", 1)[1] if "," in data_url else data_url
+        return base64.b64decode(encoded)
     except Exception as e:
-        print(f"Failed to save image {path}: {e}")
+        print(f"Failed to decode image: {e}")
+        return None

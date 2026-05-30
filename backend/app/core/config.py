@@ -27,5 +27,7 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = "solar-docs"
     R2_PUBLIC_URL: str = ""
 
+    DOWNLOAD_WINDOW_DAYS: int = 3
+
 
 settings = Settings()

@@ -45,7 +45,7 @@ async def create_customer(body: CustomerCreate, _=Depends(get_current_user)):
         "doc_status": "none",
         "signing_status": "none",
         "signing_token": None,
-        "docs_folder": None,
+        "r2_prefix": None,
         "created_at": now,
         "updated_at": now,
     }

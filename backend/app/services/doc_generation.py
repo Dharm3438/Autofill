@@ -5,14 +5,20 @@ Windows: uses MS Word via docx2pdf. Linux: uses LibreOffice headless via subproc
 """
 import re
 import sys
+import shutil
 import asyncio
+import tempfile
 import subprocess
 from pathlib import Path
 from docx import Document
 from docx.shared import Inches
 
+from . import storage
+
 TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
-OUTPUT_DIR = Path(__file__).parent.parent.parent / "generated_docs"
+
+SIGNATURE_KEY = "signature.png"
+PHOTO_KEY = "photo.jpg"
 
 TEMPLATES = {
     "Annexure_1":           "TEMPELATE_Annexure.docx",
@@ -106,39 +112,56 @@ def convert_docx_to_pdf(docx_path: Path) -> bool:
 
 
 async def generate_for_customer(customer: dict) -> str:
+    """
+    Generate all documents for a customer in a temp dir, then upload the
+    resulting PDFs to R2 under customers/{id}/. Returns the R2 prefix.
+    """
     customer_id = str(customer.get("_id", "unknown"))
     safe_name = sanitize(customer.get("CONSUMER_NAME", "customer"))
-    folder_name = f"{customer_id}_{safe_name}"
-    output_dir = OUTPUT_DIR / folder_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+    prefix = storage.customer_prefix(customer_id)
 
     replacements = build_replacements(customer)
-
-    # Auto-detect signature / photo from prior signing submission
-    sig_file   = output_dir / "signature.png"
-    photo_file = output_dir / "photo.jpg"
-    images = {
-        "signature": sig_file   if sig_file.exists()   else None,
-        "photo":     photo_file if photo_file.exists() else None,
-    }
-
     loop = asyncio.get_event_loop()
 
-    for doc_type, template_file in TEMPLATES.items():
-        template_path = TEMPLATE_DIR / template_file
-        if not template_path.exists():
-            print(f"Template not found: {template_path}")
-            continue
+    work_dir = Path(tempfile.mkdtemp(prefix=f"docgen_{customer_id}_"))
+    try:
+        # Pull signature / photo down from R2 (saved during signing) so they get embedded
+        images = {}
+        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY)):
+            r2_key = prefix + fname
+            local = work_dir / fname
+            if await loop.run_in_executor(None, storage.object_exists, r2_key):
+                data = await loop.run_in_executor(None, storage.download_bytes, r2_key)
+                local.write_bytes(data)
+                images[img_key] = local
+            else:
+                images[img_key] = None
 
-        docx_path = output_dir / f"{safe_name}_{doc_type}.docx"
+        # Remove any stale PDFs from a previous generation before uploading fresh ones
+        stale = [o["key"] for o in await loop.run_in_executor(None, storage.list_objects, prefix)
+                 if o["key"].lower().endswith(".pdf")]
+        for key in stale:
+            await loop.run_in_executor(None, storage.delete_prefix, key)
 
-        await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements, images)
-        print(f"DOCX generated: {docx_path.name}")
+        for doc_type, template_file in TEMPLATES.items():
+            template_path = TEMPLATE_DIR / template_file
+            if not template_path.exists():
+                print(f"Template not found: {template_path}")
+                continue
 
-        success = await loop.run_in_executor(None, convert_docx_to_pdf, docx_path)
-        if success:
-            print(f"PDF generated: {docx_path.stem}.pdf")
-        else:
-            print(f"PDF failed: {docx_path.stem}")
+            docx_path = work_dir / f"{safe_name}_{doc_type}.docx"
+            await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements, images)
 
-    return folder_name
+            success = await loop.run_in_executor(None, convert_docx_to_pdf, docx_path)
+            pdf_path = docx_path.with_suffix(".pdf")
+            if success and pdf_path.exists():
+                await loop.run_in_executor(
+                    None, storage.upload_file, pdf_path, prefix + pdf_path.name, "application/pdf"
+                )
+                print(f"Uploaded to R2: {prefix + pdf_path.name}")
+            else:
+                print(f"PDF failed: {docx_path.stem}")
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+    return prefix

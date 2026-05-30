@@ -1,14 +1,16 @@
 import io
+import asyncio
 import zipfile
-from pathlib import Path
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from ..core.database import get_db
 from ..core.deps import get_current_user
-from ..services.doc_generation import OUTPUT_DIR
+from ..services import storage
 from bson import ObjectId
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+_PRIVATE_NAMES = {"signature.png", "photo.jpg"}
 
 
 @router.post("/generate/{customer_id}")
@@ -39,10 +41,10 @@ async def _generate_task(customer_id: str, customer: dict):
     from ..core.database import get_db
     db = get_db()
     try:
-        folder = await generate_for_customer(customer)
+        prefix = await generate_for_customer(customer)
         await db.customers.update_one(
             {"_id": ObjectId(customer_id)},
-            {"$set": {"doc_status": "complete", "docs_folder": folder}}
+            {"$set": {"doc_status": "complete", "r2_prefix": prefix}}
         )
         print(f"Docs complete for {customer_id}")
     except Exception as e:
@@ -58,31 +60,28 @@ async def get_doc_status(customer_id: str, _=Depends(get_current_user)):
     db = get_db()
     customer = await db.customers.find_one(
         {"_id": ObjectId(customer_id)},
-        {"doc_status": 1, "docs_folder": 1}
+        {"doc_status": 1, "r2_prefix": 1}
     )
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return {"success": True, "data": {
         "doc_status": customer.get("doc_status", "none"),
-        "docs_folder": customer.get("docs_folder"),
+        "r2_prefix": customer.get("r2_prefix"),
     }}
 
 
 @router.get("/list/{customer_id}")
 async def list_documents(customer_id: str, _=Depends(get_current_user)):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)}, {"docs_folder": 1})
-    if not customer or not customer.get("docs_folder"):
+    customer = await db.customers.find_one({"_id": ObjectId(customer_id)}, {"r2_prefix": 1})
+    if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
-    folder = OUTPUT_DIR / customer["docs_folder"]
-    if not folder.exists():
-        raise HTTPException(status_code=404, detail="Documents folder not found on server")
-
+    objects = await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
     files = [
-        {"name": f.name, "size": f.stat().st_size, "type": f.suffix.lstrip(".")}
-        for f in sorted(folder.iterdir())
-        if f.is_file()
+        {"name": o["name"], "size": o["size"], "type": o["name"].rsplit(".", 1)[-1] if "." in o["name"] else ""}
+        for o in sorted(objects, key=lambda o: o["name"])
+        if o["name"] not in _PRIVATE_NAMES
     ]
     return {"success": True, "data": files}
 
@@ -91,19 +90,20 @@ async def list_documents(customer_id: str, _=Depends(get_current_user)):
 async def download_zip(customer_id: str, _=Depends(get_current_user)):
     db = get_db()
     customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
-    if not customer or not customer.get("docs_folder"):
+    if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
-    folder = OUTPUT_DIR / customer["docs_folder"]
-    if not folder.exists():
-        raise HTTPException(status_code=404, detail="Documents folder not found on server")
+    prefix = customer["r2_prefix"]
+    objects = [o for o in await asyncio.to_thread(storage.list_objects, prefix)
+               if o["name"] not in _PRIVATE_NAMES]
+    if not objects:
+        raise HTTPException(status_code=404, detail="No documents found")
 
-    # Build zip in memory
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in folder.iterdir():
-            if f.is_file():
-                zf.write(f, f.name)
+        for o in objects:
+            data = await asyncio.to_thread(storage.download_bytes, o["key"])
+            zf.writestr(o["name"], data)
     buf.seek(0)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")
