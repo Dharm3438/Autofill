@@ -17,6 +17,13 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+    @property
+    def allowed_origins(self) -> list[str]:
+        origins = ["http://localhost:5173", "http://localhost:4173"]
+        if self.FRONTEND_URL not in origins:
+            origins.append(self.FRONTEND_URL)
+        return origins
+
     R2_ACCOUNT_ID: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
