@@ -719,6 +719,107 @@
     .section-title { font-size: 1.5rem; }
     .otp-input { width: 42px; height: 52px; font-size: 1.2rem; }
   }
+
+  /* ── Signature camera ── */
+  .sig-cam-wrap {
+    position: relative;
+    background: #0f1117;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 3/2;
+    max-height: 320px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sig-cam-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sig-cam-overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; color: rgba(255,255,255,0.7); font-size: 0.82rem; pointer-events: none;
+  }
+  .sig-cam-overlay svg { width: 38px; height: 38px; stroke: rgba(255,255,255,0.5); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  /* signature guide frame inside camera */
+  .sig-cam-guide {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%; aspect-ratio: 3/1;
+    border: 2px dashed rgba(255,255,255,0.7);
+    border-radius: 6px; pointer-events: none;
+  }
+  .sig-cam-guide::before {
+    content: 'Fit signature inside the box';
+    position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+    font-size: 0.68rem; color: rgba(255,255,255,0.65); white-space: nowrap;
+  }
+
+  /* ── Signature image editor (crop + B&W) ── */
+  .sig-editor-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(15,17,23,0.72);
+    display: none; align-items: center; justify-content: center;
+    padding: 16px; backdrop-filter: blur(2px);
+  }
+  .sig-editor-overlay.show { display: flex; }
+  .sig-editor {
+    background: var(--white); border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    width: 100%; max-width: 440px;
+    max-height: 92vh; overflow-y: auto;
+    padding: 18px;
+  }
+  .sig-editor h3 { font-size: 1.05rem; margin: 0 0 4px; color: var(--ink); }
+  .sig-editor .sig-editor-sub { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 14px; }
+  .sig-ed-stage {
+    position: relative; width: 100%; aspect-ratio: 3/1;
+    background:
+      linear-gradient(45deg, #e9e9e9 25%, transparent 25%, transparent 75%, #e9e9e9 75%, #e9e9e9),
+      linear-gradient(45deg, #e9e9e9 25%, #fff 25%, #fff 75%, #e9e9e9 75%, #e9e9e9);
+    background-size: 18px 18px; background-position: 0 0, 9px 9px;
+    border-radius: 10px; overflow: hidden;
+    touch-action: none; cursor: grab;
+  }
+  .sig-ed-stage:active { cursor: grabbing; }
+  .sig-ed-stage canvas { display: block; width: 100%; height: 100%; }
+  .sig-ed-frame {
+    position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 0 2px var(--accent-light);
+    border-radius: 10px;
+  }
+  .sig-ed-frame::before, .sig-ed-frame::after {
+    content: ''; position: absolute; left: 0; right: 0; height: 1px;
+    background: rgba(45,102,71,0.25);
+  }
+  .sig-ed-frame::before { top: 33%; }
+  .sig-ed-frame::after { top: 66%; }
+  .sig-ed-control { margin-top: 14px; }
+  .sig-ed-control label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 6px;
+  }
+  .sig-ed-control input[type=range] { width: 100%; accent-color: var(--accent-light); }
+  .sig-ed-toggle {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 0.82rem; color: var(--ink); margin-top: 14px; cursor: pointer;
+  }
+  .sig-ed-toggle input { width: 16px; height: 16px; accent-color: var(--accent-light); }
+  .sig-ed-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .sig-cam-result { display: none; }
+  .sig-cam-result.show { display: block; }
+  .sig-cam-result .photo-result-body { background: #f7f7f5; }
+  .sig-cam-result .photo-result-body img {
+    max-height: 160px; width: auto; aspect-ratio: auto;
+    border-radius: 6px; border: 1px solid var(--border);
+    background:
+      linear-gradient(45deg, #e9e9e9 25%, transparent 25%, transparent 75%, #e9e9e9 75%, #e9e9e9),
+      linear-gradient(45deg, #e9e9e9 25%, #fff 25%, #fff 75%, #e9e9e9 75%, #e9e9e9);
+    background-size: 14px 14px; background-position: 0 0, 7px 7px;
+    box-shadow: none; object-fit: contain;
+  }
+  .btn-mini {
+    font-size: 0.72rem; padding: 5px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--white);
+    color: var(--ink-muted); cursor: pointer; margin-left: 8px;
+  }
+  .btn-mini:hover { background: var(--surface); }
 </style>
 </head>
 <body>
@@ -827,6 +928,10 @@
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
           Draw Signature
         </button>
+        <button class="sig-tab" id="tab-sigcam" onclick="switchSigTab('sigcam')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Take Photo
+        </button>
         <button class="sig-tab" id="tab-upload" onclick="switchSigTab('upload')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Upload Image
@@ -862,12 +967,55 @@
         <div class="upload-preview" id="upload-preview">
           <div class="upload-preview-header">
             <span id="upload-filename">signature.png</span>
-            <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
+            <span>
+              <button class="btn-mini" onclick="reopenSigEditor()">✎ Adjust</button>
+              <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
+            </span>
           </div>
           <img id="upload-preview-img" src="" alt="Uploaded signature"/>
         </div>
         <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
-          💡 Tip: A signature on white paper photographed clearly works well. Transparent PNG gives the cleanest result.
+          💡 Tip: A signature on white paper photographed clearly works best. We'll crop it to a fixed box and convert it to clean black &amp; white.
+        </p>
+      </div>
+
+      <!-- Take Photo tab -->
+      <div class="sig-tab-panel" id="tabpanel-sigcam">
+        <div id="sig-cam-live">
+          <div class="sig-cam-wrap" id="sig-cam-wrap">
+            <video id="sig-cam-video" autoplay playsinline muted></video>
+            <div class="sig-cam-overlay" id="sig-cam-overlay">
+              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Tap below to start camera</span>
+            </div>
+            <div class="sig-cam-guide" id="sig-cam-guide" style="display:none"></div>
+          </div>
+          <div class="camera-toolbar">
+            <button class="btn-cam-switch" title="Switch camera" onclick="switchSigCamera()">
+              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            </button>
+            <button class="btn-capture" id="btn-sig-capture" onclick="captureSigPhoto()" title="Take photo">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="btn-cam-switch" title="Start / stop camera" onclick="toggleSigCamera()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="photo-result sig-cam-result" id="sig-cam-result">
+          <div class="photo-result-header">
+            <span>✓ Signature captured</span>
+            <span>
+              <button class="btn-mini" onclick="reopenSigEditor()">✎ Adjust</button>
+              <button class="btn-clear" onclick="retakeSigPhoto()">↺ Retake</button>
+            </span>
+          </div>
+          <div class="photo-result-body">
+            <img id="sig-cam-img" src="" alt="Captured signature"/>
+          </div>
+        </div>
+        <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+          💡 Tip: Photograph your signature on white paper in good light. You'll fit it inside a fixed box and we'll convert it to clean black &amp; white.
         </p>
       </div>
 
@@ -1138,7 +1286,9 @@
     document.getElementById(`step-${n}`)?.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
+    if (n !== 2) stopSigCamera();
     if (n === 2 && activeTab === 'draw') setTimeout(initSigPad, 80);
+    if (n === 2 && activeTab === 'sigcam' && !document.getElementById('sig-cam-result').classList.contains('show')) setTimeout(startSigCamera, 100);
     if (n === 3) setTimeout(autoStartCamera, 100);
     if (n === 4) renderDocReview();
     if (n === 5) renderConsent();
@@ -1162,7 +1312,7 @@
   }
 
   // ── Sig tab state ──────────────────────
-  let activeTab = 'draw'; // 'draw' | 'upload'
+  let activeTab = 'draw'; // 'draw' | 'sigcam' | 'upload'
 
   function switchSigTab(tab) {
     activeTab = tab;
@@ -1171,15 +1321,18 @@
     document.getElementById(`tab-${tab}`).classList.add('active');
     document.getElementById(`tabpanel-${tab}`).classList.add('active');
 
-    // Clear sig state from other tab
-    if (tab === 'draw') {
-      // keep upload data in state but don't enable next unless draw is also signed
-      updateSigNextBtn();
-    } else {
-      updateSigNextBtn();
-    }
+    updateSigNextBtn();
+
+    // Stop the signature camera unless we're on its tab
+    if (tab !== 'sigcam') stopSigCamera();
 
     if (tab === 'draw') setTimeout(initSigPad, 50);
+    else if (tab === 'sigcam') {
+      // Start camera only if we don't already have a captured result showing
+      if (!document.getElementById('sig-cam-result').classList.contains('show')) {
+        setTimeout(startSigCamera, 80);
+      }
+    }
   }
 
   // ── Signature pad ──────────────────────
@@ -1264,25 +1417,16 @@
     img.src = dataURL;
   }
 
-  // ── Upload handler ─────────────────────
+  // ── Upload handler (routes through the crop + B&W editor) ──
   function handleUpload(input) {
     const file = input.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File too large. Please upload an image under 5MB.');
+    if (file.size > 10 * 1024 * 1024) {
+      alert('File too large. Please upload an image under 10MB.');
       return;
     }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      compressImage(e.target.result, 800, 400, 'png', 1.0, (compressed) => {
-        state.signatureDataURL = compressed;
-        document.getElementById('upload-preview-img').src = compressed;
-        document.getElementById('upload-filename').textContent = file.name;
-        document.getElementById('upload-area').style.display = 'none';
-        document.getElementById('upload-preview').classList.add('show');
-        updateSigNextBtn();
-      });
-    };
+    reader.onload = (e) => openSigEditor(e.target.result, applySignatureResult);
     reader.readAsDataURL(file);
   }
 
@@ -1293,6 +1437,253 @@
     document.getElementById('upload-preview').classList.remove('show');
     updateSigNextBtn();
   }
+
+  // Called by the editor once the user applies a cropped + filtered signature.
+  function applySignatureResult(dataURL) {
+    state.signatureDataURL = dataURL;
+    if (activeTab === 'upload') {
+      document.getElementById('upload-preview-img').src = dataURL;
+      document.getElementById('upload-filename').textContent = 'Signature ready ✓';
+      document.getElementById('upload-area').style.display = 'none';
+      document.getElementById('upload-preview').classList.add('show');
+    } else if (activeTab === 'sigcam') {
+      document.getElementById('sig-cam-img').src = dataURL;
+      document.getElementById('sig-cam-live').style.display = 'none';
+      document.getElementById('sig-cam-result').classList.add('show');
+      stopSigCamera();
+    }
+    updateSigNextBtn();
+  }
+
+  // ══════════════════════════════════════
+  // SIGNATURE CAMERA (photograph a signature)
+  // ══════════════════════════════════════
+  let sigCamStream = null;
+  let sigFacing = 'environment'; // rear camera for photographing paper
+
+  async function startSigCamera() {
+    try {
+      if (sigCamStream) stopSigCamera();
+      const constraints = { video: { facingMode: sigFacing, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+      sigCamStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const v = document.getElementById('sig-cam-video');
+      v.srcObject = sigCamStream;
+      v.play();
+      document.getElementById('sig-cam-overlay').style.display = 'none';
+      document.getElementById('sig-cam-guide').style.display = 'block';
+    } catch (err) {
+      const o = document.getElementById('sig-cam-overlay');
+      o.style.display = 'flex';
+      o.innerHTML = '<span style="font-size:0.8rem;color:rgba(255,255,255,0.65);text-align:center;padding:0 20px;">Camera unavailable.<br/>Please use the Upload Image tab instead.</span>';
+    }
+  }
+
+  function stopSigCamera() {
+    if (sigCamStream) {
+      sigCamStream.getTracks().forEach(t => t.stop());
+      sigCamStream = null;
+    }
+    const v = document.getElementById('sig-cam-video');
+    if (v) v.srcObject = null;
+  }
+
+  async function switchSigCamera() {
+    sigFacing = sigFacing === 'user' ? 'environment' : 'user';
+    await startSigCamera();
+  }
+
+  async function toggleSigCamera() {
+    if (sigCamStream) stopSigCamera();
+    else await startSigCamera();
+  }
+
+  function captureSigPhoto() {
+    const v = document.getElementById('sig-cam-video');
+    if (!v.srcObject) { startSigCamera(); return; }
+    const c = document.createElement('canvas');
+    const W = v.videoWidth || 1280, H = v.videoHeight || 720;
+    c.width = W; c.height = H;
+    c.getContext('2d').drawImage(v, 0, 0, W, H);
+    openSigEditor(c.toDataURL('image/jpeg', 0.95), applySignatureResult);
+  }
+
+  function retakeSigPhoto() {
+    state.signatureDataURL = null;
+    document.getElementById('sig-cam-img').src = '';
+    document.getElementById('sig-cam-result').classList.remove('show');
+    document.getElementById('sig-cam-live').style.display = 'block';
+    updateSigNextBtn();
+    startSigCamera();
+  }
+
+  // ══════════════════════════════════════
+  // SIGNATURE EDITOR — crop to fixed box + black & white
+  // ══════════════════════════════════════
+  const SIG_OUT_W = 600, SIG_OUT_H = 200;     // fixed output box (3:1)
+  const sigEdSrc = document.createElement('canvas');
+  sigEdSrc.width = SIG_OUT_W; sigEdSrc.height = SIG_OUT_H;
+
+  const sigEd = {
+    img: null, source: null, onApply: null,
+    scale: 1, minScale: 0.2, maxScale: 4,
+    offsetX: 0, offsetY: 0,
+    threshold: 135, bw: true,
+    drag: false, lastX: 0, lastY: 0, pinchDist: 0,
+  };
+
+  function openSigEditor(dataURL, onApply) {
+    const img = new Image();
+    img.onload = () => {
+      sigEd.img = img;
+      sigEd.source = dataURL;
+      sigEd.onApply = onApply;
+      sigEd.bw = true;
+      sigEd.threshold = 135;
+      fitSigImage();
+      document.getElementById('sig-ed-bw').checked = true;
+      document.getElementById('sig-ed-threshold').value = sigEd.threshold;
+      document.getElementById('sig-ed-threshold-row').style.display = '';
+      document.getElementById('sig-editor-overlay').classList.add('show');
+      sigEdRender();
+    };
+    img.src = dataURL;
+  }
+
+  // Re-open the editor on the original source so the user can readjust.
+  function reopenSigEditor() {
+    if (sigEd.source) openSigEditor(sigEd.source, applySignatureResult);
+  }
+
+  function closeSigEditor() {
+    document.getElementById('sig-editor-overlay').classList.remove('show');
+  }
+
+  // "Contain" fit — whole image visible inside the box, centered.
+  function fitSigImage() {
+    const img = sigEd.img;
+    const s = Math.min(SIG_OUT_W / img.width, SIG_OUT_H / img.height);
+    sigEd.scale = s;
+    sigEd.minScale = s * 0.4;
+    sigEd.maxScale = s * 10;
+    sigEd.offsetX = (SIG_OUT_W - img.width * s) / 2;
+    sigEd.offsetY = (SIG_OUT_H - img.height * s) / 2;
+    const zoom = document.getElementById('sig-ed-zoom');
+    zoom.min = sigEd.minScale;
+    zoom.max = sigEd.maxScale;
+    zoom.step = (sigEd.maxScale - sigEd.minScale) / 100;
+    zoom.value = sigEd.scale;
+  }
+
+  // Draw the transformed colour image into the offscreen source canvas (white bg).
+  function sigEdDrawSource() {
+    const ctx = sigEdSrc.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    ctx.drawImage(sigEd.img, sigEd.offsetX, sigEd.offsetY,
+      sigEd.img.width * sigEd.scale, sigEd.img.height * sigEd.scale);
+  }
+
+  // Threshold the source canvas. transparent=true => ink black, paper transparent.
+  function sigEdBinarize(transparent) {
+    const id = sigEdSrc.getContext('2d').getImageData(0, 0, SIG_OUT_W, SIG_OUT_H);
+    const d = id.data;
+    const t = sigEd.threshold;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      if (lum < t) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
+      else if (transparent) { d[i + 3] = 0; }
+      else { d[i] = d[i + 1] = d[i + 2] = 255; d[i + 3] = 255; }
+    }
+    return id;
+  }
+
+  function sigEdRender() {
+    sigEdDrawSource();
+    const ctx = document.getElementById('sig-ed-canvas').getContext('2d');
+    ctx.clearRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    if (sigEd.bw) ctx.putImageData(sigEdBinarize(true), 0, 0);
+    else ctx.drawImage(sigEdSrc, 0, 0);
+  }
+
+  function sigEdSetZoom(val) {
+    zoomSigAround(SIG_OUT_W / 2, SIG_OUT_H / 2, parseFloat(val) / sigEd.scale);
+  }
+  function sigEdSetThreshold(val) { sigEd.threshold = parseInt(val, 10); sigEdRender(); }
+  function sigEdSetBw(checked) {
+    sigEd.bw = checked;
+    document.getElementById('sig-ed-threshold-row').style.display = checked ? '' : 'none';
+    sigEdRender();
+  }
+
+  // Zoom keeping the given canvas-space point fixed.
+  function zoomSigAround(cx, cy, factor) {
+    const ns = Math.min(sigEd.maxScale, Math.max(sigEd.minScale, sigEd.scale * factor));
+    const k = ns / sigEd.scale;
+    sigEd.offsetX = cx - (cx - sigEd.offsetX) * k;
+    sigEd.offsetY = cy - (cy - sigEd.offsetY) * k;
+    sigEd.scale = ns;
+    document.getElementById('sig-ed-zoom').value = sigEd.scale;
+    sigEdRender();
+  }
+
+  function applySigEditor() {
+    let dataURL;
+    sigEdDrawSource();
+    if (sigEd.bw) {
+      const out = document.createElement('canvas');
+      out.width = SIG_OUT_W; out.height = SIG_OUT_H;
+      out.getContext('2d').putImageData(sigEdBinarize(true), 0, 0);
+      dataURL = out.toDataURL('image/png');
+    } else {
+      dataURL = sigEdSrc.toDataURL('image/png');
+    }
+    closeSigEditor();
+    if (sigEd.onApply) sigEd.onApply(dataURL);
+  }
+
+  // Pan / pinch on the editor stage. (Modal markup is parsed after this
+  // script, so wire up once the DOM is ready.)
+  document.addEventListener('DOMContentLoaded', function wireSigEditorGestures() {
+    const stage = document.getElementById('sig-ed-stage');
+    if (!stage) return;
+    const toCanvasDelta = (dxCss, dyCss) => {
+      const r = SIG_OUT_W / stage.clientWidth;
+      return { dx: dxCss * r, dy: dyCss * r };
+    };
+    const start = (x, y) => { sigEd.drag = true; sigEd.lastX = x; sigEd.lastY = y; };
+    const move = (x, y) => {
+      if (!sigEd.drag) return;
+      const { dx, dy } = toCanvasDelta(x - sigEd.lastX, y - sigEd.lastY);
+      sigEd.offsetX += dx; sigEd.offsetY += dy;
+      sigEd.lastX = x; sigEd.lastY = y;
+      sigEdRender();
+    };
+    const end = () => { sigEd.drag = false; };
+
+    stage.addEventListener('mousedown', e => start(e.clientX, e.clientY));
+    window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
+    window.addEventListener('mouseup', end);
+
+    stage.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) start(e.touches[0].clientX, e.touches[0].clientY);
+      else if (e.touches.length === 2) { sigEd.drag = false; sigEd.pinchDist = 0; }
+    }, { passive: true });
+    stage.addEventListener('touchmove', e => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (sigEd.pinchDist) zoomSigAround(SIG_OUT_W / 2, SIG_OUT_H / 2, dist / sigEd.pinchDist);
+        sigEd.pinchDist = dist;
+      } else if (e.touches.length === 1) {
+        e.preventDefault();
+        move(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+    stage.addEventListener('touchend', e => { if (e.touches.length < 2) { sigEd.pinchDist = 0; sigEd.drag = false; } });
+  });
 
   // Drag & drop on upload area
   document.addEventListener('DOMContentLoaded', () => {
@@ -1672,5 +2063,35 @@
   // ── Boot ───────────────────────────────
   initPage();
 </script>
+<!-- ══════════════════════════════════════
+     SIGNATURE IMAGE EDITOR (crop + B&W)
+══════════════════════════════════════ -->
+<div class="sig-editor-overlay" id="sig-editor-overlay">
+  <div class="sig-editor">
+    <h3>Fit your signature</h3>
+    <div class="sig-editor-sub">Drag to position and use the slider to zoom so your signature sits neatly inside the box.</div>
+    <div class="sig-ed-stage" id="sig-ed-stage">
+      <canvas id="sig-ed-canvas" width="600" height="200"></canvas>
+      <div class="sig-ed-frame"></div>
+    </div>
+    <div class="sig-ed-control">
+      <label>Zoom</label>
+      <input type="range" id="sig-ed-zoom" min="0.2" max="4" step="0.01" value="1" oninput="sigEdSetZoom(this.value)"/>
+    </div>
+    <label class="sig-ed-toggle">
+      <input type="checkbox" id="sig-ed-bw" checked onchange="sigEdSetBw(this.checked)"/>
+      Convert to clean black &amp; white
+    </label>
+    <div class="sig-ed-control" id="sig-ed-threshold-row">
+      <label>Sensitivity <span style="color:var(--ink-faint)">(more / less ink)</span></label>
+      <input type="range" id="sig-ed-threshold" min="60" max="210" step="1" value="135" oninput="sigEdSetThreshold(this.value)"/>
+    </div>
+    <div class="sig-ed-actions">
+      <button class="btn btn-secondary" onclick="closeSigEditor()">Cancel</button>
+      <button class="btn btn-primary" onclick="applySigEditor()">Apply Signature</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
