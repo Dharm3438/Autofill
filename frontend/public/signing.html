@@ -751,57 +751,50 @@
     font-size: 0.68rem; color: rgba(255,255,255,0.65); white-space: nowrap;
   }
 
-  /* ── Signature image editor (crop + B&W) ── */
+  /* ── Signature image editor (crop + auto B&W) ── */
   .sig-editor-overlay {
     position: fixed; inset: 0; z-index: 1000;
-    background: rgba(15,17,23,0.72);
-    display: none; align-items: center; justify-content: center;
-    padding: 16px; backdrop-filter: blur(2px);
+    background: rgba(10,12,18,0.88);
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 0;
   }
   .sig-editor-overlay.show { display: flex; }
   .sig-editor {
-    background: var(--white); border-radius: 16px;
-    box-shadow: var(--shadow-lg);
-    width: 100%; max-width: 440px;
-    max-height: 92vh; overflow-y: auto;
-    padding: 18px;
+    width: 100%; max-width: 520px;
+    display: flex; flex-direction: column;
+    padding: 0 16px 24px;
   }
-  .sig-editor h3 { font-size: 1.05rem; margin: 0 0 4px; color: var(--ink); }
-  .sig-editor .sig-editor-sub { font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 14px; }
-  .sig-ed-stage {
-    position: relative; width: 100%; aspect-ratio: 3/1;
-    background:
-      linear-gradient(45deg, #e9e9e9 25%, transparent 25%, transparent 75%, #e9e9e9 75%, #e9e9e9),
-      linear-gradient(45deg, #e9e9e9 25%, #fff 25%, #fff 75%, #e9e9e9 75%, #e9e9e9);
-    background-size: 18px 18px; background-position: 0 0, 9px 9px;
-    border-radius: 10px; overflow: hidden;
-    touch-action: none; cursor: grab;
-  }
-  .sig-ed-stage:active { cursor: grabbing; }
-  .sig-ed-stage canvas { display: block; width: 100%; height: 100%; }
-  .sig-ed-frame {
-    position: absolute; inset: 0; pointer-events: none;
-    box-shadow: inset 0 0 0 2px var(--accent-light);
-    border-radius: 10px;
-  }
-  .sig-ed-frame::before, .sig-ed-frame::after {
-    content: ''; position: absolute; left: 0; right: 0; height: 1px;
-    background: rgba(45,102,71,0.25);
-  }
-  .sig-ed-frame::before { top: 33%; }
-  .sig-ed-frame::after { top: 66%; }
-  .sig-ed-control { margin-top: 14px; }
-  .sig-ed-control label {
+  .sig-editor-header {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 6px;
+    padding: 18px 0 12px;
   }
-  .sig-ed-control input[type=range] { width: 100%; accent-color: var(--accent-light); }
-  .sig-ed-toggle {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 0.82rem; color: var(--ink); margin-top: 14px; cursor: pointer;
+  .sig-editor-header h3 { font-size: 1rem; color: #fff; margin: 0; }
+  .sig-editor-header p { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin: 3px 0 0; }
+  /* the live crop viewport */
+  .sig-ed-viewport {
+    position: relative; width: 100%; aspect-ratio: 3/1;
+    border-radius: 12px; overflow: hidden;
+    touch-action: none; cursor: grab;
+    border: 2px solid var(--accent-light);
+    box-shadow: 0 0 0 4000px rgba(10,12,18,0.88); /* darken outside */
   }
-  .sig-ed-toggle input { width: 16px; height: 16px; accent-color: var(--accent-light); }
-  .sig-ed-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .sig-ed-viewport:active { cursor: grabbing; }
+  .sig-ed-viewport canvas { display: block; width: 100%; height: 100%; }
+  /* corner markers */
+  .sig-ed-corner {
+    position: absolute; width: 18px; height: 18px; pointer-events: none;
+    border-color: var(--accent-glow); border-style: solid;
+  }
+  .sig-ed-corner.tl { top: 0; left: 0; border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+  .sig-ed-corner.tr { top: 0; right: 0; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+  .sig-ed-corner.bl { bottom: 0; left: 0; border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+  .sig-ed-corner.br { bottom: 0; right: 0; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+  .sig-ed-hint {
+    position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%);
+    font-size: 0.65rem; color: rgba(255,255,255,0.55); white-space: nowrap; pointer-events: none;
+  }
+  .sig-ed-actions { display: flex; gap: 10px; margin-top: 20px; }
+  /* result preview – B&W on checkerboard */
   .sig-cam-result { display: none; }
   .sig-cam-result.show { display: block; }
   .sig-cam-result .photo-result-body { background: #f7f7f5; }
@@ -1517,17 +1510,19 @@
   }
 
   // ══════════════════════════════════════
-  // SIGNATURE EDITOR — crop to fixed box + black & white
+  // SIGNATURE CROP + AUTO B&W EDITOR
+  // User drags/pinches to fit their signature inside the box.
+  // Tap Done → auto-binarize to black ink on transparent PNG.
   // ══════════════════════════════════════
-  const SIG_OUT_W = 600, SIG_OUT_H = 200;     // fixed output box (3:1)
+  const SIG_OUT_W = 600, SIG_OUT_H = 200; // fixed 3:1 output size
+  const SIG_THRESHOLD = 135; // fixed binarization level — works for most ink-on-paper photos
   const sigEdSrc = document.createElement('canvas');
   sigEdSrc.width = SIG_OUT_W; sigEdSrc.height = SIG_OUT_H;
 
   const sigEd = {
     img: null, source: null, onApply: null,
-    scale: 1, minScale: 0.2, maxScale: 4,
+    scale: 1, minScale: 0.1, maxScale: 20,
     offsetX: 0, offsetY: 0,
-    threshold: 135, bw: true,
     drag: false, lastX: 0, lastY: 0, pinchDist: 0,
   };
 
@@ -1537,19 +1532,19 @@
       sigEd.img = img;
       sigEd.source = dataURL;
       sigEd.onApply = onApply;
-      sigEd.bw = true;
-      sigEd.threshold = 135;
-      fitSigImage();
-      document.getElementById('sig-ed-bw').checked = true;
-      document.getElementById('sig-ed-threshold').value = sigEd.threshold;
-      document.getElementById('sig-ed-threshold-row').style.display = '';
+      // "Contain" fit — whole image visible, centered
+      const s = Math.min(SIG_OUT_W / img.width, SIG_OUT_H / img.height);
+      sigEd.scale = s;
+      sigEd.minScale = s * 0.3;
+      sigEd.maxScale = s * 12;
+      sigEd.offsetX = (SIG_OUT_W - img.width * s) / 2;
+      sigEd.offsetY = (SIG_OUT_H - img.height * s) / 2;
       document.getElementById('sig-editor-overlay').classList.add('show');
       sigEdRender();
     };
     img.src = dataURL;
   }
 
-  // Re-open the editor on the original source so the user can readjust.
   function reopenSigEditor() {
     if (sigEd.source) openSigEditor(sigEd.source, applySignatureResult);
   }
@@ -1558,131 +1553,123 @@
     document.getElementById('sig-editor-overlay').classList.remove('show');
   }
 
-  // "Contain" fit — whole image visible inside the box, centered.
-  function fitSigImage() {
-    const img = sigEd.img;
-    const s = Math.min(SIG_OUT_W / img.width, SIG_OUT_H / img.height);
-    sigEd.scale = s;
-    sigEd.minScale = s * 0.4;
-    sigEd.maxScale = s * 10;
-    sigEd.offsetX = (SIG_OUT_W - img.width * s) / 2;
-    sigEd.offsetY = (SIG_OUT_H - img.height * s) / 2;
-    const zoom = document.getElementById('sig-ed-zoom');
-    zoom.min = sigEd.minScale;
-    zoom.max = sigEd.maxScale;
-    zoom.step = (sigEd.maxScale - sigEd.minScale) / 100;
-    zoom.value = sigEd.scale;
-  }
-
-  // Draw the transformed colour image into the offscreen source canvas (white bg).
-  function sigEdDrawSource() {
-    const ctx = sigEdSrc.getContext('2d');
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
-    ctx.drawImage(sigEd.img, sigEd.offsetX, sigEd.offsetY,
+  function sigEdRender() {
+    // Draw colour photo into offscreen canvas with white background
+    const src = sigEdSrc.getContext('2d');
+    src.setTransform(1, 0, 0, 1, 0, 0);
+    src.fillStyle = '#ffffff';
+    src.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    src.drawImage(sigEd.img, sigEd.offsetX, sigEd.offsetY,
       sigEd.img.width * sigEd.scale, sigEd.img.height * sigEd.scale);
-  }
-
-  // Threshold the source canvas. transparent=true => ink black, paper transparent.
-  function sigEdBinarize(transparent) {
-    const id = sigEdSrc.getContext('2d').getImageData(0, 0, SIG_OUT_W, SIG_OUT_H);
+    // Show live B&W preview in the editor canvas
+    const id = src.getImageData(0, 0, SIG_OUT_W, SIG_OUT_H);
     const d = id.data;
-    const t = sigEd.threshold;
     for (let i = 0; i < d.length; i += 4) {
       const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-      if (lum < t) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
-      else if (transparent) { d[i + 3] = 0; }
-      else { d[i] = d[i + 1] = d[i + 2] = 255; d[i + 3] = 255; }
+      if (lum < SIG_THRESHOLD) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
+      else { d[i + 3] = 0; }
     }
-    return id;
+    const out = document.getElementById('sig-ed-canvas').getContext('2d');
+    out.clearRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    out.putImageData(id, 0, 0);
   }
 
-  function sigEdRender() {
-    sigEdDrawSource();
-    const ctx = document.getElementById('sig-ed-canvas').getContext('2d');
-    ctx.clearRect(0, 0, SIG_OUT_W, SIG_OUT_H);
-    if (sigEd.bw) ctx.putImageData(sigEdBinarize(true), 0, 0);
-    else ctx.drawImage(sigEdSrc, 0, 0);
-  }
-
-  function sigEdSetZoom(val) {
-    zoomSigAround(SIG_OUT_W / 2, SIG_OUT_H / 2, parseFloat(val) / sigEd.scale);
-  }
-  function sigEdSetThreshold(val) { sigEd.threshold = parseInt(val, 10); sigEdRender(); }
-  function sigEdSetBw(checked) {
-    sigEd.bw = checked;
-    document.getElementById('sig-ed-threshold-row').style.display = checked ? '' : 'none';
-    sigEdRender();
-  }
-
-  // Zoom keeping the given canvas-space point fixed.
+  // Zoom keeping canvas-space point (cx, cy) fixed under the finger
   function zoomSigAround(cx, cy, factor) {
     const ns = Math.min(sigEd.maxScale, Math.max(sigEd.minScale, sigEd.scale * factor));
     const k = ns / sigEd.scale;
     sigEd.offsetX = cx - (cx - sigEd.offsetX) * k;
     sigEd.offsetY = cy - (cy - sigEd.offsetY) * k;
     sigEd.scale = ns;
-    document.getElementById('sig-ed-zoom').value = sigEd.scale;
     sigEdRender();
   }
 
   function applySigEditor() {
-    let dataURL;
-    sigEdDrawSource();
-    if (sigEd.bw) {
-      const out = document.createElement('canvas');
-      out.width = SIG_OUT_W; out.height = SIG_OUT_H;
-      out.getContext('2d').putImageData(sigEdBinarize(true), 0, 0);
-      dataURL = out.toDataURL('image/png');
-    } else {
-      dataURL = sigEdSrc.toDataURL('image/png');
+    // Re-draw source, binarize, output as transparent PNG
+    const src = sigEdSrc.getContext('2d');
+    src.setTransform(1, 0, 0, 1, 0, 0);
+    src.fillStyle = '#ffffff';
+    src.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    src.drawImage(sigEd.img, sigEd.offsetX, sigEd.offsetY,
+      sigEd.img.width * sigEd.scale, sigEd.img.height * sigEd.scale);
+    const id = src.getImageData(0, 0, SIG_OUT_W, SIG_OUT_H);
+    const d = id.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      if (lum < SIG_THRESHOLD) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
+      else { d[i + 3] = 0; }
     }
+    const result = document.createElement('canvas');
+    result.width = SIG_OUT_W; result.height = SIG_OUT_H;
+    result.getContext('2d').putImageData(id, 0, 0);
     closeSigEditor();
-    if (sigEd.onApply) sigEd.onApply(dataURL);
+    if (sigEd.onApply) sigEd.onApply(result.toDataURL('image/png'));
   }
 
-  // Pan / pinch on the editor stage. (Modal markup is parsed after this
-  // script, so wire up once the DOM is ready.)
-  document.addEventListener('DOMContentLoaded', function wireSigEditorGestures() {
+  // Wire drag + pinch gestures after DOM is ready (modal is below the script tag)
+  document.addEventListener('DOMContentLoaded', () => {
     const stage = document.getElementById('sig-ed-stage');
     if (!stage) return;
-    const toCanvasDelta = (dxCss, dyCss) => {
+
+    // Convert CSS-pixel delta to canvas-pixel delta
+    const toCv = (dxCss, dyCss) => {
       const r = SIG_OUT_W / stage.clientWidth;
       return { dx: dxCss * r, dy: dyCss * r };
     };
-    const start = (x, y) => { sigEd.drag = true; sigEd.lastX = x; sigEd.lastY = y; };
-    const move = (x, y) => {
+
+    // Mouse
+    stage.addEventListener('mousedown', e => {
+      sigEd.drag = true; sigEd.lastX = e.clientX; sigEd.lastY = e.clientY;
+    });
+    window.addEventListener('mousemove', e => {
       if (!sigEd.drag) return;
-      const { dx, dy } = toCanvasDelta(x - sigEd.lastX, y - sigEd.lastY);
+      const { dx, dy } = toCv(e.clientX - sigEd.lastX, e.clientY - sigEd.lastY);
       sigEd.offsetX += dx; sigEd.offsetY += dy;
-      sigEd.lastX = x; sigEd.lastY = y;
+      sigEd.lastX = e.clientX; sigEd.lastY = e.clientY;
       sigEdRender();
-    };
-    const end = () => { sigEd.drag = false; };
+    });
+    window.addEventListener('mouseup', () => { sigEd.drag = false; });
+    // Mouse wheel zoom
+    stage.addEventListener('wheel', e => {
+      e.preventDefault();
+      const r = SIG_OUT_W / stage.clientWidth;
+      const cx = (e.offsetX || 0) * r, cy = (e.offsetY || 0) * r;
+      zoomSigAround(cx, cy, e.deltaY < 0 ? 1.1 : 0.9);
+    }, { passive: false });
 
-    stage.addEventListener('mousedown', e => start(e.clientX, e.clientY));
-    window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
-    window.addEventListener('mouseup', end);
-
+    // Touch
     stage.addEventListener('touchstart', e => {
-      if (e.touches.length === 1) start(e.touches[0].clientX, e.touches[0].clientY);
-      else if (e.touches.length === 2) { sigEd.drag = false; sigEd.pinchDist = 0; }
+      if (e.touches.length === 1) {
+        sigEd.drag = true;
+        sigEd.lastX = e.touches[0].clientX; sigEd.lastY = e.touches[0].clientY;
+        sigEd.pinchDist = 0;
+      } else if (e.touches.length === 2) {
+        sigEd.drag = false; sigEd.pinchDist = 0;
+      }
     }, { passive: true });
     stage.addEventListener('touchmove', e => {
+      e.preventDefault();
       if (e.touches.length === 2) {
-        e.preventDefault();
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         const dist = Math.hypot(dx, dy);
-        if (sigEd.pinchDist) zoomSigAround(SIG_OUT_W / 2, SIG_OUT_H / 2, dist / sigEd.pinchDist);
+        // Pinch zoom centred on midpoint
+        const rect = stage.getBoundingClientRect();
+        const mx = ((e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left) * (SIG_OUT_W / stage.clientWidth);
+        const my = ((e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top) * (SIG_OUT_H / stage.clientHeight);
+        if (sigEd.pinchDist) zoomSigAround(mx, my, dist / sigEd.pinchDist);
         sigEd.pinchDist = dist;
-      } else if (e.touches.length === 1) {
-        e.preventDefault();
-        move(e.touches[0].clientX, e.touches[0].clientY);
+      } else if (e.touches.length === 1 && sigEd.drag) {
+        const { dx, dy } = toCv(e.touches[0].clientX - sigEd.lastX, e.touches[0].clientY - sigEd.lastY);
+        sigEd.offsetX += dx; sigEd.offsetY += dy;
+        sigEd.lastX = e.touches[0].clientX; sigEd.lastY = e.touches[0].clientY;
+        sigEdRender();
       }
     }, { passive: false });
-    stage.addEventListener('touchend', e => { if (e.touches.length < 2) { sigEd.pinchDist = 0; sigEd.drag = false; } });
+    stage.addEventListener('touchend', e => {
+      if (e.touches.length < 2) { sigEd.pinchDist = 0; }
+      if (e.touches.length === 0) { sigEd.drag = false; }
+    });
   });
 
   // Drag & drop on upload area
@@ -2064,31 +2051,27 @@
   initPage();
 </script>
 <!-- ══════════════════════════════════════
-     SIGNATURE IMAGE EDITOR (crop + B&W)
+     SIGNATURE IMAGE EDITOR (crop + auto B&W)
 ══════════════════════════════════════ -->
 <div class="sig-editor-overlay" id="sig-editor-overlay">
   <div class="sig-editor">
-    <h3>Fit your signature</h3>
-    <div class="sig-editor-sub">Drag to position and use the slider to zoom so your signature sits neatly inside the box.</div>
-    <div class="sig-ed-stage" id="sig-ed-stage">
+    <div class="sig-editor-header">
+      <div>
+        <h3>Fit your signature</h3>
+        <p>Pinch to zoom · drag to position · tap Done when ready</p>
+      </div>
+    </div>
+    <div class="sig-ed-viewport" id="sig-ed-stage">
       <canvas id="sig-ed-canvas" width="600" height="200"></canvas>
-      <div class="sig-ed-frame"></div>
-    </div>
-    <div class="sig-ed-control">
-      <label>Zoom</label>
-      <input type="range" id="sig-ed-zoom" min="0.2" max="4" step="0.01" value="1" oninput="sigEdSetZoom(this.value)"/>
-    </div>
-    <label class="sig-ed-toggle">
-      <input type="checkbox" id="sig-ed-bw" checked onchange="sigEdSetBw(this.checked)"/>
-      Convert to clean black &amp; white
-    </label>
-    <div class="sig-ed-control" id="sig-ed-threshold-row">
-      <label>Sensitivity <span style="color:var(--ink-faint)">(more / less ink)</span></label>
-      <input type="range" id="sig-ed-threshold" min="60" max="210" step="1" value="135" oninput="sigEdSetThreshold(this.value)"/>
+      <div class="sig-ed-corner tl"></div>
+      <div class="sig-ed-corner tr"></div>
+      <div class="sig-ed-corner bl"></div>
+      <div class="sig-ed-corner br"></div>
+      <div class="sig-ed-hint">Signature will be cropped here and converted to black &amp; white</div>
     </div>
     <div class="sig-ed-actions">
-      <button class="btn btn-secondary" onclick="closeSigEditor()">Cancel</button>
-      <button class="btn btn-primary" onclick="applySigEditor()">Apply Signature</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="closeSigEditor()">Cancel</button>
+      <button class="btn btn-primary" style="flex:2" onclick="applySigEditor()">Done</button>
     </div>
   </div>
 </div>
