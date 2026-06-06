@@ -1,17 +1,28 @@
-import resend
+import smtplib
 import secrets
+from email.message import EmailMessage
+from email.utils import formataddr
 from datetime import datetime, timedelta, timezone
 from ..core.config import settings
 
 
 def _send_email(to: str, subject: str, html: str):
-    resend.api_key = settings.RESEND_API_KEY
-    resend.Emails.send({
-        "from": f"{settings.FROM_NAME} <{settings.FROM_EMAIL}>",
-        "to": [to],
-        "subject": subject,
-        "html": html,
-    })
+    from_email = settings.FROM_EMAIL or settings.SMTP_USER
+
+    msg = EmailMessage()
+    msg["From"] = formataddr((settings.FROM_NAME, from_email))
+    msg["To"] = to
+    msg["Subject"] = subject
+    msg.set_content(
+        "Your email client does not support HTML. "
+        "Please open this message in a client that does."
+    )
+    msg.add_alternative(html, subtype="html")
+
+    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+        server.starttls()
+        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        server.send_message(msg)
 
 
 async def create_signing_token(db, customer_id: str) -> str:
