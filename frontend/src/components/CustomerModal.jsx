@@ -151,9 +151,9 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                   </div>
 
                   {/* Section Fields */}
-                  <div className="p-4 bg-white grid grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="p-4 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                     {section.fields.map(field => (
-                      <div key={field.key} className={field.span === 2 ? 'col-span-2' : ''}>
+                      <div key={field.key} className={field.span === 2 ? 'sm:col-span-2' : ''}>
                         <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
                           {field.label}
                           {field.required && <span className="text-red-500 ml-0.5 normal-case">*</span>}

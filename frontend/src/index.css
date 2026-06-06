@@ -1,18 +1,20 @@
 @import "tailwindcss";
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/*
+  Custom base styles must live inside @layer base so Tailwind's utility
+  classes (padding, margin, etc.) can still override them. Unlayered CSS
+  wins over Tailwind's layered utilities and silently breaks spacing.
+  Tailwind's preflight already handles box-sizing and margin resets.
+*/
+@layer base {
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: #f7f7f5;
+    color: #0f1117;
+    min-height: 100vh;
+  }
 
-body {
-  font-family: 'DM Sans', system-ui, sans-serif;
-  background: #f7f7f5;
-  color: #0f1117;
-  min-height: 100vh;
-}
-
-#root {
-  min-height: 100vh;
+  #root {
+    min-height: 100vh;
+  }
 }

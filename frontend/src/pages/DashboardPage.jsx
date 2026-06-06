@@ -9,8 +9,8 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Banner */}
-      <div className="bg-[#1a3a2a] px-8 py-10">
-        <div className="max-w-4xl mx-auto">
+      <div className="bg-[#1a3a2a] px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <div className="max-w-7xl mx-auto">
           <div className="flex items-center gap-3 mb-2">
             <Sun className="w-6 h-6 text-white/60" />
             <span className="text-white/60 text-sm font-medium">Solar Document Platform</span>
@@ -24,9 +24,9 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">Quick Actions</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
             onClick={() => navigate('/customers')}
             className="group flex items-start gap-4 bg-white rounded-2xl border border-gray-200 p-6 hover:border-[#1a3a2a] hover:shadow-md transition-all text-left"
