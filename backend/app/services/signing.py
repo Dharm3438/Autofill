@@ -1,28 +1,28 @@
-import smtplib
 import secrets
-from email.message import EmailMessage
-from email.utils import formataddr
+import requests
 from datetime import datetime, timedelta, timezone
 from ..core.config import settings
 
+BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
+
 
 def _send_email(to: str, subject: str, html: str):
-    from_email = settings.FROM_EMAIL or settings.SMTP_USER
-
-    msg = EmailMessage()
-    msg["From"] = formataddr((settings.FROM_NAME, from_email))
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(
-        "Your email client does not support HTML. "
-        "Please open this message in a client that does."
+    resp = requests.post(
+        BREVO_API_URL,
+        headers={
+            "api-key": settings.BREVO_API_KEY,
+            "accept": "application/json",
+            "content-type": "application/json",
+        },
+        json={
+            "sender": {"name": settings.FROM_NAME, "email": settings.FROM_EMAIL},
+            "to": [{"email": to}],
+            "subject": subject,
+            "htmlContent": html,
+        },
+        timeout=15,
     )
-    msg.add_alternative(html, subtype="html")
-
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        server.starttls()
-        server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.send_message(msg)
+    resp.raise_for_status()
 
 
 async def create_signing_token(db, customer_id: str) -> str:

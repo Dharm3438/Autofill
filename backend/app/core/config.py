@@ -8,10 +8,7 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_EXPIRE_HOURS: int = 24
 
-    SMTP_HOST: str = "smtp.gmail.com"
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    BREVO_API_KEY: str = ""
     FROM_EMAIL: str = ""
     FROM_NAME: str = "Solar Docs Platform"
 
