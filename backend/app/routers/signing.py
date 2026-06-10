@@ -13,7 +13,12 @@ from ..core.config import settings
 from ..core.database import get_db
 from ..core.deps import get_current_user
 from ..services import storage
-from ..services.doc_generation import SIGNATURE_KEY, PHOTO_KEY
+from ..services.doc_generation import (
+    SIGNATURE_KEY,
+    PHOTO_KEY,
+    AADHAR_FRONT_KEY,
+    AADHAR_BACK_KEY,
+)
 from bson import ObjectId
 
 router = APIRouter(prefix="/signing", tags=["signing"])
@@ -153,11 +158,11 @@ async def verify_otp(token: str, body: OTPBody):
     return {"success": True, "message": "OTP verified"}
 
 
-# ── Public: submit signature + photo ─────────────────────────────────────────
+# ── Public: submit Aadhaar card (front + back) ───────────────────────────────
 
 class SubmitBody(BaseModel):
-    signature: str   # base64 data URL
-    photo: str       # base64 data URL
+    aadhar_front: str | None = None   # base64 data URL
+    aadhar_back: str | None = None    # base64 data URL
 
 @router.post("/submit/{token}")
 async def submit_signing(token: str, body: SubmitBody, background_tasks: BackgroundTasks):
@@ -175,16 +180,17 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Save signature and photo to R2 under the customer's prefix
+    # Save the Aadhaar front & back images to R2 under the customer's prefix.
+    # Kept as full-colour JPEGs (no black/white filter) so they embed faithfully.
     prefix = storage.customer_prefix(customer_id)
-    sig_bytes = _decode_base64_image(body.signature)
-    photo_bytes = _decode_base64_image(body.photo)
-    if sig_bytes:
-        sig_bytes = _compress_signature(sig_bytes)
-        await asyncio.to_thread(storage.upload_bytes, sig_bytes, prefix + SIGNATURE_KEY, "image/png")
-    if photo_bytes:
-        photo_bytes = _compress_photo(photo_bytes)
-        await asyncio.to_thread(storage.upload_bytes, photo_bytes, prefix + PHOTO_KEY, "image/jpeg")
+    front_bytes = _decode_base64_image(body.aadhar_front)
+    back_bytes = _decode_base64_image(body.aadhar_back)
+    if front_bytes:
+        front_bytes = _compress_photo(front_bytes)
+        await asyncio.to_thread(storage.upload_bytes, front_bytes, prefix + AADHAR_FRONT_KEY, "image/jpeg")
+    if back_bytes:
+        back_bytes = _compress_photo(back_bytes)
+        await asyncio.to_thread(storage.upload_bytes, back_bytes, prefix + AADHAR_BACK_KEY, "image/jpeg")
 
     now = datetime.now(timezone.utc)
     download_expires_at = (now + timedelta(days=settings.DOWNLOAD_WINDOW_DAYS)).isoformat()
