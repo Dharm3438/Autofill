@@ -29,15 +29,19 @@ const SLOTS = [
 
 export default function UploadsModal({ customer, onClose, onChanged }) {
   const [status, setStatus] = useState({ installation: false, np_stamp: false, dcr: false })
-  const [busy, setBusy] = useState(null) // `${kind}:${action}`
+  // Map of `${kind}:${action}` → true; each slot/action tracked independently
+  const [busy, setBusy] = useState({})
   const fileRefs = useRef({})
+  // Discard stale refresh responses when multiple uploads complete concurrently
+  const refreshIdRef = useRef(0)
 
   async function refresh() {
+    const id = ++refreshIdRef.current
     try {
       const res = await getUploadStatus(customer.id)
-      setStatus(res.data.data)
+      if (id === refreshIdRef.current) setStatus(res.data.data)
     } catch {
-      toast.error('Failed to load upload status')
+      if (id === refreshIdRef.current) toast.error('Failed to load upload status')
     }
   }
 
@@ -53,9 +57,19 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     onClose()
   }
 
+  function setKey(key, active) {
+    setBusy(prev => {
+      const next = { ...prev }
+      if (active) next[key] = true
+      else delete next[key]
+      return next
+    })
+  }
+
   async function handleFile(kind, file) {
     if (!file) return
-    setBusy(`${kind}:upload`)
+    const key = `${kind}:upload`
+    setKey(key, true)
     try {
       await uploadDocument(customer.id, kind, file)
       toast.success('Uploaded')
@@ -63,13 +77,14 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Upload failed')
     } finally {
-      setBusy(null)
+      setKey(key, false)
       if (fileRefs.current[kind]) fileRefs.current[kind].value = ''
     }
   }
 
   async function handleView(kind) {
-    setBusy(`${kind}:view`)
+    const key = `${kind}:view`
+    setKey(key, true)
     try {
       const res = await previewUpload(customer.id, kind)
       const url = URL.createObjectURL(res.data)
@@ -79,13 +94,14 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     } catch {
       toast.error('Failed to open document')
     } finally {
-      setBusy(null)
+      setKey(key, false)
     }
   }
 
   async function handleDelete(kind) {
     if (!confirm('Remove this uploaded document?')) return
-    setBusy(`${kind}:delete`)
+    const key = `${kind}:delete`
+    setKey(key, true)
     try {
       await deleteUpload(customer.id, kind)
       toast.success('Removed')
@@ -93,7 +109,7 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     } catch {
       toast.error('Failed to remove document')
     } finally {
-      setBusy(null)
+      setKey(key, false)
     }
   }
 
@@ -120,6 +136,9 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
         <div className="p-6 space-y-4">
           {SLOTS.map(({ kind, title, hint, accept, icon: Icon }) => {
             const uploaded = status[kind]
+            const isUploading = !!busy[`${kind}:upload`]
+            const isViewing = !!busy[`${kind}:view`]
+            const isDeleting = !!busy[`${kind}:delete`]
             return (
               <div
                 key={kind}
@@ -143,10 +162,10 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
                       />
                       <button
                         onClick={() => fileRefs.current[kind]?.click()}
-                        disabled={busy === `${kind}:upload`}
+                        disabled={isUploading}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-50 transition-colors"
                       >
-                        {busy === `${kind}:upload`
+                        {isUploading
                           ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                           : <Upload className="w-3.5 h-3.5" />}
                         {uploaded ? 'Replace' : 'Upload'}
@@ -156,20 +175,20 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
                         <>
                           <button
                             onClick={() => handleView(kind)}
-                            disabled={busy === `${kind}:view`}
+                            disabled={isViewing}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-50 transition-colors"
                           >
-                            {busy === `${kind}:view`
+                            {isViewing
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <Eye className="w-3.5 h-3.5" />}
                             View
                           </button>
                           <button
                             onClick={() => handleDelete(kind)}
-                            disabled={busy === `${kind}:delete`}
+                            disabled={isDeleting}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
                           >
-                            {busy === `${kind}:delete`
+                            {isDeleting
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
                               : <Trash2 className="w-3.5 h-3.5" />}
                           </button>
