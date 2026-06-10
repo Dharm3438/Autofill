@@ -20,6 +20,9 @@ TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
 
 SIGNATURE_KEY = "signature.png"
 PHOTO_KEY = "photo.jpg"
+# Customer Aadhaar card images collected on the signing page.
+AADHAR_FRONT_KEY = "aadhar_front.jpg"
+AADHAR_BACK_KEY = "aadhar_back.jpg"
 
 TEMPLATES = {
     "Annexure_1":           "TEMPELATE_Annexure.docx",
@@ -46,7 +49,7 @@ INSTALLATION_OUT_NAME = "Customer_Installation_Photo.pdf"
 DCR_OUT_NAME          = "DCR.pdf"
 
 # Internal artifacts that are never delivered to the customer.
-HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY}
+HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY, AADHAR_FRONT_KEY, AADHAR_BACK_KEY}
 # Generated, unstamped NP first page — for the admin to print only.
 NP_FIRST_PAGE_SUFFIX = "_NP_Agreement_First_Page.pdf"
 # Base NP agreement (pages 2+). The stamped first page is merged in front of it.
@@ -54,8 +57,11 @@ NP_AGREEMENT_SUFFIX = "_NP_Agreement.pdf"
 
 # placeholder -> (image-key, render width)
 IMAGE_PLACEHOLDERS = {
-    "${CUSTOMER_SIGN}$":  ("signature", Inches(1.25)),
-    "${CUSTOMER_PHOTO}$": ("photo",     Inches(2.5)),
+    "${CUSTOMER_SIGN}$":   ("signature",    Inches(1.25)),
+    "${CUSTOMER_PHOTO}$":  ("photo",        Inches(2.5)),
+    # Aadhaar card images uploaded by the customer on the signing page.
+    "${AADHAR_FRONT}$":    ("aadhar_front", Inches(3.0)),
+    "${AADHAR_BACK}$":     ("aadhar_back",  Inches(3.0)),
 }
 
 
@@ -149,7 +155,8 @@ async def generate_for_customer(customer: dict) -> str:
     try:
         # Pull signature / photo down from R2 (saved during signing) so they get embedded
         images = {}
-        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY)):
+        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY),
+                               ("aadhar_front", AADHAR_FRONT_KEY), ("aadhar_back", AADHAR_BACK_KEY)):
             r2_key = prefix + fname
             local = work_dir / fname
             if await loop.run_in_executor(None, storage.object_exists, r2_key):
