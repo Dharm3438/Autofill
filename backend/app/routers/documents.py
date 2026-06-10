@@ -84,7 +84,7 @@ async def list_documents(customer_id: str, _=Depends(get_current_user)):
     files = [
         {"name": o["name"], "size": o["size"], "type": o["name"].rsplit(".", 1)[-1] if "." in o["name"] else ""}
         for o in sorted(objects, key=lambda o: o["name"])
-        if o["name"] not in _PRIVATE_NAMES
+        if o["name"] not in _PRIVATE_NAMES and not o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)
     ]
     return {"success": True, "data": files}
 
@@ -118,7 +118,7 @@ async def download_zip(customer_id: str, _=Depends(get_current_user)):
 
     prefix = customer["r2_prefix"]
     objects = [o for o in await asyncio.to_thread(storage.list_objects, prefix)
-               if o["name"] not in _PRIVATE_NAMES]
+               if o["name"] not in _PRIVATE_NAMES and not o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)]
     if not objects:
         raise HTTPException(status_code=404, detail="No documents found")
 
