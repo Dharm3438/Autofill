@@ -44,6 +44,7 @@ async def create_customer(body: CustomerCreate, _=Depends(get_current_user)):
         **body.model_dump(),
         "doc_status": "none",
         "signing_status": "none",
+        "uploads": {"installation": False, "np_stamp": False, "dcr": False},
         "signing_token": None,
         "r2_prefix": None,
         "created_at": now,

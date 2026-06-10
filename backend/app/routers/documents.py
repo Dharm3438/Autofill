@@ -8,12 +8,13 @@ from ..core.deps import get_current_user
 from ..services import storage
 from bson import ObjectId
 
+from ..services.doc_generation import (
+    build_customer_bundle,
+    list_customer_documents,
+    NP_FIRST_PAGE_SUFFIX as _NP_FIRST_PAGE_SUFFIX,
+)
+
 router = APIRouter(prefix="/documents", tags=["documents"])
-
-_PRIVATE_NAMES = {"signature.png", "photo.jpg"}
-
-# Suffix of the generated PDF for the NP Agreement first page (see doc_generation.TEMPLATES)
-_NP_FIRST_PAGE_SUFFIX = "_NP_Agreement_First_Page.pdf"
 
 
 @router.post("/generate/{customer_id}")
@@ -81,11 +82,7 @@ async def list_documents(customer_id: str, _=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="No documents found")
 
     objects = await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
-    files = [
-        {"name": o["name"], "size": o["size"], "type": o["name"].rsplit(".", 1)[-1] if "." in o["name"] else ""}
-        for o in sorted(objects, key=lambda o: o["name"])
-        if o["name"] not in _PRIVATE_NAMES and not o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)
-    ]
+    files = list_customer_documents(customer["r2_prefix"], objects)
     return {"success": True, "data": files}
 
 
@@ -116,17 +113,14 @@ async def download_zip(customer_id: str, _=Depends(get_current_user)):
     if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
-    prefix = customer["r2_prefix"]
-    objects = [o for o in await asyncio.to_thread(storage.list_objects, prefix)
-               if o["name"] not in _PRIVATE_NAMES and not o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)]
-    if not objects:
+    bundle = await build_customer_bundle(customer["r2_prefix"])
+    if not bundle:
         raise HTTPException(status_code=404, detail="No documents found")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for o in objects:
-            data = await asyncio.to_thread(storage.download_bytes, o["key"])
-            zf.writestr(o["name"], data)
+        for name, data in bundle:
+            zf.writestr(name, data)
     buf.seek(0)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")

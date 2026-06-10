@@ -42,9 +42,16 @@ class CustomerUpdate(CustomerCreate):
     CONSUMER_PHONE: Optional[str] = None
 
 
+class UploadStatus(BaseModel):
+    installation: bool = False
+    np_stamp: bool = False
+    dcr: bool = False
+
+
 class CustomerOut(CustomerCreate):
     id: str
     doc_status: str = "none"       # none | generating | complete
     signing_status: str = "none"   # none | sent | signed
+    uploads: UploadStatus = UploadStatus()
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

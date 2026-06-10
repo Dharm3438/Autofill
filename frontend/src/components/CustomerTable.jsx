@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { Pencil, Trash2, FileText, Send, Download, Printer, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, FileText, Send, Download, Printer, ChevronDown, ChevronUp, Loader2, UploadCloud } from 'lucide-react'
 import { deleteCustomer } from '../api/customers'
 import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
+import UploadsModal from './UploadsModal'
 import toast from 'react-hot-toast'
+
+function uploadsComplete(c) {
+  const u = c.uploads || {}
+  return Boolean(u.installation && u.np_stamp && u.dcr)
+}
 
 const DOC_STATUS_STYLES = {
   none:       'bg-gray-100 text-gray-500 border border-gray-200',
@@ -29,6 +35,7 @@ const STATUS_LABELS = {
 export default function CustomerTable({ customers, onEdit, onRefresh }) {
   const [expanded, setExpanded]   = useState(null)
   const [loadingId, setLoadingId] = useState(null)
+  const [uploadsFor, setUploadsFor] = useState(null)
   const pollingRef = useRef({})
 
   useEffect(() => {
@@ -176,9 +183,20 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         </button>
 
         <button
-          title="Send Signing Link"
+          title="Upload Documents (Installation Photo, Stamped NP Page, DCR)"
+          onClick={() => setUploadsFor(c)}
+          className={`relative p-2 rounded-lg hover:bg-violet-50 transition-colors ${uploadsComplete(c) ? 'text-violet-600' : 'text-violet-400'}`}
+        >
+          <UploadCloud className="w-4 h-4" />
+          {!uploadsComplete(c) && (
+            <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
+          )}
+        </button>
+
+        <button
+          title={uploadsComplete(c) ? 'Send Signing Link' : 'Upload all three documents before sending'}
           onClick={() => handleSendLink(c)}
-          disabled={loadingId === `send-${c.id}` || c.doc_status !== 'complete'}
+          disabled={loadingId === `send-${c.id}` || c.doc_status !== 'complete' || !uploadsComplete(c)}
           className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `send-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
@@ -332,6 +350,14 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           </div>
         ))}
       </div>
+
+      {uploadsFor && (
+        <UploadsModal
+          customer={uploadsFor}
+          onClose={() => setUploadsFor(null)}
+          onChanged={onRefresh}
+        />
+      )}
     </>
   )
 }

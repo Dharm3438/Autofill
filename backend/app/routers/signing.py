@@ -30,6 +30,24 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
     if not customer.get("CONSUMER_EMAIL"):
         raise HTTPException(status_code=400, detail="Customer has no email address")
 
+    # All three admin documents must be uploaded before the customer is sent the
+    # signing link, so they never receive an incomplete bundle. Check R2 directly
+    # (authoritative) rather than trusting the cached Mongo flags.
+    from ..services.doc_generation import uploaded_docs_present
+    prefix = storage.customer_prefix(customer_id)
+    present = await asyncio.to_thread(uploaded_docs_present, prefix)
+    await db.customers.update_one({"_id": ObjectId(customer_id)}, {"$set": {"uploads": present}})
+    missing = [label for flag, label in (
+        ("installation", "Installation Photo"),
+        ("np_stamp", "Stamped NP First Page"),
+        ("dcr", "DCR Document"),
+    ) if not present.get(flag)]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Upload required document(s) before sending the link: {', '.join(missing)}",
+        )
+
     from ..services.signing import create_signing_token, send_signing_email
     token = await create_signing_token(db, customer_id)
     send_signing_email(customer, token)
@@ -211,16 +229,15 @@ async def download_signed_docs(token: str):
     if customer.get("doc_status") == "generating":
         raise HTTPException(status_code=425, detail="Your documents are still being finalized. Please try again in a few seconds.")
 
-    objects = [o for o in await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
-               if o["name"].lower().endswith(".pdf")]
-    if not objects:
+    from ..services.doc_generation import build_customer_bundle
+    bundle = await build_customer_bundle(customer["r2_prefix"])
+    if not bundle:
         raise HTTPException(status_code=404, detail="No finalized documents available")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for o in objects:
-            data = await asyncio.to_thread(storage.download_bytes, o["key"])
-            zf.writestr(o["name"], data)
+        for name, data in bundle:
+            zf.writestr(name, data)
     buf.seek(0)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")

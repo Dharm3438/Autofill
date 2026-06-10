@@ -10,6 +10,7 @@ import asyncio
 import tempfile
 import subprocess
 from pathlib import Path
+import fitz  # PyMuPDF
 from docx import Document
 from docx.shared import Inches
 
@@ -28,8 +29,28 @@ TEMPLATES = {
     "NP_Agreement":         "np_agreement.docx",
     "NP_Agreement_First_Page": "np_agreement_first_page.docx",
     "Meter_testing_letter": "Meter Testing Letter.docx",
-    "DCR":                  "DCR.docx",
+    # DCR is no longer auto-generated — the admin uploads the official
+    # government DCR PDF (see uploads router / DCR_UPLOAD_KEY below).
 }
+
+# ── Admin-uploaded documents (stored under a protected sub-prefix) ────────────
+# These live under customers/{id}/uploads/ so the "delete all PDFs before
+# regeneration" step never wipes them when the customer signs.
+UPLOAD_PREFIX = "uploads/"
+INSTALLATION_UPLOAD_KEY = UPLOAD_PREFIX + "installation.pdf"
+DCR_UPLOAD_KEY          = UPLOAD_PREFIX + "dcr.pdf"
+NP_STAMP_UPLOAD_KEY     = UPLOAD_PREFIX + "np_first_page_stamped.pdf"
+
+# Friendly filenames for uploaded extras in the delivered bundle.
+INSTALLATION_OUT_NAME = "Customer_Installation_Photo.pdf"
+DCR_OUT_NAME          = "DCR.pdf"
+
+# Internal artifacts that are never delivered to the customer.
+HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY}
+# Generated, unstamped NP first page — for the admin to print only.
+NP_FIRST_PAGE_SUFFIX = "_NP_Agreement_First_Page.pdf"
+# Base NP agreement (pages 2+). The stamped first page is merged in front of it.
+NP_AGREEMENT_SUFFIX = "_NP_Agreement.pdf"
 
 # placeholder -> (image-key, render width)
 IMAGE_PLACEHOLDERS = {
@@ -138,9 +159,11 @@ async def generate_for_customer(customer: dict) -> str:
             else:
                 images[img_key] = None
 
-        # Remove any stale PDFs from a previous generation before uploading fresh ones
+        # Remove any stale PDFs from a previous generation before uploading fresh
+        # ones — but never touch admin uploads under the uploads/ sub-prefix.
+        upload_prefix = prefix + UPLOAD_PREFIX
         stale = [o["key"] for o in await loop.run_in_executor(None, storage.list_objects, prefix)
-                 if o["key"].lower().endswith(".pdf")]
+                 if o["key"].lower().endswith(".pdf") and not o["key"].startswith(upload_prefix)]
         for key in stale:
             await loop.run_in_executor(None, storage.delete_prefix, key)
 
@@ -166,3 +189,92 @@ async def generate_for_customer(customer: dict) -> str:
         shutil.rmtree(work_dir, ignore_errors=True)
 
     return prefix
+
+
+# ── Upload presence (authoritative — reads R2, not the Mongo flags) ──────────
+
+def uploaded_docs_present(prefix: str) -> dict:
+    """Return which admin uploads actually exist in R2 under `prefix`."""
+    return {
+        "installation": storage.object_exists(prefix + INSTALLATION_UPLOAD_KEY),
+        "np_stamp":     storage.object_exists(prefix + NP_STAMP_UPLOAD_KEY),
+        "dcr":          storage.object_exists(prefix + DCR_UPLOAD_KEY),
+    }
+
+
+# ── Final-bundle assembly (delivered to the customer / admin download) ────────
+
+def merge_pdf_front(front: bytes, base: bytes) -> bytes:
+    """Return a single PDF with `front` pages prepended to `base` pages."""
+    out = fitz.open()
+    front_doc = fitz.open(stream=front, filetype="pdf")
+    base_doc = fitz.open(stream=base, filetype="pdf")
+    try:
+        out.insert_pdf(front_doc)
+        out.insert_pdf(base_doc)
+        return out.tobytes()
+    finally:
+        out.close()
+        front_doc.close()
+        base_doc.close()
+
+
+def _is_deliverable(prefix: str, obj: dict) -> bool:
+    """True for a generated PDF that should reach the customer."""
+    key, name = obj["key"], obj["name"]
+    if key.startswith(prefix + UPLOAD_PREFIX):      # admin uploads handled separately
+        return False
+    if name in HIDDEN_DOC_NAMES:                     # signature.png / photo.jpg
+        return False
+    if name.endswith(NP_FIRST_PAGE_SUFFIX):          # unstamped print copy
+        return False
+    return name.lower().endswith(".pdf")
+
+
+def list_customer_documents(prefix: str, objects: list[dict]) -> list[dict]:
+    """Logical document list (name/size) for the admin panel — no downloads."""
+    docs = [
+        {"name": o["name"], "size": o["size"], "type": "pdf"}
+        for o in objects if _is_deliverable(prefix, o)
+    ]
+    by_key = {o["key"]: o for o in objects}
+    if prefix + INSTALLATION_UPLOAD_KEY in by_key:
+        docs.append({"name": INSTALLATION_OUT_NAME, "size": by_key[prefix + INSTALLATION_UPLOAD_KEY]["size"], "type": "pdf"})
+    if prefix + DCR_UPLOAD_KEY in by_key:
+        docs.append({"name": DCR_OUT_NAME, "size": by_key[prefix + DCR_UPLOAD_KEY]["size"], "type": "pdf"})
+    return sorted(docs, key=lambda d: d["name"])
+
+
+async def build_customer_bundle(prefix: str) -> list[tuple[str, bytes]]:
+    """
+    Assemble the final set of PDFs delivered to the customer:
+      • generated docs (Annexure, Aadhar, WCR, etc.)
+      • NP Agreement with the admin's stamped first page merged in front
+      • admin-uploaded installation photo PDF and government DCR PDF
+    Internal artifacts (signature, photo, unstamped first page) are excluded.
+    """
+    loop = asyncio.get_event_loop()
+    objects = await loop.run_in_executor(None, storage.list_objects, prefix)
+    keys = {o["key"] for o in objects}
+
+    stamp_key = prefix + NP_STAMP_UPLOAD_KEY
+    stamp_bytes = None
+    if stamp_key in keys:
+        stamp_bytes = await loop.run_in_executor(None, storage.download_bytes, stamp_key)
+
+    bundle: list[tuple[str, bytes]] = []
+    for o in sorted(objects, key=lambda o: o["name"]):
+        if not _is_deliverable(prefix, o):
+            continue
+        data = await loop.run_in_executor(None, storage.download_bytes, o["key"])
+        if o["name"].endswith(NP_AGREEMENT_SUFFIX) and stamp_bytes:
+            data = merge_pdf_front(stamp_bytes, data)
+        bundle.append((o["name"], data))
+
+    for upload_key, out_name in ((prefix + INSTALLATION_UPLOAD_KEY, INSTALLATION_OUT_NAME),
+                                 (prefix + DCR_UPLOAD_KEY, DCR_OUT_NAME)):
+        if upload_key in keys:
+            data = await loop.run_in_executor(None, storage.download_bytes, upload_key)
+            bundle.append((out_name, data))
+
+    return bundle
