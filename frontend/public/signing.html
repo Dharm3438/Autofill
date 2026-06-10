@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Document Signing Portal</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
@@ -880,7 +881,7 @@
   .aadhar-preview img {
     display: block;
     width: 100%;
-    aspect-ratio: 1;
+    aspect-ratio: 1.585;
     object-fit: cover;
     background: #fff;
   }
@@ -891,9 +892,12 @@
     padding: 8px 10px;
     border-top: 1px solid var(--border);
   }
-  .cropper-image-container.square {
-    height: 340px;
-    max-height: 340px;
+  /* Fixed-size cropper stage so the crop box is the same on every image,
+     with only a small margin around the rectangle. */
+  .cropper-image-container.aadhar {
+    height: 300px;
+    max-height: 300px;
+    background: #11141b;
     touch-action: none;
   }
   /* rotation slider */
@@ -970,17 +974,21 @@
     </div>
     <div class="step" id="step-2">
       <div class="step-dot">2</div>
-      <div class="step-label">Aadhaar</div>
+      <div class="step-label">Sign</div>
     </div>
     <div class="step" id="step-3">
       <div class="step-dot">3</div>
-      <div class="step-label">Review</div>
+      <div class="step-label">Aadhaar</div>
     </div>
     <div class="step" id="step-4">
       <div class="step-dot">4</div>
-      <div class="step-label">Consent</div>
+      <div class="step-label">Review</div>
     </div>
     <div class="step" id="step-5">
+      <div class="step-dot">5</div>
+      <div class="step-label">Consent</div>
+    </div>
+    <div class="step" id="step-6">
       <div class="step-dot">✓</div>
       <div class="step-label">Done</div>
     </div>
@@ -1041,12 +1049,152 @@
 
 
   <!-- ══════════════════════════════════════
-       PANEL 2 — AADHAAR CARD UPLOAD (front + back)
+       PANEL 2 — SIGNATURE CAPTURE
   ══════════════════════════════════════ -->
   <div class="panel" id="panel-2">
-    <div class="section-eyebrow">Step 2 of 4</div>
+    <div class="section-eyebrow">Step 2 of 5</div>
+    <div class="section-title">Provide your signature</div>
+    <div class="section-subtitle">Draw your signature or upload an image of it. This will be applied to all your documents.</div>
+
+    <div class="card">
+      <!-- Method tabs -->
+      <div class="sig-tabs">
+        <button class="sig-tab active" id="tab-draw" onclick="switchSigTab('draw')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+          Draw
+        </button>
+        <button class="sig-tab" id="tab-upload" onclick="switchSigTab('upload')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload
+        </button>
+        <button class="sig-tab" id="tab-sig-camera" onclick="switchSigTab('camera')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          Camera
+        </button>
+      </div>
+
+      <!-- Tab content area (hidden when cropping or showing processed preview) -->
+      <div id="sig-tab-content">
+        <!-- Draw tab -->
+        <div class="sig-tab-panel active" id="tabpanel-draw">
+          <div class="sig-wrap" id="sig-wrap">
+            <canvas id="sig-canvas" height="220"></canvas>
+            <div class="sig-hint" id="sig-hint">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="#9399aa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+              <div class="sig-hint-text">Click and drag to sign</div>
+            </div>
+            <div class="sig-baseline"></div>
+            <div class="sig-toolbar">
+              <span class="sig-toolbar-info" id="sig-status">Use finger or mouse to sign</span>
+              <button class="btn-clear" onclick="clearSig()">✕ Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload tab -->
+        <div class="sig-tab-panel" id="tabpanel-upload">
+          <div class="upload-area" id="upload-area">
+            <input type="file" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp" onchange="handleUpload(this)"/>
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <div class="upload-title">Upload your signature</div>
+            <div class="upload-sub">PNG, JPG or GIF · Max 2MB · You'll position it in the crop box on the next step.</div>
+          </div>
+          <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+            💡 Position your signature inside the crop box, then tap <strong>Apply</strong>. We'll clean it to pure black on white automatically.
+          </p>
+        </div>
+
+        <!-- Camera tab -->
+        <div class="sig-tab-panel" id="tabpanel-camera">
+          <div class="camera-wrap landscape" id="sig-camera-wrap">
+            <video id="sig-camera-video" autoplay playsinline muted></video>
+            <canvas id="sig-camera-canvas" style="display:none"></canvas>
+            <div class="camera-overlay" id="sig-camera-overlay">
+              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <span>Starting camera…</span>
+            </div>
+          </div>
+          <div class="camera-toolbar">
+            <button class="btn-cam-switch" title="Switch camera" onclick="sigSwitchCamera()">
+              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            </button>
+            <button class="btn-capture" id="btn-sig-capture" onclick="sigCapturePhoto()" title="Capture signature">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="btn-cam-switch" title="Start / stop camera" onclick="sigToggleCamera()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </button>
+          </div>
+          <p style="font-size:0.75rem;color:var(--ink-faint);margin-top:10px;">
+            📷 Photograph your signature on paper. You'll position it in the crop box next, then we'll clean it to pure black on white.
+          </p>
+        </div>
+      </div>
+
+      <!-- Shared cropper editor (visible after upload or camera capture) -->
+      <div class="cropper-wrap" id="cropper-wrap">
+        <div class="cropper-wrap-header">
+          <span id="cropper-filename">signature.png</span>
+          <button class="btn-clear" onclick="cancelCrop()">✕ Cancel</button>
+        </div>
+        <div class="cropper-image-container">
+          <img id="cropper-img" alt="To crop"/>
+        </div>
+        <div class="cropper-toolbar">
+          <button type="button" class="cropper-tool-btn" onclick="cropperZoom(0.1)" title="Zoom in">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom In
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="cropperZoom(-0.1)" title="Zoom out">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom Out
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="cropperReset()" title="Reset">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button type="button" class="cropper-tool-btn primary" onclick="applyCrop()" title="Apply crop">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Apply
+          </button>
+        </div>
+      </div>
+
+      <!-- Shared processed BW signature preview -->
+      <div class="sig-processed" id="upload-preview">
+        <div class="sig-processed-header">
+          <span><strong style="color:var(--ink);">Processed signature</strong> · <span id="upload-filename">signature.png</span></span>
+          <button class="btn-clear" onclick="clearUpload()">✕ Remove</button>
+        </div>
+        <div class="sig-processed-body">
+          <img id="upload-preview-img" src="" alt="Processed signature"/>
+        </div>
+      </div>
+
+      <div class="mt-16 btn-row">
+        <button class="btn btn-secondary" onclick="sigStopCamera(); goTo(1);">← Back</button>
+        <button class="btn btn-primary" id="btn-sig-next" disabled onclick="sigStopCamera(); goTo(3);">Continue →</button>
+      </div>
+    </div>
+
+    <div class="card" style="background:#f0f8f4;border-color:#c3e0cf;">
+      <p style="font-size:0.82rem;color:var(--accent);line-height:1.6;">
+        <strong>ℹ️ About your signature</strong><br>
+        Your signature will be securely stored and embedded on each document. By signing, you confirm you are <strong id="sig-confirm-name">Rahul Sharma</strong> and authorise its use across your documents.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════
+       PANEL 3 — AADHAAR CARD UPLOAD (front + back)
+  ══════════════════════════════════════ -->
+  <div class="panel" id="panel-3">
+    <div class="section-eyebrow">Step 3 of 5</div>
     <div class="section-title">Upload your Aadhaar card</div>
-    <div class="section-subtitle">Add clear photos of the <strong>front</strong> and <strong>back</strong> of your Aadhaar card. After picking each image, fit it inside the square box — drag to move, pinch to zoom and twist two fingers to rotate.</div>
+    <div class="section-subtitle">Add clear photos of the <strong>front</strong> and <strong>back</strong> of your Aadhaar card. After picking each image, fit it inside the box — drag to move, pinch to zoom and twist two fingers to rotate.</div>
 
     <div class="card">
       <div class="aadhar-grid">
@@ -1090,13 +1238,13 @@
         </div>
       </div>
 
-      <!-- Shared square cropper (zoom + rotate with fingers) -->
+      <!-- Shared fixed-size rectangular cropper (zoom + rotate with fingers) -->
       <div class="cropper-wrap" id="aadhar-cropper-wrap" style="margin-top:16px;">
         <div class="cropper-wrap-header">
           <span id="aadhar-cropper-title">Fit your Aadhaar inside the box</span>
           <button class="btn-clear" onclick="cancelAadharCrop()">✕ Cancel</button>
         </div>
-        <div class="cropper-image-container square" id="aadhar-cropper-container">
+        <div class="cropper-image-container aadhar" id="aadhar-cropper-container">
           <img id="aadhar-cropper-img" alt="Aadhaar to fit"/>
         </div>
         <div class="rot-row">
@@ -1134,8 +1282,8 @@
       </div>
 
       <div class="mt-16 btn-row">
-        <button class="btn btn-secondary" onclick="goTo(1)">← Back</button>
-        <button class="btn btn-primary" id="btn-aadhar-next" disabled onclick="goTo(3)">Continue →</button>
+        <button class="btn btn-secondary" onclick="goTo(2)">← Back</button>
+        <button class="btn btn-primary" id="btn-aadhar-next" disabled onclick="goTo(4)">Continue →</button>
       </div>
     </div>
 
@@ -1149,10 +1297,10 @@
 
 
   <!-- ══════════════════════════════════════
-       PANEL 3 — DOCUMENT REVIEW
+       PANEL 4 — DOCUMENT REVIEW
   ══════════════════════════════════════ -->
-  <div class="panel" id="panel-3">
-    <div class="section-eyebrow">Step 3 of 4</div>
+  <div class="panel" id="panel-4">
+    <div class="section-eyebrow">Step 4 of 5</div>
     <div class="section-title">Review your documents</div>
     <div class="section-subtitle">Please read each document carefully. Check the box once you've reviewed it.</div>
 
@@ -1165,25 +1313,30 @@
     </div>
 
     <div class="mt-16 btn-row">
-      <button class="btn btn-secondary" onclick="goTo(2)">← Back</button>
-      <button class="btn btn-primary" id="btn-review-next" disabled onclick="goTo(4)">Proceed to Consent →</button>
+      <button class="btn btn-secondary" onclick="goTo(3)">← Back</button>
+      <button class="btn btn-primary" id="btn-review-next" disabled onclick="goTo(5)">Proceed to Consent →</button>
     </div>
   </div>
 
 
   <!-- ══════════════════════════════════════
-       PANEL 4 — CONSENT & FINAL SUBMIT
+       PANEL 5 — CONSENT & FINAL SIGN
   ══════════════════════════════════════ -->
-  <div class="panel" id="panel-4">
-    <div class="section-eyebrow">Step 4 of 4</div>
+  <div class="panel" id="panel-5">
+    <div class="section-eyebrow">Step 5 of 5</div>
     <div class="section-title">Final consent</div>
-    <div class="section-subtitle">Review your Aadhaar images and confirm consent for all documents.</div>
+    <div class="section-subtitle">Review your signature and confirm consent for all documents.</div>
+
+    <div class="final-sig-preview">
+      <div class="final-sig-label">Your Signature</div>
+      <div class="final-sig-img"><img id="consent-sig-img" src="" alt="Your signature"/></div>
+    </div>
 
     <div class="final-sig-preview" id="consent-aadhar-wrap" style="display:none;">
       <div class="final-sig-label">Your Aadhaar card</div>
       <div class="final-sig-img" style="justify-content:flex-start;gap:12px;">
-        <img id="consent-aadhar-front" src="" alt="Aadhaar front" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:2px solid var(--border);"/>
-        <img id="consent-aadhar-back" src="" alt="Aadhaar back" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:2px solid var(--border);"/>
+        <img id="consent-aadhar-front" src="" alt="Aadhaar front" style="height:70px;border-radius:6px;border:2px solid var(--border);"/>
+        <img id="consent-aadhar-back" src="" alt="Aadhaar back" style="height:70px;border-radius:6px;border:2px solid var(--border);"/>
       </div>
     </div>
 
@@ -1191,11 +1344,11 @@
 
     <label class="consent-check-wrap">
       <input type="checkbox" id="chk-consent-1" onchange="checkConsent()"/>
-      <div class="consent-check-text" id="consent-check-text-1">I have read and understood all documents and consent to my Aadhaar details being used on each.</div>
+      <div class="consent-check-text" id="consent-check-text-1">I have read and understood all documents and consent to my signature being applied to each.</div>
     </label>
     <label class="consent-check-wrap">
       <input type="checkbox" id="chk-consent-2" onchange="checkConsent()"/>
-      <div class="consent-check-text">I confirm that I am <strong>Rahul Sharma</strong> and that the uploaded Aadhaar card is mine.</div>
+      <div class="consent-check-text">I confirm that I am <strong>Rahul Sharma</strong> and that I am signing these documents of my own free will.</div>
     </label>
 
     <div style="font-size:0.75rem;color:var(--ink-faint);margin-bottom:20px;padding:10px 14px;background:var(--surface);border-radius:8px;border:1px solid var(--border);">
@@ -1204,23 +1357,23 @@
     </div>
 
     <div class="btn-row">
-      <button class="btn btn-secondary" onclick="goTo(3)">← Back</button>
-      <button class="btn btn-primary" id="btn-final-sign" disabled>✅ Submit Documents</button>
+      <button class="btn btn-secondary" onclick="goTo(4)">← Back</button>
+      <button class="btn btn-primary" id="btn-final-sign" disabled>✍️ Sign All Documents</button>
     </div>
   </div>
 
 
   <!-- ══════════════════════════════════════
-       PANEL 5 — SUCCESS
+       PANEL 6 — SUCCESS
   ══════════════════════════════════════ -->
-  <div class="panel" id="panel-5">
+  <div class="panel" id="panel-6">
     <div class="card text-center" style="padding:40px 24px;">
       <div class="success-icon">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
       </div>
-      <div class="section-title" style="margin-bottom:8px;">All documents submitted!</div>
+      <div class="section-title" style="margin-bottom:8px;">All documents signed!</div>
       <p style="font-size:0.9rem;color:var(--ink-muted);line-height:1.6;" id="done-subtitle">
-        Your Aadhaar card has been successfully submitted and applied to all documents. A confirmation has been sent to your registered contact.
+        Your signature has been successfully applied to all documents. A confirmation has been sent to your registered contact.
       </p>
 
       <div class="doc-done-list" id="done-list"></div>
@@ -1249,7 +1402,8 @@
   // ── State ──────────────────────────────
   const state = {
     currentPanel: 1,
-    aadhar:     { front: null, back: null },   // cropped square data URLs (submitted)
+    signatureDataURL: null,
+    aadhar:     { front: null, back: null },   // cropped data URLs (submitted)
     aadharOrig: { front: null, back: null },   // original uploads (for re-fit)
     reviewedDocs: new Set(),
     sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
@@ -1261,11 +1415,11 @@
   const DOCUMENTS = [
     {
       id: 'annexure-1', name: 'Annexure-1', meta: 'Solar Installation Declaration',
-      preview: `<strong>Annexure-1</strong><p>This document is generated with your solar installation details. Your Aadhaar details will be embedded where required before it is finalized.</p>`
+      preview: `<strong>Annexure-1</strong><p>This document is generated with your solar installation details. Your signature and photo will be embedded where required before it is finalized.</p>`
     },
     {
       id: 'aadhar', name: 'Aadhar Declaration', meta: 'Identity Declaration',
-      preview: `<strong>Aadhar Declaration</strong><p>Confirms your identity for the solar net-metering application using the front and back of your Aadhaar card.</p>`
+      preview: `<strong>Aadhar Declaration</strong><p>Confirms your identity details for the solar net-metering application. Generated from your registered information.</p>`
     },
     {
       id: 'wcr', name: 'Work Completion Report', meta: 'Installation Completion',
@@ -1302,9 +1456,12 @@
     document.getElementById(`step-${n}`)?.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    if (n === 3) renderDocReview();
-    if (n === 4) renderConsent();
-    if (n === 5) renderSuccess();
+    if (n !== 2) sigStopCamera();
+    if (n === 2 && activeTab === 'draw') setTimeout(initSigPad, 80);
+    if (n === 2 && activeTab === 'camera') setTimeout(sigStartCamera, 100);
+    if (n === 4) renderDocReview();
+    if (n === 5) renderConsent();
+    if (n === 6) renderSuccess();
   }
 
   // ── OTP logic ─────────────────────────
@@ -1323,12 +1480,442 @@
     document.getElementById('btn-verify').disabled = full.length < 6;
   }
 
+  // ── Sig tab state ──────────────────────
+  let activeTab = 'draw'; // 'draw' | 'upload' | 'camera'
+
+  function switchSigTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.sig-tabs .sig-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('#sig-tab-content .sig-tab-panel').forEach(p => p.classList.remove('active'));
+    const tabBtn = document.getElementById(tab === 'camera' ? 'tab-sig-camera' : `tab-${tab}`);
+    if (tabBtn) tabBtn.classList.add('active');
+    document.getElementById(`tabpanel-${tab}`).classList.add('active');
+
+    if (tab === 'draw') {
+      sigStopCamera();
+      setTimeout(initSigPad, 50);
+    } else if (tab === 'camera') {
+      setTimeout(sigStartCamera, 80);
+    } else {
+      sigStopCamera();
+    }
+    updateSigNextBtn();
+  }
+
+  function setSigSourceVisible(visible) {
+    document.getElementById('sig-tab-content').style.display = visible ? '' : 'none';
+  }
+
+  // ── Signature pad ──────────────────────
+  let sigPad = null;
+
+  function initSigPad() {
+    const canvas = document.getElementById('sig-canvas');
+    if (!canvas) return;
+
+    // Get actual rendered width of parent
+    const wrap = document.getElementById('sig-wrap');
+    const W = wrap.clientWidth || 600;
+    const H = 220;
+    const ratio = window.devicePixelRatio || 1;
+
+    // Set canvas pixel dimensions explicitly
+    canvas.width = W * ratio;
+    canvas.height = H * ratio;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    canvas.getContext('2d').scale(ratio, ratio);
+
+    if (sigPad) sigPad.off();
+    sigPad = new SignaturePad(canvas, {
+      minWidth: 1.5,
+      maxWidth: 3.5,
+      penColor: '#0f1117',
+      backgroundColor: 'rgba(255,255,255,0)',
+    });
+
+    sigPad.addEventListener('beginStroke', () => {
+      document.getElementById('sig-hint').classList.add('hidden');
+    });
+    sigPad.addEventListener('endStroke', () => {
+      const empty = sigPad.isEmpty();
+      document.getElementById('sig-wrap').classList.toggle('has-sig', !empty);
+      document.getElementById('sig-status').textContent = empty ? 'Use finger or mouse to sign' : '✓ Signature captured';
+      if (!empty) {
+        // Trim/center/BW into a 500x200 PNG; fall back to raw if anything fails
+        let processed = null;
+        try { processed = processDrawnSignature(canvas); }
+        catch (err) { console.error('Draw processing failed:', err); }
+        state.signatureDataURL = processed || sigPad.toDataURL('image/png');
+      } else {
+        state.signatureDataURL = null;
+      }
+      updateSigNextBtn();
+    });
+  }
+
+  function updateSigNextBtn() {
+    document.getElementById('btn-sig-next').disabled = !state.signatureDataURL;
+  }
+
+  window.addEventListener('load', () => {
+    // Init pad after a short delay so the panel is rendered and has dimensions
+    setTimeout(initSigPad, 100);
+  });
+
+  window.addEventListener('resize', () => {
+    if (activeTab === 'draw') initSigPad();
+  });
+
+  function clearSig() {
+    if (sigPad) sigPad.clear();
+    document.getElementById('sig-hint').classList.remove('hidden');
+    document.getElementById('sig-wrap').classList.remove('has-sig');
+    document.getElementById('sig-status').textContent = 'Use finger or mouse to sign';
+    if (activeTab === 'draw') state.signatureDataURL = null;
+    updateSigNextBtn();
+  }
+
+  // ── Image compression helper (used by the passport-photo step) ───────────
+  function compressImage(dataURL, maxW, maxH, format, quality, callback) {
+    const img = new window.Image();
+    img.onload = () => {
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > maxW || h > maxH) {
+        const scale = Math.min(maxW / w, maxH / h);
+        w = Math.round(w * scale);
+        h = Math.round(h * scale);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      const mime = format === 'png' ? 'image/png' : 'image/jpeg';
+      callback(canvas.toDataURL(mime, quality));
+    };
+    img.src = dataURL;
+  }
+
   // ══════════════════════════════════════
-  // AADHAAR UPLOAD + SQUARE CROPPER (zoom + rotate with fingers)
+  // SIGNATURE IMAGE PROCESSING
+  // Final output: 500x200 PNG, pure black ink on pure white
   // ══════════════════════════════════════
-  const AAD_OUT = 1000;            // output square size in px
+  const SIG_OUT_W = 500;
+  const SIG_OUT_H = 200;
+
+  // Otsu's method — auto-pick the best B/W split point from a grayscale histogram.
+  function otsuThreshold(hist, total) {
+    let sum = 0;
+    for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let sumB = 0, wB = 0, maxVar = 0, threshold = 127;
+    for (let i = 0; i < 256; i++) {
+      wB += hist[i];
+      if (wB === 0) continue;
+      const wF = total - wB;
+      if (wF === 0) break;
+      sumB += i * hist[i];
+      const mB = sumB / wB;
+      const mF = (sum - sumB) / wF;
+      const between = wB * wF * (mB - mF) * (mB - mF);
+      if (between > maxVar) { maxVar = between; threshold = i; }
+    }
+    return threshold;
+  }
+
+  // Apply B/W threshold to a canvas, in place. Composites alpha onto white first
+  // so that drawn signatures (transparent bg) and uploaded photos (opaque)
+  // share the same logic.
+  // Returns {minX, minY, maxX, maxY} ink-bounds, or null if no ink found.
+  function applyBWAndFindBounds(canvas) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const img = ctx.getImageData(0, 0, W, H);
+    const data = img.data;
+
+    // Pass 1: composite onto white + build grayscale histogram
+    const hist = new Array(256).fill(0);
+    for (let i = 0; i < data.length; i += 4) {
+      const a = data[i+3] / 255;
+      const r = Math.round(data[i]   * a + 255 * (1 - a));
+      const g = Math.round(data[i+1] * a + 255 * (1 - a));
+      const b = Math.round(data[i+2] * a + 255 * (1 - a));
+      data[i] = r; data[i+1] = g; data[i+2] = b; data[i+3] = 255;
+      const gray = (0.299*r + 0.587*g + 0.114*b) | 0;
+      hist[gray]++;
+    }
+    const total = (data.length / 4) | 0;
+    const T = otsuThreshold(hist, total);
+
+    // Pass 2: threshold + bounds
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        const gray = (0.299*data[idx] + 0.587*data[idx+1] + 0.114*data[idx+2]) | 0;
+        if (gray < T) {
+          data[idx] = data[idx+1] = data[idx+2] = 0;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        } else {
+          data[idx] = data[idx+1] = data[idx+2] = 255;
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return maxX < 0 ? null : { minX, minY, maxX, maxY };
+  }
+
+  // For drawn signatures: BW + trim whitespace + center on 500x200 white canvas.
+  function processDrawnSignature(srcCanvas) {
+    // Copy to a working canvas at native pixel size
+    const work = document.createElement('canvas');
+    work.width  = srcCanvas.width;
+    work.height = srcCanvas.height;
+    work.getContext('2d').drawImage(srcCanvas, 0, 0);
+
+    const bounds = applyBWAndFindBounds(work);
+    if (!bounds) return null;
+
+    const inkW = bounds.maxX - bounds.minX + 1;
+    const inkH = bounds.maxY - bounds.minY + 1;
+
+    // Letterbox-fit ink into 500x200 with a small margin
+    const margin = 12;
+    const targetW = SIG_OUT_W - margin * 2;
+    const targetH = SIG_OUT_H - margin * 2;
+    const scale = Math.min(targetW / inkW, targetH / inkH);
+    const drawW = inkW * scale;
+    const drawH = inkH * scale;
+    const dx = (SIG_OUT_W - drawW) / 2;
+    const dy = (SIG_OUT_H - drawH) / 2;
+
+    const out = document.createElement('canvas');
+    out.width = SIG_OUT_W;
+    out.height = SIG_OUT_H;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    octx.imageSmoothingEnabled = true;
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(work, bounds.minX, bounds.minY, inkW, inkH, dx, dy, drawW, drawH);
+    return out.toDataURL('image/png');
+  }
+
+  // For uploaded signatures already cropped by Cropper.js to 500x200:
+  // just apply BW threshold over the cropped canvas.
+  function processCroppedSignature(croppedCanvas) {
+    const out = document.createElement('canvas');
+    out.width = SIG_OUT_W;
+    out.height = SIG_OUT_H;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#ffffff';
+    octx.fillRect(0, 0, SIG_OUT_W, SIG_OUT_H);
+    octx.drawImage(croppedCanvas, 0, 0, SIG_OUT_W, SIG_OUT_H);
+    applyBWAndFindBounds(out);
+    return out.toDataURL('image/png');
+  }
+
+  // ══════════════════════════════════════
+  // UPLOAD + CROPPER
+  // ══════════════════════════════════════
   let cropperInstance = null;
-  let activeSide = 'front';        // which side is currently being fitted
+  let uploadedFilename = 'signature.png';
+
+  function handleUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('File too large. Please upload an image under 2MB.');
+      input.value = '';
+      return;
+    }
+    uploadedFilename = file.name;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      openCropper(e.target.result);
+    };
+    reader.readAsDataURL(file);
+    input.value = ''; // allow re-selecting same file later
+  }
+
+  function openCropper(dataUrl) {
+    sigStopCamera();                    // free the webcam while user crops
+    setSigSourceVisible(false);         // hide draw / upload / camera panels
+    document.getElementById('upload-area').style.display = 'block';
+    document.getElementById('upload-preview').classList.remove('show');
+    document.getElementById('cropper-filename').textContent = uploadedFilename;
+
+    const wrap = document.getElementById('cropper-wrap');
+    wrap.classList.add('show');
+
+    const img = document.getElementById('cropper-img');
+    img.src = dataUrl;
+
+    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+
+    // Wait for the image to actually load so Cropper measures it correctly
+    img.onload = () => {
+      cropperInstance = new Cropper(img, {
+        aspectRatio: SIG_OUT_W / SIG_OUT_H,   // 2.5 : 1
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 0.85,
+        background: false,
+        responsive: true,
+        zoomable: true,
+        scalable: false,
+        rotatable: false,
+        wheelZoomRatio: 0.1,
+        guides: true,
+        center: true,
+        movable: true,
+        cropBoxMovable: true,
+        cropBoxResizable: true,
+      });
+    };
+  }
+
+  function cropperZoom(delta) {
+    if (cropperInstance) cropperInstance.zoom(delta);
+  }
+
+  function cropperReset() {
+    if (cropperInstance) cropperInstance.reset();
+  }
+
+  function cancelCrop() {
+    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+    document.getElementById('cropper-wrap').classList.remove('show');
+    setSigSourceVisible(true);
+    // Restart camera if user was on the camera tab
+    if (activeTab === 'camera') setTimeout(sigStartCamera, 80);
+  }
+
+  function applyCrop() {
+    if (!cropperInstance) return;
+    const cropped = cropperInstance.getCroppedCanvas({
+      width: SIG_OUT_W,
+      height: SIG_OUT_H,
+      fillColor: '#ffffff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    if (!cropped) { alert('Could not crop. Please try again.'); return; }
+
+    const dataUrl = processCroppedSignature(cropped);
+    state.signatureDataURL = dataUrl;
+
+    document.getElementById('upload-preview-img').src = dataUrl;
+    document.getElementById('upload-filename').textContent = uploadedFilename;
+    document.getElementById('upload-preview').classList.add('show');
+
+    cropperInstance.destroy();
+    cropperInstance = null;
+    document.getElementById('cropper-wrap').classList.remove('show');
+    // Keep the tab panels hidden — the processed preview is the focus now.
+
+    updateSigNextBtn();
+  }
+
+  function clearUpload() {
+    state.signatureDataURL = null;
+    document.getElementById('upload-preview-img').src = '';
+    document.getElementById('upload-preview').classList.remove('show');
+    setSigSourceVisible(true);
+    if (activeTab === 'camera') setTimeout(sigStartCamera, 80);
+    updateSigNextBtn();
+  }
+
+  // ══════════════════════════════════════
+  // SIGNATURE CAMERA (parallel to the photo-step camera; isolated state)
+  // ══════════════════════════════════════
+  let sigCameraStream = null;
+  let sigFacingMode = 'environment';   // rear cam by default — better for paper
+
+  async function sigStartCamera() {
+    if (activeTab !== 'camera') return;
+    try {
+      if (sigCameraStream) sigStopCamera();
+      const constraints = { video: { facingMode: sigFacingMode, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false };
+      sigCameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const video = document.getElementById('sig-camera-video');
+      video.srcObject = sigCameraStream;
+      video.play();
+      document.getElementById('sig-camera-overlay').style.display = 'none';
+    } catch (err) {
+      const overlay = document.getElementById('sig-camera-overlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" stroke="rgba(255,255,255,0.4)" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span style="font-size:0.8rem;color:rgba(255,255,255,0.6);text-align:center;padding:0 20px;">Camera access denied.<br/>Please use the Upload tab instead.</span>`;
+    }
+  }
+
+  function sigStopCamera() {
+    if (sigCameraStream) {
+      sigCameraStream.getTracks().forEach(t => t.stop());
+      sigCameraStream = null;
+    }
+    const video = document.getElementById('sig-camera-video');
+    if (video) video.srcObject = null;
+  }
+
+  async function sigSwitchCamera() {
+    sigFacingMode = sigFacingMode === 'user' ? 'environment' : 'user';
+    await sigStartCamera();
+  }
+
+  async function sigToggleCamera() {
+    if (sigCameraStream) sigStopCamera();
+    else await sigStartCamera();
+  }
+
+  function sigCapturePhoto() {
+    const video = document.getElementById('sig-camera-video');
+    if (!video || !video.srcObject) { sigStartCamera(); return; }
+    const canvas = document.getElementById('sig-camera-canvas');
+    const W = video.videoWidth || 1280;
+    const H = video.videoHeight || 960;
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (sigFacingMode === 'user') {
+      ctx.translate(W, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, W, H);
+    const dataURL = canvas.toDataURL('image/jpeg', 0.92);
+    uploadedFilename = 'signature-photo.jpg';
+    openCropper(dataURL);   // openCropper itself stops the camera
+  }
+
+
+  // Drag & drop on upload area
+  document.addEventListener('DOMContentLoaded', () => {
+    const area = document.getElementById('upload-area');
+    if (!area) return;
+    area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+    area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+    area.addEventListener('drop', (e) => {
+      e.preventDefault();
+      area.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        area.querySelector('input[type=file]').files = dt.files;
+        handleUpload(area.querySelector('input[type=file]'));
+      }
+    });
+  });
+
+  // ══════════════════════════════════════
+  // AADHAAR UPLOAD + FIXED RECTANGLE CROPPER (zoom + rotate with fingers)
+  // ══════════════════════════════════════
+  const AAD_RATIO = 1.585;            // Aadhaar card width : height
+  const AAD_OUT_W = 1000;             // output width in px
+  const AAD_OUT_H = Math.round(AAD_OUT_W / AAD_RATIO);  // ~631
+  let aadharCropper = null;
+  let activeSide = 'front';           // which side is being fitted
 
   function handleAadharUpload(side, input) {
     const file = input.files[0];
@@ -1358,14 +1945,13 @@
     const img = document.getElementById('aadhar-cropper-img');
     img.src = dataUrl;
 
-    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+    if (aadharCropper) { aadharCropper.destroy(); aadharCropper = null; }
 
     img.onload = () => {
-      cropperInstance = new Cropper(img, {
-        aspectRatio: 1,            // square crop box
-        viewMode: 0,               // allow free pan/rotate beyond bounds
-        dragMode: 'move',          // drag pans the image; crop box stays fixed
-        autoCropArea: 1,
+      aadharCropper = new Cropper(img, {
+        aspectRatio: AAD_RATIO,    // rectangular crop box
+        viewMode: 0,               // free pan / zoom / rotate behind the box
+        dragMode: 'move',          // drag pans the image; the box stays fixed
         background: true,
         responsive: true,
         zoomable: true,
@@ -1374,40 +1960,62 @@
         scalable: true,
         rotatable: true,           // rotation enabled
         movable: true,
-        cropBoxMovable: false,
-        cropBoxResizable: false,
+        cropBoxMovable: false,     // fixed box — only the image moves
+        cropBoxResizable: false,   // fixed box — same size for every image
         toggleDragModeOnDblclick: false,
         guides: true,
         center: true,
         wheelZoomRatio: 0.1,
-        ready() { resetRotationUI(); },
+        ready() {
+          fitFixedCropBox();
+          resetRotationUI();
+        },
       });
     };
-    // bring the editor into view
     setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
   }
 
+  // Force a fixed-size rectangle crop box centred in the stage with a small
+  // margin, independent of the uploaded image's dimensions.
+  function fitFixedCropBox() {
+    if (!aadharCropper) return;
+    const cd = aadharCropper.getContainerData();
+    const margin = 14;
+    let boxW = cd.width - margin * 2;
+    let boxH = boxW / AAD_RATIO;
+    if (boxH > cd.height - margin * 2) {
+      boxH = cd.height - margin * 2;
+      boxW = boxH * AAD_RATIO;
+    }
+    aadharCropper.setCropBoxData({
+      left: (cd.width - boxW) / 2,
+      top:  (cd.height - boxH) / 2,
+      width: boxW,
+      height: boxH,
+    });
+  }
+
   function cancelAadharCrop() {
-    if (cropperInstance) { cropperInstance.destroy(); cropperInstance = null; }
+    if (aadharCropper) { aadharCropper.destroy(); aadharCropper = null; }
     document.getElementById('aadhar-cropper-wrap').classList.remove('show');
   }
 
-  function aadharZoom(delta) { if (cropperInstance) cropperInstance.zoom(delta); }
+  function aadharZoom(delta) { if (aadharCropper) aadharCropper.zoom(delta); }
 
   function aadharRotate(deg) {
-    if (!cropperInstance) return;
-    cropperInstance.rotate(deg);
+    if (!aadharCropper) return;
+    aadharCropper.rotate(deg);
     syncRotationSlider();
   }
 
   function aadharCropReset() {
-    if (cropperInstance) cropperInstance.reset();
+    if (aadharCropper) { aadharCropper.reset(); fitFixedCropBox(); }
     resetRotationUI();
   }
 
   function cropperRotateTo(deg) {
-    if (!cropperInstance) return;
-    cropperInstance.rotateTo(Number(deg));
+    if (!aadharCropper) return;
+    aadharCropper.rotateTo(Number(deg));
     document.getElementById('rot-value').textContent = `${Math.round(Number(deg))}°`;
   }
 
@@ -1418,10 +2026,10 @@
     if (v) v.textContent = '0°';
   }
 
-  // Keep the slider + readout in sync after gesture/button rotations.
+  // Keep the slider + readout in sync after gesture / button rotations.
   function syncRotationSlider() {
-    if (!cropperInstance) return;
-    let r = cropperInstance.getData().rotate || 0;
+    if (!aadharCropper) return;
+    let r = aadharCropper.getData().rotate || 0;
     let norm = ((r % 360) + 360) % 360;       // 0..359
     if (norm > 180) norm -= 360;              // -180..180
     const s = document.getElementById('rot-slider');
@@ -1431,10 +2039,10 @@
   }
 
   function applyAadharCrop() {
-    if (!cropperInstance) return;
-    const canvas = cropperInstance.getCroppedCanvas({
-      width: AAD_OUT,
-      height: AAD_OUT,
+    if (!aadharCropper) return;
+    const canvas = aadharCropper.getCroppedCanvas({
+      width: AAD_OUT_W,
+      height: AAD_OUT_H,
       fillColor: '#ffffff',
       imageSmoothingEnabled: true,
       imageSmoothingQuality: 'high',
@@ -1449,8 +2057,8 @@
     document.getElementById(`aadhar-preview-${activeSide}`).classList.add('show');
     document.getElementById(`aadhar-drop-${activeSide}`).style.display = 'none';
 
-    cropperInstance.destroy();
-    cropperInstance = null;
+    aadharCropper.destroy();
+    aadharCropper = null;
     document.getElementById('aadhar-cropper-wrap').classList.remove('show');
     updateAadharNextBtn();
   }
@@ -1476,26 +2084,24 @@
   // ── Two-finger twist gesture → rotate the image ──────────────
   // Runs alongside Cropper's native pinch-zoom & drag-pan so the user can
   // move, zoom AND rotate at the same time with their fingers.
-  (function attachTwistGesture() {
+  (function attachAadharTwist() {
     const container = document.getElementById('aadhar-cropper-container');
     if (!container) return;
     let lastAngle = null;
-
-    const angleOf = (touches) =>
-      Math.atan2(touches[1].clientY - touches[0].clientY,
-                 touches[1].clientX - touches[0].clientX) * 180 / Math.PI;
+    const angleOf = (t) =>
+      Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
 
     container.addEventListener('touchstart', (e) => {
       if (e.touches.length === 2) lastAngle = angleOf(e.touches);
     }, { passive: true });
 
     container.addEventListener('touchmove', (e) => {
-      if (e.touches.length === 2 && lastAngle !== null && cropperInstance) {
+      if (e.touches.length === 2 && lastAngle !== null && aadharCropper) {
         const a = angleOf(e.touches);
         let d = a - lastAngle;
         if (d > 180) d -= 360;
         if (d < -180) d += 360;
-        cropperInstance.rotate(d);
+        aadharCropper.rotate(d);
         lastAngle = a;
         syncRotationSlider();
       }
@@ -1546,6 +2152,7 @@
               <input type="checkbox" ${reviewed ? 'checked' : ''} onchange="toggleReview('${doc.id}', this.checked)"/>
               I have read this document
             </label>
+            ${state.signatureDataURL ? `<img class="sig-preview-small ${reviewed ? 'show' : ''}" id="sig-prev-${doc.id}" src="${state.signatureDataURL}" alt="sig"/>` : ''}
           </div>
         </div>
       `;
@@ -1555,6 +2162,8 @@
   function toggleReview(docId, checked) {
     if (checked) state.reviewedDocs.add(docId);
     else state.reviewedDocs.delete(docId);
+    const img = document.getElementById(`sig-prev-${docId}`);
+    if (img) img.classList.toggle('show', checked);
     checkAllReviewed();
   }
   function checkAllReviewed() {
@@ -1568,11 +2177,11 @@
     const n = DOCUMENTS.length;
     const docList = DOCUMENTS.map((d, i) => `<strong>${i+1}.</strong> ${d.name}`).join(' · ');
     document.getElementById('consent-box').innerHTML = `
-      I, <strong>${name}</strong>, confirm that I have personally reviewed all <strong>${n} documents</strong> listed below and authorise my Aadhaar card details to be applied to each of them. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
+      I, <strong>${name}</strong>, confirm that I have personally reviewed all <strong>${n} documents</strong> listed below and agree that my signature above shall be applied to each of them as my lawful electronic signature. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
       <br/><br/>Documents included:<br/>${docList}`;
     document.getElementById('consent-check-text-1').textContent =
-      `I have read and understood all ${n} documents and consent to my Aadhaar details being used on each.`;
-
+      `I have read and understood all ${n} documents and consent to my signature being applied to each.`;
+    if (state.signatureDataURL) document.getElementById('consent-sig-img').src = state.signatureDataURL;
     if (state.aadhar.front || state.aadhar.back) {
       if (state.aadhar.front) document.getElementById('consent-aadhar-front').src = state.aadhar.front;
       if (state.aadhar.back)  document.getElementById('consent-aadhar-back').src = state.aadhar.back;
@@ -1590,6 +2199,8 @@
     document.getElementById('btn-final-sign').disabled = !(c1 && c2);
   }
 
+  // finalSign() is defined in the API section below
+
   // ── Success render ─────────────────────
   function renderSuccess() {
     const doneList = document.getElementById('done-list');
@@ -1603,10 +2214,10 @@
     document.getElementById('done-session').textContent = 'SES-' + state.sessionId;
     document.getElementById('done-signed-by').textContent = state.customerName || 'Customer';
     document.getElementById('done-subtitle').textContent =
-      `Your Aadhaar card has been successfully submitted and applied to all ${DOCUMENTS.length} documents. A confirmation has been sent to your registered contact.`;
+      `Your signature has been successfully applied to all ${DOCUMENTS.length} documents. A confirmation has been sent to your registered contact.`;
   }
   async function downloadAll() {
-    const btn = document.querySelector('#panel-5 .btn-primary');
+    const btn = document.querySelector('#panel-6 .btn-primary');
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing...'; }
     try {
@@ -1658,6 +2269,8 @@
       document.querySelectorAll('.consent-check-text').forEach(el => {
         el.innerHTML = el.innerHTML.replace(/Rahul Sharma/g, state.customerName);
       });
+      const sigConfirm = document.getElementById('sig-confirm-name');
+      if (sigConfirm) sigConfirm.textContent = state.customerName;
       const aadharConfirm = document.getElementById('aadhar-confirm-name');
       if (aadharConfirm) aadharConfirm.textContent = state.customerName;
 
@@ -1735,6 +2348,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          signature: state.signatureDataURL,
           aadhar_front: state.aadhar.front,
           aadhar_back:  state.aadhar.back,
         }),
@@ -1742,19 +2356,19 @@
       const data = await res.json();
       if (!res.ok) {
         btn.disabled = false;
-        btn.textContent = '✅ Submit Documents';
+        btn.textContent = '✍️ Sign All Documents';
         alert(data.detail || 'Submission failed. Please try again.');
         return;
       }
-      goTo(5);
+      goTo(6);
     } catch (e) {
       btn.disabled = false;
-      btn.textContent = '✅ Submit Documents';
+      btn.textContent = '✍️ Sign All Documents';
       alert('Submission failed. Please check your connection and try again.');
     }
   }
 
-  // ── Wire final submit button ───────────
+  // ── Wire final sign button ─────────────
   document.getElementById('btn-final-sign').addEventListener('click', finalSign);
 
   // ── Boot ───────────────────────────────

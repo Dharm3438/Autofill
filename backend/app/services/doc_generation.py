@@ -153,7 +153,7 @@ async def generate_for_customer(customer: dict) -> str:
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"docgen_{customer_id}_"))
     try:
-        # Pull signature / photo down from R2 (saved during signing) so they get embedded
+        # Pull signature + Aadhaar images down from R2 (saved during signing) so they get embedded
         images = {}
         for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY),
                                ("aadhar_front", AADHAR_FRONT_KEY), ("aadhar_back", AADHAR_BACK_KEY)):
