@@ -12,5 +12,8 @@ export const listDocs = (customerId) =>
 export const downloadZip = (customerId) =>
   api.get(`/documents/download/${customerId}/zip`, { responseType: 'blob' })
 
+export const downloadNpFirstPage = (customerId) =>
+  api.get(`/documents/download/${customerId}/np-first-page`, { responseType: 'blob' })
+
 export const sendSigningLink = (customerId) =>
   api.post(`/signing/send-link/${customerId}`)

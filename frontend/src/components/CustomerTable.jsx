@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { Pencil, Trash2, FileText, Send, Download, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { Pencil, Trash2, FileText, Send, Download, Printer, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
 import { deleteCustomer } from '../api/customers'
-import { generateDocs, getDocStatus, sendSigningLink, downloadZip } from '../api/documents'
+import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
 import toast from 'react-hot-toast'
 
 const DOC_STATUS_STYLES = {
@@ -122,6 +122,21 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
     }
   }
 
+  async function handlePrintFirstPage(customer) {
+    setLoadingId(`print-${customer.id}`)
+    try {
+      const res = await downloadNpFirstPage(customer.id)
+      const url = URL.createObjectURL(res.data)
+      const win = window.open(url, '_blank')
+      if (!win) toast.error('Allow pop-ups to open the document for printing')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch {
+      toast.error('Failed to open NP Agreement first page')
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
   function docBadge(c) {
     return (
       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${DOC_STATUS_STYLES[c.doc_status] || DOC_STATUS_STYLES.none}`}>
@@ -149,6 +164,15 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           className="p-2 rounded-lg hover:bg-[#1a3a2a]/10 text-[#1a3a2a] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `gen-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+        </button>
+
+        <button
+          title="Print NP Agreement First Page"
+          onClick={() => handlePrintFirstPage(c)}
+          disabled={loadingId === `print-${c.id}` || c.doc_status !== 'complete'}
+          className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          {loadingId === `print-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
         </button>
 
         <button

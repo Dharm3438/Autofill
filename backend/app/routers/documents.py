@@ -12,6 +12,9 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 _PRIVATE_NAMES = {"signature.png", "photo.jpg"}
 
+# Suffix of the generated PDF for the NP Agreement first page (see doc_generation.TEMPLATES)
+_NP_FIRST_PAGE_SUFFIX = "_NP_Agreement_First_Page.pdf"
+
 
 @router.post("/generate/{customer_id}")
 async def generate_documents(
@@ -84,6 +87,26 @@ async def list_documents(customer_id: str, _=Depends(get_current_user)):
         if o["name"] not in _PRIVATE_NAMES
     ]
     return {"success": True, "data": files}
+
+
+@router.get("/download/{customer_id}/np-first-page")
+async def download_np_first_page(customer_id: str, _=Depends(get_current_user)):
+    db = get_db()
+    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    if not customer or not customer.get("r2_prefix"):
+        raise HTTPException(status_code=404, detail="No documents found")
+
+    objects = await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
+    target = next((o for o in objects if o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="NP Agreement first page not found")
+
+    data = await asyncio.to_thread(storage.download_bytes, target["key"])
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{target["name"]}"'}
+    )
 
 
 @router.get("/download/{customer_id}/zip")

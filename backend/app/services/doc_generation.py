@@ -26,6 +26,7 @@ TEMPLATES = {
     "WCR":                  "WCR.docx",
     "Annexure_3":           "Annexure-3-Net-Metering.docx",
     "NP_Agreement":         "np_agreement.docx",
+    "NP_Agreement_First_Page": "np_agreement_first_page.docx",
     "Meter_testing_letter": "Meter Testing Letter.docx",
     "DCR":                  "DCR.docx",
 }
