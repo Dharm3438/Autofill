@@ -54,7 +54,7 @@ export default function CustomersPage() {
   const totalPages = Math.ceil(total / LIMIT)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0e1512]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Header */}
@@ -64,8 +64,8 @@ export default function CustomersPage() {
               <Users className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Customers</h1>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Customers</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
                 {total} {total === 1 ? 'customer' : 'customers'} total
               </p>
             </div>
@@ -81,30 +81,30 @@ export default function CustomersPage() {
 
         {/* Search */}
         <div className="relative mb-5">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
           <input
             type="text"
             placeholder="Search by name, app no, or phone…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 focus:border-[#1a3a2a] transition-all shadow-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50 transition-all shadow-sm"
           />
         </div>
 
         {/* Table Card */}
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="bg-white dark:bg-[#16201b] rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
-              <RefreshCw className="w-6 h-6 text-[#1a3a2a] animate-spin" />
-              <p className="text-sm text-gray-400">Loading customers…</p>
+              <RefreshCw className="w-6 h-6 text-[#1a3a2a] dark:text-emerald-400 animate-spin" />
+              <p className="text-sm text-gray-400 dark:text-gray-500">Loading customers…</p>
             </div>
           ) : customers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24">
-              <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-                <Users className="w-6 h-6 text-gray-400" />
+              <div className="w-14 h-14 rounded-2xl bg-gray-100 dark:bg-white/5 flex items-center justify-center mb-4">
+                <Users className="w-6 h-6 text-gray-400 dark:text-gray-500" />
               </div>
-              <p className="text-gray-600 font-medium mb-1">No customers found</p>
-              <p className="text-sm text-gray-400 mb-4">
+              <p className="text-gray-600 dark:text-gray-300 font-medium mb-1">No customers found</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
                 {search ? 'Try a different search term' : 'Get started by adding your first customer'}
               </p>
               {!search && (
@@ -129,22 +129,22 @@ export default function CustomersPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between mt-4">
-            <p className="text-sm text-gray-500">
-              Page <span className="font-medium text-gray-700">{page}</span> of{' '}
-              <span className="font-medium text-gray-700">{totalPages}</span>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Page <span className="font-medium text-gray-700 dark:text-gray-200">{page}</span> of{' '}
+              <span className="font-medium text-gray-700 dark:text-gray-200">{totalPages}</span>
             </p>
             <div className="flex gap-2">
               <button
                 disabled={page === 1}
                 onClick={() => setPage(p => p - 1)}
-                className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl bg-white disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] transition-colors"
+                className="px-4 py-2 text-sm font-medium border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-[#16201b] text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] dark:hover:border-emerald-500/50 dark:hover:text-emerald-400 transition-colors"
               >
                 Previous
               </button>
               <button
                 disabled={page === totalPages}
                 onClick={() => setPage(p => p + 1)}
-                className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-xl bg-white disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] transition-colors"
+                className="px-4 py-2 text-sm font-medium border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-[#16201b] text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] dark:hover:border-emerald-500/50 dark:hover:text-emerald-400 transition-colors"
               >
                 Next
               </button>

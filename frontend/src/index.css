@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 /*
+  Enable class-based dark mode. Tailwind v4 defaults the `dark:` variant to the
+  `prefers-color-scheme` media query; this override makes it follow a `.dark`
+  class on <html> instead, so the night-mode toggle can control it explicitly.
+*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
   Custom base styles must live inside @layer base so Tailwind's utility
   classes (padding, margin, etc.) can still override them. Unlayered CSS
   wins over Tailwind's layered utilities and silently breaks spacing.
@@ -12,6 +19,12 @@
     background: #f7f7f5;
     color: #0f1117;
     min-height: 100vh;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  html.dark body {
+    background: #0e1512;
+    color: #e5e7eb;
   }
 
   #root {

@@ -108,7 +108,7 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm overflow-y-auto py-6 px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl ring-1 ring-black/10 my-auto">
+      <div className="bg-white dark:bg-[#16201b] rounded-2xl shadow-2xl w-full max-w-3xl ring-1 ring-black/10 dark:ring-white/10 my-auto">
 
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-5 bg-[#1a3a2a] rounded-t-2xl">
@@ -141,22 +141,22 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
             {SECTIONS.map(section => {
               const Icon = section.icon
               return (
-                <div key={section.title} className="rounded-xl border border-gray-200 overflow-hidden">
+                <div key={section.title} className="rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">
                   {/* Section Header */}
-                  <div className={`flex items-center gap-2.5 px-4 py-3 ${section.bg} border-b border-gray-200`}>
-                    <div className={`w-7 h-7 rounded-lg bg-white flex items-center justify-center shadow-sm`}>
+                  <div className={`flex items-center gap-2.5 px-4 py-3 ${section.bg} dark:bg-white/5 border-b border-gray-200 dark:border-white/10`}>
+                    <div className={`w-7 h-7 rounded-lg bg-white dark:bg-white/10 flex items-center justify-center shadow-sm`}>
                       <Icon className={`w-4 h-4 ${section.color}`} />
                     </div>
-                    <h3 className="text-sm font-semibold text-gray-800">{section.title}</h3>
+                    <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">{section.title}</h3>
                   </div>
 
                   {/* Section Fields */}
-                  <div className="p-4 bg-white grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                  <div className="p-4 bg-white dark:bg-[#16201b] grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                     {section.fields.map(field => (
                       <div key={field.key} className={field.span === 2 ? 'sm:col-span-2' : ''}>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">
+                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
                           {field.label}
-                          {field.required && <span className="text-red-500 ml-0.5 normal-case">*</span>}
+                          {field.required && <span className="text-red-500 dark:text-red-400 ml-0.5 normal-case">*</span>}
                         </label>
                         <input
                           type={field.type || 'text'}
@@ -164,7 +164,7 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                           value={form[field.key]}
                           onChange={e => set(field.key, e.target.value)}
                           placeholder={field.hint || ''}
-                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 focus:border-[#1a3a2a] focus:bg-white transition-all"
+                          className="w-full px-3 py-2.5 rounded-lg border border-gray-200 dark:border-white/10 bg-gray-50 dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50 focus:bg-white dark:focus:bg-white/10 transition-all"
                         />
                       </div>
                     ))}
@@ -175,11 +175,11 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl">
+          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 dark:border-white/10 bg-gray-50 dark:bg-white/5 rounded-b-2xl">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              className="px-5 py-2.5 text-sm font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl hover:bg-gray-50 dark:hover:bg-white/10 hover:border-gray-300 dark:hover:border-white/20 transition-colors"
             >
               Cancel
             </button>
