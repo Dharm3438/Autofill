@@ -15,7 +15,6 @@ from ..core.deps import get_current_user
 from ..services import storage
 from ..services.doc_generation import (
     SIGNATURE_KEY,
-    PHOTO_KEY,
     AADHAR_FRONT_KEY,
     AADHAR_BACK_KEY,
 )
@@ -158,11 +157,12 @@ async def verify_otp(token: str, body: OTPBody):
     return {"success": True, "message": "OTP verified"}
 
 
-# ── Public: submit Aadhaar card (front + back) ───────────────────────────────
+# ── Public: submit signature + Aadhaar card (front + back) ───────────────────
 
 class SubmitBody(BaseModel):
-    aadhar_front: str | None = None   # base64 data URL
-    aadhar_back: str | None = None    # base64 data URL
+    signature: str | None = None       # base64 data URL
+    aadhar_front: str | None = None    # base64 data URL
+    aadhar_back: str | None = None     # base64 data URL
 
 @router.post("/submit/{token}")
 async def submit_signing(token: str, body: SubmitBody, background_tasks: BackgroundTasks):
@@ -180,11 +180,15 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Save the Aadhaar front & back images to R2 under the customer's prefix.
-    # Kept as full-colour JPEGs (no black/white filter) so they embed faithfully.
+    # Save signature + Aadhaar card (front & back) to R2 under the customer's
+    # prefix. Aadhaar images stay full-colour JPEGs (no black/white filter).
     prefix = storage.customer_prefix(customer_id)
+    sig_bytes = _decode_base64_image(body.signature)
     front_bytes = _decode_base64_image(body.aadhar_front)
     back_bytes = _decode_base64_image(body.aadhar_back)
+    if sig_bytes:
+        sig_bytes = _compress_signature(sig_bytes)
+        await asyncio.to_thread(storage.upload_bytes, sig_bytes, prefix + SIGNATURE_KEY, "image/png")
     if front_bytes:
         front_bytes = _compress_photo(front_bytes)
         await asyncio.to_thread(storage.upload_bytes, front_bytes, prefix + AADHAR_FRONT_KEY, "image/jpeg")
