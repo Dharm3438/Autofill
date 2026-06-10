@@ -118,16 +118,16 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
       <div
-        className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        className="bg-white dark:bg-[#16201b] rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
+        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100 dark:border-white/10">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Upload Documents</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{customer.CONSUMER_NAME}</p>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Upload Documents</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{customer.CONSUMER_NAME}</p>
           </div>
-          <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+          <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -142,15 +142,15 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
             return (
               <div
                 key={kind}
-                className={`rounded-xl border p-4 transition-colors ${uploaded ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 bg-gray-50/60'}`}
+                className={`rounded-xl border p-4 transition-colors ${uploaded ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/10' : 'border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5'}`}
               >
                 <div className="flex items-start gap-3">
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${uploaded ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${uploaded ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
                     {uploaded ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-800">{title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{hint}</p>
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <input
@@ -176,7 +176,7 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
                           <button
                             onClick={() => handleView(kind)}
                             disabled={isViewing}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-gray-600 hover:bg-white disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-white/10 disabled:opacity-50 transition-colors"
                           >
                             {isViewing
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -186,7 +186,7 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
                           <button
                             onClick={() => handleDelete(kind)}
                             disabled={isDeleting}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 text-red-500 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-200 dark:border-white/10 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                           >
                             {isDeleting
                               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -203,13 +203,13 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-          <p className={`text-sm font-medium ${allDone ? 'text-emerald-600' : 'text-amber-600'}`}>
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-white/10 flex items-center justify-between">
+          <p className={`text-sm font-medium ${allDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
             {allDone ? 'All documents uploaded — ready to send signing link.' : 'All three required before sending the link.'}
           </p>
           <button
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium rounded-xl border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/10 transition-colors"
           >
             Done
           </button>

@@ -11,16 +11,16 @@ function uploadsComplete(c) {
 }
 
 const DOC_STATUS_STYLES = {
-  none:       'bg-gray-100 text-gray-500 border border-gray-200',
-  generating: 'bg-amber-50 text-amber-700 border border-amber-200',
-  complete:   'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  failed:     'bg-red-50 text-red-600 border border-red-200',
+  none:       'bg-gray-100 text-gray-500 border border-gray-200 dark:bg-white/5 dark:text-gray-400 dark:border-white/10',
+  generating: 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20',
+  complete:   'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20',
+  failed:     'bg-red-50 text-red-600 border border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20',
 }
 
 const SIGN_STATUS_STYLES = {
-  none:   'bg-gray-100 text-gray-500 border border-gray-200',
-  sent:   'bg-blue-50 text-blue-700 border border-blue-200',
-  signed: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+  none:   'bg-gray-100 text-gray-500 border border-gray-200 dark:bg-white/5 dark:text-gray-400 dark:border-white/10',
+  sent:   'bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20',
+  signed: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20',
 }
 
 const STATUS_LABELS = {
@@ -168,7 +168,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           title="Generate Documents"
           onClick={() => handleGenerateDocs(c)}
           disabled={loadingId === `gen-${c.id}` || c.doc_status === 'generating'}
-          className="p-2 rounded-lg hover:bg-[#1a3a2a]/10 text-[#1a3a2a] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg hover:bg-[#1a3a2a]/10 dark:hover:bg-emerald-500/10 text-[#1a3a2a] dark:text-emerald-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `gen-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
         </button>
@@ -177,7 +177,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           title="Print NP Agreement First Page"
           onClick={() => handlePrintFirstPage(c)}
           disabled={loadingId === `print-${c.id}` || c.doc_status !== 'complete'}
-          className="p-2 rounded-lg hover:bg-indigo-50 text-indigo-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `print-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
         </button>
@@ -185,7 +185,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         <button
           title="Upload Documents (Installation Photo, Stamped NP Page, DCR)"
           onClick={() => setUploadsFor(c)}
-          className={`relative p-2 rounded-lg hover:bg-violet-50 transition-colors ${uploadsComplete(c) ? 'text-violet-600' : 'text-violet-400'}`}
+          className={`relative p-2 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors ${uploadsComplete(c) ? 'text-violet-600 dark:text-violet-400' : 'text-violet-400 dark:text-violet-400/60'}`}
         >
           <UploadCloud className="w-4 h-4" />
           {!uploadsComplete(c) && (
@@ -197,7 +197,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           title={uploadsComplete(c) ? 'Send Signing Link' : 'Upload all three documents before sending'}
           onClick={() => handleSendLink(c)}
           disabled={loadingId === `send-${c.id}` || c.doc_status !== 'complete' || !uploadsComplete(c)}
-          className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `send-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
@@ -206,17 +206,17 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           title="Download All Documents"
           onClick={() => handleDownload(c)}
           disabled={loadingId === `dl-${c.id}` || c.doc_status !== 'complete'}
-          className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          className="p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `dl-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         </button>
 
-        <div className="w-px h-4 bg-gray-200 mx-1" />
+        <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1" />
 
         <button
           title="Edit"
           onClick={() => onEdit(c)}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
         >
           <Pencil className="w-4 h-4" />
         </button>
@@ -224,7 +224,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         <button
           title="Delete"
           onClick={() => handleDelete(c)}
-          className="p-2 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
+          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -249,9 +249,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           ['Meter Receipt No', c.METER_RECIPT_NO],
           ['Generation Meter', c.GENERATION_METER_NO],
         ].filter(([, val]) => val).map(([label, val]) => (
-          <div key={label} className="bg-white rounded-lg px-3 py-2 border border-[#1a3a2a]/10">
-            <p className="text-xs text-gray-400 mb-0.5">{label}</p>
-            <p className="text-sm font-medium text-gray-800 break-words">{val}</p>
+          <div key={label} className="bg-white dark:bg-white/5 rounded-lg px-3 py-2 border border-[#1a3a2a]/10 dark:border-white/10">
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{label}</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-200 break-words">{val}</p>
           </div>
         ))}
       </div>
@@ -264,27 +264,27 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 border-b-2 border-gray-100">
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">App No</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Phone</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Docs</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Signing</th>
-              <th className="text-right px-5 py-3.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+            <tr className="bg-gray-50 dark:bg-white/5 border-b-2 border-gray-100 dark:border-white/10">
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">App No</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Docs</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Signing</th>
+              <th className="text-right px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-gray-100 dark:divide-white/10">
             {customers.map((c) => (
               <Fragment key={c.id}>
                 <tr
-                  className={`hover:bg-[#f0f7f3] transition-colors ${expanded === c.id ? 'bg-[#f0f7f3]' : 'bg-white'}`}
+                  className={`transition-colors ${expanded === c.id ? 'bg-[#f0f7f3] dark:bg-white/5' : 'bg-white dark:bg-[#16201b] hover:bg-[#f0f7f3] dark:hover:bg-white/5'}`}
                 >
                   <td className="px-5 py-4">
                     <button
                       onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                      className="flex items-center gap-2 font-semibold text-gray-800 hover:text-[#1a3a2a] transition-colors text-left"
+                      className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-100 hover:text-[#1a3a2a] dark:hover:text-emerald-400 transition-colors text-left"
                     >
-                      <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${expanded === c.id ? 'bg-[#1a3a2a] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${expanded === c.id ? 'bg-[#1a3a2a] text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'}`}>
                         {expanded === c.id
                           ? <ChevronUp className="w-3 h-3" />
                           : <ChevronDown className="w-3 h-3" />}
@@ -292,8 +292,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
                       {c.CONSUMER_NAME}
                     </button>
                   </td>
-                  <td className="px-5 py-4 text-gray-500 font-mono text-xs">{c.CONSUMER_APP_NO || '—'}</td>
-                  <td className="px-5 py-4 text-gray-600">{c.CONSUMER_PHONE}</td>
+                  <td className="px-5 py-4 text-gray-500 dark:text-gray-400 font-mono text-xs">{c.CONSUMER_APP_NO || '—'}</td>
+                  <td className="px-5 py-4 text-gray-600 dark:text-gray-300">{c.CONSUMER_PHONE}</td>
                   <td className="px-5 py-4">{docBadge(c)}</td>
                   <td className="px-5 py-4">{signBadge(c)}</td>
                   <td className="px-5 py-4">
@@ -302,7 +302,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
                 </tr>
 
                 {expanded === c.id && (
-                  <tr className="bg-[#f0f7f3]/70">
+                  <tr className="bg-[#f0f7f3]/70 dark:bg-white/5">
                     <td colSpan={6} className="px-5 py-4">{detailGrid(c)}</td>
                   </tr>
                 )}
@@ -313,15 +313,15 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
       </div>
 
       {/* Mobile: stacked cards */}
-      <div className="md:hidden divide-y divide-gray-100">
+      <div className="md:hidden divide-y divide-gray-100 dark:divide-white/10">
         {customers.map((c) => (
           <div key={c.id} className="p-4">
             <div className="flex items-start justify-between gap-3">
               <button
                 onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                className="flex items-center gap-2 font-semibold text-gray-800 text-left min-w-0"
+                className="flex items-center gap-2 font-semibold text-gray-800 dark:text-gray-100 text-left min-w-0"
               >
-                <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${expanded === c.id ? 'bg-[#1a3a2a] text-white' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${expanded === c.id ? 'bg-[#1a3a2a] text-white' : 'bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400'}`}>
                   {expanded === c.id
                     ? <ChevronUp className="w-3 h-3" />
                     : <ChevronDown className="w-3 h-3" />}
@@ -330,7 +330,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
               </button>
             </div>
 
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
               {c.CONSUMER_APP_NO && <span className="font-mono">#{c.CONSUMER_APP_NO}</span>}
               {c.CONSUMER_PHONE && <span>{c.CONSUMER_PHONE}</span>}
             </div>
@@ -340,12 +340,12 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
               {signBadge(c)}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-gray-100 pt-2">
+            <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-gray-100 dark:border-white/10 pt-2">
               {actions(c)}
             </div>
 
             {expanded === c.id && (
-              <div className="mt-3 bg-[#f0f7f3]/70 rounded-xl p-3">{detailGrid(c)}</div>
+              <div className="mt-3 bg-[#f0f7f3]/70 dark:bg-white/5 rounded-xl p-3">{detailGrid(c)}</div>
             )}
           </div>
         ))}

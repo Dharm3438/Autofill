@@ -47,9 +47,9 @@ export default function LoginPage() {
   const isSignup = mode === 'signup'
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-[#0e1512]">
       {/* Left panel */}
-      <div className="hidden lg:flex flex-col justify-between w-96 bg-[#1a3a2a] p-10 flex-shrink-0">
+      <div className="hidden lg:flex flex-col justify-between w-96 bg-[#1a3a2a] dark:bg-[#13241b] p-10 flex-shrink-0">
         <div className="flex items-center gap-2.5">
           <Sun className="w-6 h-6 text-white/80" />
           <span className="text-white font-bold text-lg tracking-tight">Solar Docs</span>
@@ -73,13 +73,13 @@ export default function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-[#1a3a2a] flex items-center justify-center">
               <Sun className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-900">Solar Docs</span>
+            <span className="text-xl font-bold text-gray-900 dark:text-gray-100">Solar Docs</span>
           </div>
 
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-1">
             {isSignup ? 'Create account' : 'Sign in'}
           </h1>
-          <p className="text-sm text-gray-500 mb-8">
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-8">
             {isSignup
               ? 'Enter your details to create a new account.'
               : 'Enter your credentials to access the platform.'}
@@ -88,17 +88,17 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignup && (
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
                   Full name
                 </label>
                 <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                   <input
                     type="text"
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 focus:border-[#1a3a2a] transition-all shadow-sm"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50 transition-all shadow-sm"
                     placeholder="John Smith"
                   />
                 </div>
@@ -110,7 +110,7 @@ export default function LoginPage() {
                 Email address
               </label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                 <input
                   type="email"
                   required
@@ -127,7 +127,7 @@ export default function LoginPage() {
                 Password
               </label>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
                 <input
                   type="password"
                   required
@@ -149,12 +149,12 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-6">
+          <p className="text-center text-sm text-gray-500 dark:text-gray-400 mt-6">
             {isSignup ? 'Already have an account?' : "Don't have an account?"}{' '}
             <button
               type="button"
               onClick={() => switchMode(isSignup ? 'login' : 'signup')}
-              className="text-[#1a3a2a] font-semibold hover:underline"
+              className="text-[#1a3a2a] dark:text-emerald-400 font-semibold hover:underline"
             >
               {isSignup ? 'Sign in' : 'Sign up'}
             </button>
