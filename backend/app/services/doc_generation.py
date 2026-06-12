@@ -78,11 +78,31 @@ def build_replacements(customer: dict) -> dict:
     return replacements
 
 
+def _copy_run_format(src_run, dst_run):
+    """Copy character-level formatting from src_run to dst_run (font name, size, italic, underline, color)."""
+    sf, df = src_run.font, dst_run.font
+    df.name      = sf.name
+    df.size      = sf.size
+    df.italic    = sf.italic
+    df.underline = sf.underline
+    if sf.color and sf.color.type is not None:
+        try:
+            df.color.rgb = sf.color.rgb
+        except Exception:
+            pass
+
+
 def process_paragraph(paragraph, replacements: dict, images: dict):
     all_keys = list(replacements.keys()) + list(IMAGE_PLACEHOLDERS.keys())
     original = "".join(r.text for r in paragraph.runs)
     if not any(k in original for k in all_keys):
         return
+
+    # Capture formatting from the first non-empty run before clearing all runs.
+    # All runs in a template paragraph are typically uniform, so this covers the
+    # whole paragraph (font name, size, color, etc.).
+    fmt_run = next((r for r in paragraph.runs if r.text), None) or (paragraph.runs[0] if paragraph.runs else None)
+
     for run in paragraph.runs:
         run.text = ""
 
@@ -95,15 +115,21 @@ def process_paragraph(paragraph, replacements: dict, images: dict):
             if img_path and img_path.exists():
                 try:
                     new_run = paragraph.add_run()
+                    if fmt_run:
+                        _copy_run_format(fmt_run, new_run)
                     new_run.add_picture(str(img_path), width=width)
                 except Exception as e:
                     print(f"Failed to embed image {img_path}: {e}")
             # else: leave blank — image not available yet
         elif part in replacements:
             new_run = paragraph.add_run(replacements[part])
-            new_run.bold = True
+            if fmt_run:
+                _copy_run_format(fmt_run, new_run)
+            new_run.bold = True  # filled values are always bolded
         else:
-            paragraph.add_run(part)
+            new_run = paragraph.add_run(part)
+            if fmt_run:
+                _copy_run_format(fmt_run, new_run)
 
 
 def fill_template(template_path: Path, output_path: Path, replacements: dict, images: dict):
