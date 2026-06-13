@@ -12,6 +12,31 @@ async def connect_db():
     # Ping to verify connection
     await client.admin.command("ping")
     print("Connected to MongoDB Atlas")
+    await _ensure_indexes()
+
+
+async def _ensure_indexes():
+    """
+    Create the indexes the app relies on at scale. Idempotent — Mongo no-ops if
+    an index already exists, so this is safe to run on every startup.
+
+      • signing_submissions.token       — looked up on every signing request
+                                           (verify / send-otp / verify-otp /
+                                           submit / download); unique because
+                                           tokens are unique by construction.
+      • signing_submissions.customer_id — used to find a customer's submission.
+      • customers.created_at            — default sort for the admin list.
+
+    Index creation is best-effort: a failure here (e.g. a pre-existing duplicate
+    blocking the unique index) must not stop the API from booting.
+    """
+    try:
+        await db.signing_submissions.create_index("token", unique=True)
+        await db.signing_submissions.create_index("customer_id")
+        await db.customers.create_index("created_at")
+        print("MongoDB indexes ensured")
+    except Exception as e:
+        print(f"Index creation warning: {e}")
 
 
 async def close_db():

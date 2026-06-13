@@ -130,6 +130,8 @@ def main():
     parser.add_argument("--only", nargs="+", metavar="KEY",
                         help=f"Only generate these template keys. Available: {', '.join(dg.TEMPLATES)}")
     parser.add_argument("--docx-only", action="store_true", help="Fill DOCX but skip PDF conversion.")
+    parser.add_argument("--batch", action="store_true",
+                        help="Convert all DOCX in a single LibreOffice call (matches production generate_for_customer).")
     parser.add_argument("--no-images", action="store_true", help="Don't embed sample signature/photo images.")
     parser.add_argument("--keep", action="store_true", help="Keep previous output (don't wipe test_output/).")
     parser.add_argument("--open", action="store_true", help="Open the output folder when done.")
@@ -176,13 +178,15 @@ def main():
 
     ok = fail = 0
     t0 = time.perf_counter()
+
+    # Phase 1 — fill every DOCX.
+    filled: list[Path] = []
     for doc_type, template_file in templates.items():
         template_path = dg.TEMPLATE_DIR / template_file
         if not template_path.exists():
             print(f"  ✗  [{doc_type}] template missing: {template_path.name}")
             fail += 1
             continue
-
         docx_path = docx_dir / f"{safe_name}_{doc_type}.docx"
         try:
             dg.fill_template(template_path, docx_path, replacements, images)
@@ -190,25 +194,43 @@ def main():
             print(f"  ✗  [{doc_type}] DOCX fill failed: {e}")
             fail += 1
             continue
-
+        filled.append(docx_path)
         if args.docx_only:
             print(f"  ✓  [{doc_type}] DOCX → docx/{docx_path.name}")
             ok += 1
-            continue
 
-        # convert_docx_to_pdf writes the PDF beside the DOCX; move it into pdf/.
-        t = time.perf_counter()
-        success = dg.convert_docx_to_pdf(docx_path)
-        dt = time.perf_counter() - t
-        produced = docx_path.with_suffix(".pdf")
-        if success and produced.exists():
-            final_pdf = pdf_dir / produced.name
-            shutil.move(str(produced), str(final_pdf))
-            print(f"  ✓  [{doc_type}] PDF  → pdf/{final_pdf.name}  ({dt:.1f}s)")
-            ok += 1
+    # Phase 2 — convert to PDF, then move each produced PDF into pdf/.
+    if not args.docx_only:
+        if args.batch:
+            # Single LibreOffice startup for the whole set (production path).
+            t = time.perf_counter()
+            produced = dg.convert_docx_batch(filled, docx_dir)
+            dt = time.perf_counter() - t
+            print(f"  (batch convert: {len(produced)}/{len(filled)} in {dt:.1f}s)")
+            for docx_path in filled:
+                pdf = docx_path.with_suffix(".pdf")
+                if pdf in produced and pdf.exists():
+                    final_pdf = pdf_dir / pdf.name
+                    shutil.move(str(pdf), str(final_pdf))
+                    print(f"  ✓  PDF  → pdf/{final_pdf.name}")
+                    ok += 1
+                else:
+                    print(f"  ✗  PDF conversion failed: {pdf.stem}")
+                    fail += 1
         else:
-            print(f"  ✗  [{doc_type}] PDF conversion failed")
-            fail += 1
+            for docx_path in filled:
+                t = time.perf_counter()
+                success = dg.convert_docx_to_pdf(docx_path)
+                dt = time.perf_counter() - t
+                produced = docx_path.with_suffix(".pdf")
+                if success and produced.exists():
+                    final_pdf = pdf_dir / produced.name
+                    shutil.move(str(produced), str(final_pdf))
+                    print(f"  ✓  PDF  → pdf/{final_pdf.name}  ({dt:.1f}s)")
+                    ok += 1
+                else:
+                    print(f"  ✗  PDF conversion failed: {docx_path.stem}")
+                    fail += 1
 
     elapsed = time.perf_counter() - t0
     print(f"\n{'─' * 50}")
