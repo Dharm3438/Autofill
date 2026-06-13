@@ -66,8 +66,10 @@ IMAGE_PLACEHOLDERS = {
     "${CUSTOMER_SIGN}$":   ("signature",    Inches(1.25)),
     "${CUSTOMER_PHOTO}$":  ("photo",        Inches(2.5)),
     # Aadhaar card images uploaded by the customer on the signing page.
-    "${AADHAR_FRONT}$":    ("aadhar_front", Inches(3.0)),
-    "${AADHAR_BACK}$":     ("aadhar_back",  Inches(3.0)),
+    # Kept under half the ~6.27in usable page width so FRONT and BACK sit
+    # side by side on one line (at 3.0in each they overflowed and wrapped).
+    "${AADHAR_FRONT}$":    ("aadhar_front", Inches(2.8)),
+    "${AADHAR_BACK}$":     ("aadhar_back",  Inches(2.8)),
 }
 
 
