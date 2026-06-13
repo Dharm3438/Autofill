@@ -17,11 +17,16 @@ It reads R2 credentials, bucket name, and FRONTEND_URL from your .env, so the
 allowed origins always match the deployed frontend. Add a custom domain to
 FRONTEND_URL (or extra_origins below) when you point one at the frontend.
 """
+import os
 import sys
 from pathlib import Path
 
-# Make "app" importable when run as scripts/configure_r2_cors.py from backend/.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Run from the backend/ root regardless of where this is invoked, so "app" is
+# importable AND pydantic finds backend/.env (it loads .env relative to the CWD,
+# so running this from inside scripts/ would otherwise miss the env file).
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BACKEND_DIR))
+os.chdir(BACKEND_DIR)
 
 from app.core.config import settings  # noqa: E402
 from app.services import storage       # noqa: E402
