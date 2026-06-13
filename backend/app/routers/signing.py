@@ -7,7 +7,7 @@ import string
 import zipfile
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import StreamingResponse, RedirectResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..core.config import settings
 from ..core.database import get_db
@@ -96,7 +96,19 @@ async def verify_token(token: str):
         prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
         objects = await asyncio.to_thread(storage.list_objects, prefix)
         manifest = signing_document_list(prefix, objects, customer)
-    documents = [{"key": d["key"], "name": d["label"]} for d in manifest]
+
+    # When presigned review is on, hand the browser a direct R2 URL per plain
+    # document so PDF.js fetches it straight from R2 (no backend byte-streaming).
+    # The URL must be fetched directly — a backend redirect would cross origins
+    # and the browser strips Origin to "null", which R2's CORS won't match. The
+    # NP Agreement (merge_stamp) has no single R2 object, so it has no url and
+    # streams through /document/{token}/{key} instead.
+    documents = []
+    for d in manifest:
+        url = None
+        if settings.R2_PRESIGNED_REVIEW and not d.get("merge_stamp"):
+            url = await asyncio.to_thread(storage.presigned_url, d["r2_key"], 21600)  # 6h
+        documents.append({"key": d["key"], "name": d["label"], "url": url})
 
     return {"success": True, "data": {
         "customer_name": customer.get("CONSUMER_NAME"),
@@ -124,19 +136,10 @@ async def get_signing_document(token: str, key: str):
     prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
     manifest = customer.get("signing_manifest")
 
-    # Offload byte delivery to R2 via a short-lived presigned URL when enabled,
-    # so the worker doesn't download+stream every reviewed PDF. Documents that
-    # need an on-the-fly stamp merge (the NP Agreement) aren't a single R2
-    # object, so those still stream through the backend.
-    if settings.R2_PRESIGNED_REVIEW:
-        from ..services.doc_generation import resolve_signing_item
-        item = await resolve_signing_item(prefix, customer, key, manifest)
-        if not item:
-            raise HTTPException(status_code=404, detail="Document not found")
-        if not item["merge_stamp"]:
-            url = await asyncio.to_thread(storage.presigned_url, item["r2_key"], 3600)
-            return RedirectResponse(url, status_code=302)
-
+    # Fallback byte-streaming path. With R2_PRESIGNED_REVIEW on, the signing page
+    # fetches plain documents straight from R2 (presigned URLs from verify), so
+    # this is hit only for the NP Agreement (assembled on the fly) — and for
+    # everything when the flag is off.
     from ..services.doc_generation import fetch_signing_document
     result = await fetch_signing_document(prefix, customer, key, manifest)
     if not result:

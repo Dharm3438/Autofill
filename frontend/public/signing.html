@@ -1554,7 +1554,7 @@
     signatureDataURL: null,
     aadhar:     { front: null, back: null },   // cropped data URLs (submitted)
     aadharOrig: { front: null, back: null },   // original uploads (for re-fit)
-    documents: [],                             // [{key, name}] from the backend
+    documents: [],                             // [{key, name, url?}] from the backend (url = direct R2 link)
     viewedDocs: new Set(),                     // keys scrolled through to the end
     reviewedDocs: new Set(),                   // keys the customer ticked as read
     sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
@@ -2331,7 +2331,9 @@
     }
 
     try {
-      const url = `${API_BASE}/signing/document/${TOKEN}/${key}`;
+      // Prefer a direct (presigned) R2 URL from the backend so PDF.js loads the
+      // file straight from R2; otherwise stream it through the backend endpoint.
+      const url = doc.url || `${API_BASE}/signing/document/${TOKEN}/${key}`;
       const pdf = await pdfjsLib.getDocument({ url }).promise;
       pdfViewer.pdf = pdf;
       body.innerHTML = '';
