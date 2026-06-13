@@ -120,12 +120,16 @@ async def get_signing_document(token: str, key: str):
         raise HTTPException(status_code=404, detail="Document not found")
 
     name, data = result
-    safe_name = name.replace('"', "")
+    # Content-Disposition is encoded as latin-1, so the filename must be ASCII —
+    # labels like "Annexure-1 — …" contain an em dash that would 500 the request.
+    import unicodedata
+    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    ascii_name = " ".join(ascii_name.replace('"', "").split()) or "document"
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{safe_name}.pdf"',
+            "Content-Disposition": f'inline; filename="{ascii_name}.pdf"',
             "Cache-Control": "private, max-age=600",
         },
     )
