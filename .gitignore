@@ -5,6 +5,7 @@ backend/**/__pycache__/
 backend/**/*.pyc
 backend/.env
 backend/generated_docs/
+backend/test_output/
 
 # Node
 frontend/node_modules/

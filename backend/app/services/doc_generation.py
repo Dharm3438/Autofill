@@ -1,14 +1,20 @@
 """
 Document generation service.
 Fills DOCX templates with customer data and converts to PDF.
-Windows: uses MS Word via docx2pdf. Linux: uses LibreOffice headless via subprocess.
+
+PDF conversion uses LibreOffice headless on every platform (Windows, macOS,
+Linux) so local output is byte-for-byte the same engine as production, where
+the Docker image ships LibreOffice. There is intentionally no docx2pdf / MS
+Word path — keeping a single conversion stack means "looks right locally"
+also means "looks right in prod".
 """
+import os
 import re
-import sys
 import shutil
 import asyncio
 import tempfile
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 import fitz  # PyMuPDF
 from docx import Document
@@ -144,25 +150,77 @@ def fill_template(template_path: Path, output_path: Path, replacements: dict, im
     doc.save(output_path)
 
 
+@lru_cache(maxsize=1)
+def _find_soffice() -> str:
+    """
+    Locate the LibreOffice executable. Honours the LIBREOFFICE_PATH env var,
+    then falls back to PATH, then to the usual per-OS install locations.
+    Raises RuntimeError with install guidance if LibreOffice is missing.
+    """
+    override = os.environ.get("LIBREOFFICE_PATH")
+    if override and Path(override).exists():
+        return override
+
+    for name in ("soffice", "libreoffice"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    candidates = [
+        # Windows
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+        # macOS
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+        # Linux (when not on PATH)
+        "/usr/bin/soffice",
+        "/usr/bin/libreoffice",
+        "/opt/libreoffice/program/soffice",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return path
+
+    raise RuntimeError(
+        "LibreOffice not found. Install it so DOCX→PDF works the same as prod:\n"
+        "  Windows: winget install --id TheDocumentFoundation.LibreOffice\n"
+        "  macOS:   brew install --cask libreoffice\n"
+        "  Linux:   apt-get install libreoffice\n"
+        "Or set LIBREOFFICE_PATH to the soffice executable."
+    )
+
+
 def convert_docx_to_pdf(docx_path: Path) -> bool:
+    """
+    Convert a DOCX to a PDF beside it using LibreOffice headless.
+
+    A throwaway user-profile dir is passed via -env:UserInstallation so the
+    conversion never collides with (or hangs behind) a LibreOffice window the
+    user may already have open, and so parallel conversions stay isolated.
+    """
+    pdf_path = docx_path.with_suffix(".pdf")
+    profile_dir = Path(tempfile.mkdtemp(prefix="lo_profile_"))
+    profile_uri = profile_dir.as_uri()
     try:
-        pdf_path = docx_path.with_suffix(".pdf")
-        if sys.platform == "win32":
-            from docx2pdf import convert
-            convert(str(docx_path), str(pdf_path))
-        else:
-            result = subprocess.run(
-                ["libreoffice", "--headless", "--convert-to", "pdf",
-                 "--outdir", str(docx_path.parent), str(docx_path)],
-                capture_output=True, text=True, timeout=60
-            )
-            if result.returncode != 0:
-                print(f"LibreOffice error: {result.stderr}")
-                return False
+        soffice = _find_soffice()
+        result = subprocess.run(
+            [soffice, "--headless", "--nologo", "--nofirststartwizard",
+             f"-env:UserInstallation={profile_uri}",
+             "--convert-to", "pdf", "--outdir", str(docx_path.parent), str(docx_path)],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            print(f"LibreOffice error [{docx_path.name}]: {result.stderr.strip() or result.stdout.strip()}")
+            return False
         return pdf_path.exists()
+    except subprocess.TimeoutExpired:
+        print(f"PDF conversion timed out [{docx_path.name}]")
+        return False
     except Exception as e:
         print(f"PDF conversion failed [{docx_path.name}]: {e}")
         return False
+    finally:
+        shutil.rmtree(profile_dir, ignore_errors=True)
 
 
 async def generate_for_customer(customer: dict) -> str:
