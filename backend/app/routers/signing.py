@@ -53,12 +53,19 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
         )
 
     from ..services.signing import create_signing_token, send_signing_email
+    from ..services.doc_generation import build_signing_manifest
     token = await create_signing_token(db, customer_id)
     send_signing_email(customer, token)
 
+    # Persist the document manifest now (one R2 LIST) so each review-page
+    # document view resolves from this list instead of re-LISTing R2 every time.
+    review_prefix = customer.get("r2_prefix") or prefix
+    manifest = await build_signing_manifest(review_prefix, customer)
+
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
-        {"$set": {"signing_status": "sent", "signing_token": token}}
+        {"$set": {"signing_status": "sent", "signing_token": token,
+                  "signing_manifest": manifest}}
     )
     return {"success": True, "message": "Signing link sent to customer"}
 
@@ -80,15 +87,16 @@ async def verify_token(token: str):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # List the customer's generated documents so the signing page can show each
-    # one (filled with their details) for review before they consent.
-    from ..services.doc_generation import signing_document_list
-    prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
-    objects = await asyncio.to_thread(storage.list_objects, prefix)
-    documents = [
-        {"key": d["key"], "name": d["label"]}
-        for d in signing_document_list(prefix, objects, customer)
-    ]
+    # Documents the signing page shows for review (filled with the customer's
+    # details). Prefer the manifest persisted at send-link time; fall back to a
+    # live R2 listing for links sent before the manifest existed.
+    manifest = customer.get("signing_manifest")
+    if manifest is None:
+        from ..services.doc_generation import signing_document_list
+        prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
+        objects = await asyncio.to_thread(storage.list_objects, prefix)
+        manifest = signing_document_list(prefix, objects, customer)
+    documents = [{"key": d["key"], "name": d["label"]} for d in manifest]
 
     return {"success": True, "data": {
         "customer_name": customer.get("CONSUMER_NAME"),
@@ -115,7 +123,7 @@ async def get_signing_document(token: str, key: str):
 
     from ..services.doc_generation import fetch_signing_document
     prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
-    result = await fetch_signing_document(prefix, customer, key)
+    result = await fetch_signing_document(prefix, customer, key, customer.get("signing_manifest"))
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
 
