@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import { logout } from '../api/auth'
-import { LogOut, LayoutDashboard, Users, Sun, Menu, X } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Sun, Moon, Menu, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function Navbar() {
   const { user, setUser } = useAuth()
+  const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -65,6 +67,14 @@ export default function Navbar() {
 
         {/* Desktop right side */}
         <div className="hidden sm:flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className="flex items-center justify-center w-9 h-9 rounded-lg text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            title={isDark ? 'Switch to day mode' : 'Switch to night mode'}
+            aria-label={isDark ? 'Switch to day mode' : 'Switch to night mode'}
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
           {user?.name && (
             <div className="flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5">
               <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold text-white">
@@ -119,6 +129,13 @@ export default function Navbar() {
               </button>
             )
           })}
+          <button
+            onClick={() => { toggleTheme(); setMenuOpen(false) }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            {isDark ? 'Day mode' : 'Night mode'}
+          </button>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white transition-colors"

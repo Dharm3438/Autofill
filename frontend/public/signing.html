@@ -827,6 +827,134 @@
     aspect-ratio: 4/3;
     max-height: 320px;
   }
+
+  /* ── Aadhaar upload ── */
+  .aadhar-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 4px;
+  }
+  @media (max-width: 540px) {
+    .aadhar-grid { grid-template-columns: 1fr; }
+  }
+  .aadhar-box-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .aadhar-box-label::before {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    background: var(--accent-light);
+  }
+  .aadhar-drop {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 28px 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--white);
+    position: relative;
+  }
+  .aadhar-drop:hover, .aadhar-drop.dragover {
+    border-color: var(--accent-light);
+    background: #f0f8f4;
+  }
+  .aadhar-drop input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .aadhar-preview {
+    display: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .aadhar-preview.show { display: block; }
+  .aadhar-preview img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1.585;
+    object-fit: cover;
+    background: #fff;
+  }
+  .aadhar-preview-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-top: 1px solid var(--border);
+  }
+  /* Fixed-size cropper stage so the crop box is the same on every image,
+     with only a small margin around the rectangle. */
+  .cropper-image-container.aadhar {
+    height: 300px;
+    max-height: 300px;
+    background: #11141b;
+    touch-action: none;
+  }
+  /* rotation slider */
+  .rot-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 14px 2px;
+    background: var(--surface);
+  }
+  .rot-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    min-width: 52px;
+  }
+  #rot-slider {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--surface-2);
+    outline: none;
+    margin: 0;
+  }
+  #rot-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--white);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    cursor: pointer;
+  }
+  #rot-slider::-moz-range-thumb {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 3px solid var(--white);
+    cursor: pointer;
+  }
+  .rot-value {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    min-width: 38px;
+    text-align: right;
+  }
+  .cropper-hint {
+    font-size: 0.75rem;
+    color: var(--ink-faint);
+    text-align: center;
+    padding: 10px 14px 2px;
+    line-height: 1.5;
+  }
 </style>
 </head>
 <body>
@@ -850,7 +978,7 @@
     </div>
     <div class="step" id="step-3">
       <div class="step-dot">3</div>
-      <div class="step-label">Photo</div>
+      <div class="step-label">Aadhaar</div>
     </div>
     <div class="step" id="step-4">
       <div class="step-dot">4</div>
@@ -1061,95 +1189,109 @@
 
 
   <!-- ══════════════════════════════════════
-       PANEL 3 — PHOTO CAPTURE
+       PANEL 3 — AADHAAR CARD UPLOAD (front + back)
   ══════════════════════════════════════ -->
   <div class="panel" id="panel-3">
     <div class="section-eyebrow">Step 3 of 5</div>
-    <div class="section-title">Your passport photo</div>
-    <div class="section-subtitle">Take a live photo or upload one. It will appear on your documents wherever a photo is required.</div>
+    <div class="section-title">Upload your Aadhaar card</div>
+    <div class="section-subtitle">Add clear photos of the <strong>front</strong> and <strong>back</strong> of your Aadhaar card. After picking each image, fit it inside the box — drag to move, pinch to zoom and twist two fingers to rotate.</div>
 
     <div class="card">
-      <!-- Method tabs -->
-      <div class="sig-tabs photo-tabs">
-        <button class="sig-tab active" id="photo-tab-camera" onclick="switchPhotoTab('camera')">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          Use Camera
-        </button>
-        <button class="sig-tab" id="photo-tab-upload" onclick="switchPhotoTab('upload')">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Upload Photo
-        </button>
-      </div>
-
-      <!-- Camera tab -->
-      <div class="sig-tab-panel active" id="photo-tabpanel-camera">
-        <!-- Live camera view (hidden when photo taken) -->
-        <div id="camera-live-wrap">
-          <div class="camera-wrap" id="camera-wrap">
-            <video id="camera-video" autoplay playsinline muted></video>
-            <div class="camera-overlay" id="camera-overlay">
-              <svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              <span>Click below to start camera</span>
+      <div class="aadhar-grid">
+        <!-- FRONT -->
+        <div class="aadhar-box">
+          <div class="aadhar-box-label">Aadhaar — Front</div>
+          <div class="aadhar-drop" id="aadhar-drop-front">
+            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/heic" onchange="handleAadharUpload('front', this)"/>
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             </div>
-            <div class="camera-guide" id="camera-guide" style="display:none"></div>
-            <canvas id="camera-canvas" style="display:none"></canvas>
+            <div class="upload-title">Tap to upload front</div>
+            <div class="upload-sub">JPG, PNG or WEBP · Max 12MB</div>
           </div>
-          <div class="camera-toolbar">
-            <button class="btn-cam-switch" title="Switch camera" onclick="switchCamera()">
-              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-            </button>
-            <button class="btn-capture" id="btn-capture" onclick="capturePhoto()" title="Take photo">
-              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/></svg>
-            </button>
-            <button class="btn-cam-switch" title="Start / stop camera" onclick="toggleCamera()" id="btn-cam-toggle">
-              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            </button>
+          <div class="aadhar-preview" id="aadhar-preview-front">
+            <img id="aadhar-img-front" src="" alt="Aadhaar front"/>
+            <div class="aadhar-preview-actions">
+              <button class="btn-clear" onclick="recropAadhar('front')">↺ Re-fit</button>
+              <button class="btn-clear" onclick="removeAadhar('front')">✕ Remove</button>
+            </div>
           </div>
         </div>
-        <!-- Captured photo preview -->
-        <div class="photo-result" id="photo-result-camera">
-          <div class="photo-result-header">
-            <span>📸 Photo captured</span>
-            <button class="btn-clear" onclick="retakePhoto()">↺ Retake</button>
+        <!-- BACK -->
+        <div class="aadhar-box">
+          <div class="aadhar-box-label">Aadhaar — Back</div>
+          <div class="aadhar-drop" id="aadhar-drop-back">
+            <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp,image/heic" onchange="handleAadharUpload('back', this)"/>
+            <div class="upload-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            </div>
+            <div class="upload-title">Tap to upload back</div>
+            <div class="upload-sub">JPG, PNG or WEBP · Max 12MB</div>
           </div>
-          <div class="photo-result-body">
-            <img id="photo-captured-img" src="" alt="Captured photo"/>
-          </div>
-        </div>
-      </div>
-
-      <!-- Upload tab -->
-      <div class="sig-tab-panel" id="photo-tabpanel-upload">
-        <div class="upload-area" id="photo-upload-area">
-          <input type="file" accept="image/png,image/jpeg,image/jpg,image/webp" onchange="handlePhotoUpload(this)"/>
-          <div class="upload-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          </div>
-          <div class="upload-title">Upload passport photo</div>
-          <div class="upload-sub">JPG or PNG · Max 5MB · Clear face, plain background</div>
-        </div>
-        <div class="photo-result" id="photo-result-upload">
-          <div class="photo-result-header">
-            <span id="photo-upload-filename">photo.jpg</span>
-            <button class="btn-clear" onclick="clearPhotoUpload()">✕ Remove</button>
-          </div>
-          <div class="photo-result-body">
-            <img id="photo-uploaded-img" src="" alt="Uploaded photo"/>
+          <div class="aadhar-preview" id="aadhar-preview-back">
+            <img id="aadhar-img-back" src="" alt="Aadhaar back"/>
+            <div class="aadhar-preview-actions">
+              <button class="btn-clear" onclick="recropAadhar('back')">↺ Re-fit</button>
+              <button class="btn-clear" onclick="removeAadhar('back')">✕ Remove</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Tips -->
-      <div class="photo-tips mt-16">
-        <div class="photo-tip"><div class="photo-tip-icon">💡</div> Plain white or light background works best</div>
-        <div class="photo-tip"><div class="photo-tip-icon">👤</div> Face should be centred, clearly visible, no sunglasses</div>
-        <div class="photo-tip"><div class="photo-tip-icon">🔒</div> Photo is stored securely and only used on your documents</div>
+      <!-- Shared fixed-size rectangular cropper (zoom + rotate with fingers) -->
+      <div class="cropper-wrap" id="aadhar-cropper-wrap" style="margin-top:16px;">
+        <div class="cropper-wrap-header">
+          <span id="aadhar-cropper-title">Fit your Aadhaar inside the box</span>
+          <button class="btn-clear" onclick="cancelAadharCrop()">✕ Cancel</button>
+        </div>
+        <div class="cropper-image-container aadhar" id="aadhar-cropper-container">
+          <img id="aadhar-cropper-img" alt="Aadhaar to fit"/>
+        </div>
+        <div class="rot-row">
+          <span class="rot-label">Rotate</span>
+          <input type="range" id="rot-slider" min="-180" max="180" value="0" step="1" oninput="cropperRotateTo(this.value)"/>
+          <span class="rot-value" id="rot-value">0°</span>
+        </div>
+        <div class="cropper-toolbar">
+          <button type="button" class="cropper-tool-btn" onclick="aadharZoom(0.1)" title="Zoom in">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom In
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="aadharZoom(-0.1)" title="Zoom out">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            Zoom Out
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="aadharRotate(-90)" title="Rotate left">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Left 90°
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="aadharRotate(90)" title="Rotate right">
+            <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+            Right 90°
+          </button>
+          <button type="button" class="cropper-tool-btn" onclick="aadharCropReset()" title="Reset">
+            <svg viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            Reset
+          </button>
+          <button type="button" class="cropper-tool-btn primary" onclick="applyAadharCrop()" title="Apply">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Apply
+          </button>
+        </div>
+        <p class="cropper-hint">📱 On your phone: <strong>drag</strong> to move · <strong>pinch</strong> to zoom · <strong>twist two fingers</strong> to rotate. You can also use the rotate slider and buttons above.</p>
       </div>
 
       <div class="mt-16 btn-row">
-        <button class="btn btn-secondary" onclick="goTo(2); stopCamera();">← Back</button>
-        <button class="btn btn-primary" id="btn-photo-next" disabled onclick="goTo(4); stopCamera();">Continue →</button>
+        <button class="btn btn-secondary" onclick="goTo(2)">← Back</button>
+        <button class="btn btn-primary" id="btn-aadhar-next" disabled onclick="goTo(4)">Continue →</button>
       </div>
+    </div>
+
+    <div class="card" style="background:#f0f8f4;border-color:#c3e0cf;">
+      <p style="font-size:0.82rem;color:var(--accent);line-height:1.6;">
+        <strong>ℹ️ About your Aadhaar</strong><br>
+        Both images are stored securely and embedded only on the documents that require identity proof. By uploading, you confirm you are <strong id="aadhar-confirm-name">the customer</strong> and that this is your own Aadhaar card.
+      </p>
     </div>
   </div>
 
@@ -1190,10 +1332,11 @@
       <div class="final-sig-img"><img id="consent-sig-img" src="" alt="Your signature"/></div>
     </div>
 
-    <div class="final-sig-preview" id="consent-photo-wrap" style="display:none;">
-      <div class="final-sig-label">Your Photo</div>
-      <div class="final-sig-img" style="justify-content:flex-start;">
-        <img id="consent-photo-img" src="" alt="Your photo" style="max-height:80px;border-radius:6px;border:2px solid var(--border);"/>
+    <div class="final-sig-preview" id="consent-aadhar-wrap" style="display:none;">
+      <div class="final-sig-label">Your Aadhaar card</div>
+      <div class="final-sig-img" style="justify-content:flex-start;gap:12px;">
+        <img id="consent-aadhar-front" src="" alt="Aadhaar front" style="height:70px;border-radius:6px;border:2px solid var(--border);"/>
+        <img id="consent-aadhar-back" src="" alt="Aadhaar back" style="height:70px;border-radius:6px;border:2px solid var(--border);"/>
       </div>
     </div>
 
@@ -1260,7 +1403,8 @@
   const state = {
     currentPanel: 1,
     signatureDataURL: null,
-    photoDataURL: null,
+    aadhar:     { front: null, back: null },   // cropped data URLs (submitted)
+    aadharOrig: { front: null, back: null },   // original uploads (for re-fit)
     reviewedDocs: new Set(),
     sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
     customerName: '',
@@ -1315,7 +1459,6 @@
     if (n !== 2) sigStopCamera();
     if (n === 2 && activeTab === 'draw') setTimeout(initSigPad, 80);
     if (n === 2 && activeTab === 'camera') setTimeout(sigStartCamera, 100);
-    if (n === 3) setTimeout(autoStartCamera, 100);
     if (n === 4) renderDocReview();
     if (n === 5) renderConsent();
     if (n === 6) renderSuccess();
@@ -1766,127 +1909,230 @@
   });
 
   // ══════════════════════════════════════
-  // PHOTO LOGIC
+  // AADHAAR UPLOAD + FIXED RECTANGLE CROPPER (zoom + rotate with fingers)
   // ══════════════════════════════════════
-  let photoTab = 'camera';
-  let cameraStream = null;
-  let facingMode = 'user'; // front cam default for selfie
+  const AAD_RATIO = 1.585;            // Aadhaar card width : height
+  const AAD_OUT_W = 1000;             // output width in px
+  const AAD_OUT_H = Math.round(AAD_OUT_W / AAD_RATIO);  // ~631
+  let aadharCropper = null;
+  let activeSide = 'front';           // which side is being fitted
 
-  function switchPhotoTab(tab) {
-    photoTab = tab;
-    document.getElementById('photo-tab-camera').classList.toggle('active', tab === 'camera');
-    document.getElementById('photo-tab-upload').classList.toggle('active', tab === 'upload');
-    document.getElementById('photo-tabpanel-camera').classList.toggle('active', tab === 'camera');
-    document.getElementById('photo-tabpanel-upload').classList.toggle('active', tab === 'upload');
-    if (tab === 'camera') setTimeout(autoStartCamera, 80);
-    else stopCamera();
-  }
-
-  async function autoStartCamera() {
-    // Only start if no photo taken yet and camera tab active
-    if (state.photoDataURL) return; // already have a photo
-    if (photoTab !== 'camera') return;
-    await startCamera();
-  }
-
-  async function startCamera() {
-    try {
-      if (cameraStream) stopCamera();
-      const constraints = { video: { facingMode, width: { ideal: 640 }, height: { ideal: 853 } }, audio: false };
-      cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
-      const video = document.getElementById('camera-video');
-      video.srcObject = cameraStream;
-      video.play();
-      document.getElementById('camera-overlay').style.display = 'none';
-      document.getElementById('camera-guide').style.display = 'block';
-    } catch (err) {
-      const overlay = document.getElementById('camera-overlay');
-      overlay.style.display = 'flex';
-      overlay.innerHTML = `<svg viewBox="0 0 24 24" width="36" height="36" stroke="rgba(255,255,255,0.4)" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg><span style="font-size:0.8rem;color:rgba(255,255,255,0.6);text-align:center;padding:0 20px;">Camera access denied.<br/>Please use the Upload tab instead.</span>`;
-    }
-  }
-
-  function stopCamera() {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      cameraStream = null;
-    }
-    const video = document.getElementById('camera-video');
-    if (video) video.srcObject = null;
-  }
-
-  async function switchCamera() {
-    facingMode = facingMode === 'user' ? 'environment' : 'user';
-    await startCamera();
-  }
-
-  async function toggleCamera() {
-    if (cameraStream) stopCamera();
-    else await startCamera();
-  }
-
-  function capturePhoto() {
-    const video = document.getElementById('camera-video');
-    if (!video.srcObject) { startCamera(); return; }
-    const canvas = document.getElementById('camera-canvas');
-    const W = video.videoWidth || 480;
-    const H = video.videoHeight || 640;
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    // Mirror if front cam
-    if (facingMode === 'user') {
-      ctx.translate(W, 0);
-      ctx.scale(-1, 1);
-    }
-    ctx.drawImage(video, 0, 0, W, H);
-    const dataURL = canvas.toDataURL('image/jpeg', 0.92);
-    state.photoDataURL = dataURL;
-    document.getElementById('photo-captured-img').src = dataURL;
-    document.getElementById('camera-live-wrap').style.display = 'none';
-    document.getElementById('photo-result-camera').classList.add('show');
-    stopCamera();
-    updatePhotoNextBtn();
-  }
-
-  function retakePhoto() {
-    state.photoDataURL = null;
-    document.getElementById('photo-captured-img').src = '';
-    document.getElementById('camera-live-wrap').style.display = 'block';
-    document.getElementById('photo-result-camera').classList.remove('show');
-    updatePhotoNextBtn();
-    startCamera();
-  }
-
-  function handlePhotoUpload(input) {
+  function handleAadharUpload(side, input) {
     const file = input.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { alert('File too large. Max 5MB.'); return; }
+    if (file.size > 12 * 1024 * 1024) {
+      alert('File too large. Please upload an image under 12MB.');
+      input.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (e) => {
-      compressImage(e.target.result, 1200, 1600, 'jpeg', 0.85, (compressed) => {
-        state.photoDataURL = compressed;
-        document.getElementById('photo-uploaded-img').src = compressed;
-        document.getElementById('photo-upload-filename').textContent = file.name;
-        document.getElementById('photo-upload-area').style.display = 'none';
-        document.getElementById('photo-result-upload').classList.add('show');
-        updatePhotoNextBtn();
-      });
+      state.aadharOrig[side] = e.target.result;
+      openAadharCropper(side, e.target.result);
     };
     reader.readAsDataURL(file);
+    input.value = '';   // allow re-selecting the same file later
   }
 
-  function clearPhotoUpload() {
-    state.photoDataURL = null;
-    document.getElementById('photo-uploaded-img').src = '';
-    document.getElementById('photo-upload-area').style.display = 'block';
-    document.getElementById('photo-result-upload').classList.remove('show');
-    updatePhotoNextBtn();
+  function openAadharCropper(side, dataUrl) {
+    activeSide = side;
+    document.getElementById('aadhar-cropper-title').textContent =
+      `Fit your Aadhaar ${side === 'front' ? 'front' : 'back'} inside the box`;
+
+    const wrap = document.getElementById('aadhar-cropper-wrap');
+    wrap.classList.add('show');
+
+    const img = document.getElementById('aadhar-cropper-img');
+    img.src = dataUrl;
+
+    if (aadharCropper) { aadharCropper.destroy(); aadharCropper = null; }
+
+    img.onload = () => {
+      aadharCropper = new Cropper(img, {
+        aspectRatio: AAD_RATIO,    // rectangular crop box
+        viewMode: 0,               // free pan / zoom / rotate behind the box
+        dragMode: 'move',          // drag pans the image; the box stays fixed
+        background: true,
+        responsive: true,
+        zoomable: true,
+        zoomOnTouch: true,         // pinch to zoom
+        zoomOnWheel: true,
+        scalable: true,
+        rotatable: true,           // rotation enabled
+        movable: true,
+        cropBoxMovable: false,     // fixed box — only the image moves
+        cropBoxResizable: false,   // fixed box — same size for every image
+        toggleDragModeOnDblclick: false,
+        guides: true,
+        center: true,
+        wheelZoomRatio: 0.1,
+        ready() {
+          fitFixedCropBox();
+          resetRotationUI();
+        },
+      });
+    };
+    setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
   }
 
-  function updatePhotoNextBtn() {
-    document.getElementById('btn-photo-next').disabled = !state.photoDataURL;
+  // Force a fixed-size rectangle crop box centred in the stage with a small
+  // margin, independent of the uploaded image's dimensions.
+  function fitFixedCropBox() {
+    if (!aadharCropper) return;
+    const cd = aadharCropper.getContainerData();
+    const margin = 14;
+    let boxW = cd.width - margin * 2;
+    let boxH = boxW / AAD_RATIO;
+    if (boxH > cd.height - margin * 2) {
+      boxH = cd.height - margin * 2;
+      boxW = boxH * AAD_RATIO;
+    }
+    aadharCropper.setCropBoxData({
+      left: (cd.width - boxW) / 2,
+      top:  (cd.height - boxH) / 2,
+      width: boxW,
+      height: boxH,
+    });
   }
+
+  function cancelAadharCrop() {
+    if (aadharCropper) { aadharCropper.destroy(); aadharCropper = null; }
+    document.getElementById('aadhar-cropper-wrap').classList.remove('show');
+  }
+
+  function aadharZoom(delta) { if (aadharCropper) aadharCropper.zoom(delta); }
+
+  function aadharRotate(deg) {
+    if (!aadharCropper) return;
+    aadharCropper.rotate(deg);
+    syncRotationSlider();
+  }
+
+  function aadharCropReset() {
+    if (aadharCropper) { aadharCropper.reset(); fitFixedCropBox(); }
+    resetRotationUI();
+  }
+
+  function cropperRotateTo(deg) {
+    if (!aadharCropper) return;
+    aadharCropper.rotateTo(Number(deg));
+    document.getElementById('rot-value').textContent = `${Math.round(Number(deg))}°`;
+  }
+
+  function resetRotationUI() {
+    const s = document.getElementById('rot-slider');
+    if (s) s.value = 0;
+    const v = document.getElementById('rot-value');
+    if (v) v.textContent = '0°';
+  }
+
+  // Keep the slider + readout in sync after gesture / button rotations.
+  function syncRotationSlider() {
+    if (!aadharCropper) return;
+    let r = aadharCropper.getData().rotate || 0;
+    let norm = ((r % 360) + 360) % 360;       // 0..359
+    if (norm > 180) norm -= 360;              // -180..180
+    const s = document.getElementById('rot-slider');
+    if (s) s.value = Math.round(norm);
+    const v = document.getElementById('rot-value');
+    if (v) v.textContent = `${Math.round(norm)}°`;
+  }
+
+  function applyAadharCrop() {
+    if (!aadharCropper) return;
+    const canvas = aadharCropper.getCroppedCanvas({
+      width: AAD_OUT_W,
+      height: AAD_OUT_H,
+      fillColor: '#ffffff',
+      imageSmoothingEnabled: true,
+      imageSmoothingQuality: 'high',
+    });
+    if (!canvas) { alert('Could not crop. Please try again.'); return; }
+
+    // Keep the colour image as-is (no black/white filter for Aadhaar).
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    state.aadhar[activeSide] = dataUrl;
+
+    document.getElementById(`aadhar-img-${activeSide}`).src = dataUrl;
+    document.getElementById(`aadhar-preview-${activeSide}`).classList.add('show');
+    document.getElementById(`aadhar-drop-${activeSide}`).style.display = 'none';
+
+    aadharCropper.destroy();
+    aadharCropper = null;
+    document.getElementById('aadhar-cropper-wrap').classList.remove('show');
+    updateAadharNextBtn();
+  }
+
+  function recropAadhar(side) {
+    if (state.aadharOrig[side]) openAadharCropper(side, state.aadharOrig[side]);
+  }
+
+  function removeAadhar(side) {
+    state.aadhar[side] = null;
+    state.aadharOrig[side] = null;
+    document.getElementById(`aadhar-img-${side}`).src = '';
+    document.getElementById(`aadhar-preview-${side}`).classList.remove('show');
+    document.getElementById(`aadhar-drop-${side}`).style.display = 'block';
+    updateAadharNextBtn();
+  }
+
+  function updateAadharNextBtn() {
+    document.getElementById('btn-aadhar-next').disabled =
+      !(state.aadhar.front && state.aadhar.back);
+  }
+
+  // ── Two-finger twist gesture → rotate the image ──────────────
+  // Runs alongside Cropper's native pinch-zoom & drag-pan so the user can
+  // move, zoom AND rotate at the same time with their fingers.
+  (function attachAadharTwist() {
+    const container = document.getElementById('aadhar-cropper-container');
+    if (!container) return;
+    let lastAngle = null;
+    const angleOf = (t) =>
+      Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
+
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) lastAngle = angleOf(e.touches);
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2 && lastAngle !== null && aadharCropper) {
+        const a = angleOf(e.touches);
+        let d = a - lastAngle;
+        if (d > 180) d -= 360;
+        if (d < -180) d += 360;
+        aadharCropper.rotate(d);
+        lastAngle = a;
+        syncRotationSlider();
+      }
+    }, { passive: true });
+
+    const end = (e) => { if (!e.touches || e.touches.length < 2) lastAngle = null; };
+    container.addEventListener('touchend', end, { passive: true });
+    container.addEventListener('touchcancel', end, { passive: true });
+  })();
+
+  // ── Drag & drop onto the Aadhaar boxes (desktop) ─────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    ['front', 'back'].forEach((side) => {
+      const area = document.getElementById(`aadhar-drop-${side}`);
+      if (!area) return;
+      area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+      area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+      area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          const input = area.querySelector('input[type=file]');
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          input.files = dt.files;
+          handleAadharUpload(side, input);
+        }
+      });
+    });
+  });
 
   // ── Document review render ─────────────
   function renderDocReview() {
@@ -1936,9 +2182,10 @@
     document.getElementById('consent-check-text-1').textContent =
       `I have read and understood all ${n} documents and consent to my signature being applied to each.`;
     if (state.signatureDataURL) document.getElementById('consent-sig-img').src = state.signatureDataURL;
-    if (state.photoDataURL) {
-      document.getElementById('consent-photo-img').src = state.photoDataURL;
-      document.getElementById('consent-photo-wrap').style.display = 'block';
+    if (state.aadhar.front || state.aadhar.back) {
+      if (state.aadhar.front) document.getElementById('consent-aadhar-front').src = state.aadhar.front;
+      if (state.aadhar.back)  document.getElementById('consent-aadhar-back').src = state.aadhar.back;
+      document.getElementById('consent-aadhar-wrap').style.display = 'block';
     }
     document.getElementById('session-time').textContent = new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
     document.getElementById('session-id').textContent = state.sessionId;
@@ -2024,6 +2271,8 @@
       });
       const sigConfirm = document.getElementById('sig-confirm-name');
       if (sigConfirm) sigConfirm.textContent = state.customerName;
+      const aadharConfirm = document.getElementById('aadhar-confirm-name');
+      if (aadharConfirm) aadharConfirm.textContent = state.customerName;
 
       // Send OTP automatically. The backend only emails one code per 10-min
       // window, so page reloads or re-clicking the email link won't trigger
@@ -2100,7 +2349,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           signature: state.signatureDataURL,
-          photo: state.photoDataURL,
+          aadhar_front: state.aadhar.front,
+          aadhar_back:  state.aadhar.back,
         }),
       });
       const data = await res.json();

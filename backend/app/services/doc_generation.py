@@ -20,6 +20,9 @@ TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
 
 SIGNATURE_KEY = "signature.png"
 PHOTO_KEY = "photo.jpg"
+# Customer Aadhaar card images collected on the signing page.
+AADHAR_FRONT_KEY = "aadhar_front.jpg"
+AADHAR_BACK_KEY = "aadhar_back.jpg"
 
 TEMPLATES = {
     "Annexure_1":           "TEMPELATE_Annexure.docx",
@@ -46,7 +49,7 @@ INSTALLATION_OUT_NAME = "Customer_Installation_Photo.pdf"
 DCR_OUT_NAME          = "DCR.pdf"
 
 # Internal artifacts that are never delivered to the customer.
-HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY}
+HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY, AADHAR_FRONT_KEY, AADHAR_BACK_KEY}
 # Generated, unstamped NP first page — for the admin to print only.
 NP_FIRST_PAGE_SUFFIX = "_NP_Agreement_First_Page.pdf"
 # Base NP agreement (pages 2+). The stamped first page is merged in front of it.
@@ -54,8 +57,11 @@ NP_AGREEMENT_SUFFIX = "_NP_Agreement.pdf"
 
 # placeholder -> (image-key, render width)
 IMAGE_PLACEHOLDERS = {
-    "${CUSTOMER_SIGN}$":  ("signature", Inches(1.25)),
-    "${CUSTOMER_PHOTO}$": ("photo",     Inches(2.5)),
+    "${CUSTOMER_SIGN}$":   ("signature",    Inches(1.25)),
+    "${CUSTOMER_PHOTO}$":  ("photo",        Inches(2.5)),
+    # Aadhaar card images uploaded by the customer on the signing page.
+    "${AADHAR_FRONT}$":    ("aadhar_front", Inches(3.0)),
+    "${AADHAR_BACK}$":     ("aadhar_back",  Inches(3.0)),
 }
 
 
@@ -72,11 +78,31 @@ def build_replacements(customer: dict) -> dict:
     return replacements
 
 
+def _copy_run_format(src_run, dst_run):
+    """Copy character-level formatting from src_run to dst_run (font name, size, italic, underline, color)."""
+    sf, df = src_run.font, dst_run.font
+    df.name      = sf.name
+    df.size      = sf.size
+    df.italic    = sf.italic
+    df.underline = sf.underline
+    if sf.color and sf.color.type is not None:
+        try:
+            df.color.rgb = sf.color.rgb
+        except Exception:
+            pass
+
+
 def process_paragraph(paragraph, replacements: dict, images: dict):
     all_keys = list(replacements.keys()) + list(IMAGE_PLACEHOLDERS.keys())
     original = "".join(r.text for r in paragraph.runs)
     if not any(k in original for k in all_keys):
         return
+
+    # Capture formatting from the first non-empty run before clearing all runs.
+    # All runs in a template paragraph are typically uniform, so this covers the
+    # whole paragraph (font name, size, color, etc.).
+    fmt_run = next((r for r in paragraph.runs if r.text), None) or (paragraph.runs[0] if paragraph.runs else None)
+
     for run in paragraph.runs:
         run.text = ""
 
@@ -89,15 +115,21 @@ def process_paragraph(paragraph, replacements: dict, images: dict):
             if img_path and img_path.exists():
                 try:
                     new_run = paragraph.add_run()
+                    if fmt_run:
+                        _copy_run_format(fmt_run, new_run)
                     new_run.add_picture(str(img_path), width=width)
                 except Exception as e:
                     print(f"Failed to embed image {img_path}: {e}")
             # else: leave blank — image not available yet
         elif part in replacements:
             new_run = paragraph.add_run(replacements[part])
-            new_run.bold = True
+            if fmt_run:
+                _copy_run_format(fmt_run, new_run)
+            new_run.bold = True  # filled values are always bolded
         else:
-            paragraph.add_run(part)
+            new_run = paragraph.add_run(part)
+            if fmt_run:
+                _copy_run_format(fmt_run, new_run)
 
 
 def fill_template(template_path: Path, output_path: Path, replacements: dict, images: dict):
@@ -147,9 +179,10 @@ async def generate_for_customer(customer: dict) -> str:
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"docgen_{customer_id}_"))
     try:
-        # Pull signature / photo down from R2 (saved during signing) so they get embedded
+        # Pull signature + Aadhaar images down from R2 (saved during signing) so they get embedded
         images = {}
-        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY)):
+        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY),
+                               ("aadhar_front", AADHAR_FRONT_KEY), ("aadhar_back", AADHAR_BACK_KEY)):
             r2_key = prefix + fname
             local = work_dir / fname
             if await loop.run_in_executor(None, storage.object_exists, r2_key):
