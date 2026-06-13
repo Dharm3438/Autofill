@@ -404,16 +404,33 @@ def signing_document_list(prefix: str, objects: list[dict], customer: dict) -> l
     return items
 
 
-async def fetch_signing_document(prefix: str, customer: dict, key: str) -> tuple[str, bytes] | None:
+async def build_signing_manifest(prefix: str, customer: dict) -> list[dict]:
     """
-    Fetch a single signing-page document's PDF bytes by its stable `key`.
-    Applies the same stamped-first-page merge as the delivered bundle so the
-    NP Agreement the customer reviews matches the final document. Returns
-    (label, pdf_bytes) or None if the key doesn't resolve.
+    Build the signing-page document manifest (the same list `signing_document_list`
+    produces) by reading R2 once. Persisted on the customer at send-link time so
+    each review-page document view resolves from the DB instead of re-LISTing the
+    whole R2 folder every time.
     """
     loop = asyncio.get_event_loop()
     objects = await loop.run_in_executor(None, storage.list_objects, prefix)
-    item = next((it for it in signing_document_list(prefix, objects, customer) if it["key"] == key), None)
+    return signing_document_list(prefix, objects, customer)
+
+
+async def fetch_signing_document(prefix: str, customer: dict, key: str,
+                                 manifest: list[dict] | None = None) -> tuple[str, bytes] | None:
+    """
+    Fetch a single signing-page document's PDF bytes by its stable `key`.
+    Uses the persisted `manifest` when given (no R2 LIST); otherwise rebuilds it
+    from R2 for backward compatibility with links sent before the manifest was
+    stored. Applies the same stamped-first-page merge as the delivered bundle so
+    the NP Agreement the customer reviews matches the final document. Returns
+    (label, pdf_bytes) or None if the key doesn't resolve.
+    """
+    loop = asyncio.get_event_loop()
+    if manifest is None:
+        objects = await loop.run_in_executor(None, storage.list_objects, prefix)
+        manifest = signing_document_list(prefix, objects, customer)
+    item = next((it for it in manifest if it["key"] == key), None)
     if not item:
         return None
 
@@ -457,19 +474,23 @@ async def build_customer_bundle(prefix: str) -> list[tuple[str, bytes]]:
     if stamp_key in keys:
         stamp_bytes = await loop.run_in_executor(None, storage.download_bytes, stamp_key)
 
-    bundle: list[tuple[str, bytes]] = []
+    # Plan the bundle first — (output name, R2 key, needs stamp merge) — in a
+    # stable order, then download every file concurrently and assemble.
+    plan: list[tuple[str, str, bool]] = []
     for o in sorted(objects, key=lambda o: o["name"]):
         if not _is_deliverable(prefix, o):
             continue
-        data = await loop.run_in_executor(None, storage.download_bytes, o["key"])
-        if o["name"].endswith(NP_AGREEMENT_SUFFIX) and stamp_bytes:
-            data = merge_pdf_front(stamp_bytes, data)
-        bundle.append((o["name"], data))
-
+        plan.append((o["name"], o["key"], o["name"].endswith(NP_AGREEMENT_SUFFIX)))
     for upload_key, out_name in ((prefix + INSTALLATION_UPLOAD_KEY, INSTALLATION_OUT_NAME),
                                  (prefix + DCR_UPLOAD_KEY, DCR_OUT_NAME)):
         if upload_key in keys:
-            data = await loop.run_in_executor(None, storage.download_bytes, upload_key)
-            bundle.append((out_name, data))
+            plan.append((out_name, upload_key, False))
 
-    return bundle
+    async def _fetch(out_name: str, r2_key: str, merge: bool) -> tuple[str, bytes]:
+        data = await loop.run_in_executor(None, storage.download_bytes, r2_key)
+        if merge and stamp_bytes:
+            data = merge_pdf_front(stamp_bytes, data)
+        return out_name, data
+
+    # gather preserves input order, so the bundle stays deterministic.
+    return list(await asyncio.gather(*(_fetch(n, k, m) for n, k, m in plan)))
