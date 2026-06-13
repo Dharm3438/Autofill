@@ -7,7 +7,7 @@ import string
 import zipfile
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, RedirectResponse
 from pydantic import BaseModel
 from ..core.config import settings
 from ..core.database import get_db
@@ -121,9 +121,24 @@ async def get_signing_document(token: str, key: str):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    from ..services.doc_generation import fetch_signing_document
     prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
-    result = await fetch_signing_document(prefix, customer, key, customer.get("signing_manifest"))
+    manifest = customer.get("signing_manifest")
+
+    # Offload byte delivery to R2 via a short-lived presigned URL when enabled,
+    # so the worker doesn't download+stream every reviewed PDF. Documents that
+    # need an on-the-fly stamp merge (the NP Agreement) aren't a single R2
+    # object, so those still stream through the backend.
+    if settings.R2_PRESIGNED_REVIEW:
+        from ..services.doc_generation import resolve_signing_item
+        item = await resolve_signing_item(prefix, customer, key, manifest)
+        if not item:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if not item["merge_stamp"]:
+            url = await asyncio.to_thread(storage.presigned_url, item["r2_key"], 3600)
+            return RedirectResponse(url, status_code=302)
+
+    from ..services.doc_generation import fetch_signing_document
+    result = await fetch_signing_document(prefix, customer, key, manifest)
     if not result:
         raise HTTPException(status_code=404, detail="Document not found")
 
