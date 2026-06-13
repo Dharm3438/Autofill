@@ -194,35 +194,64 @@ def _find_soffice() -> str:
 
 def convert_docx_to_pdf(docx_path: Path) -> bool:
     """
-    Convert a DOCX to a PDF beside it using LibreOffice headless.
+    Convert a single DOCX to a PDF beside it using LibreOffice headless.
+
+    Thin wrapper over convert_docx_batch — kept for single-file callers
+    (e.g. the docgen_test.py harness). For generating a customer's full set,
+    use convert_docx_batch so LibreOffice only starts up once.
+    """
+    produced = convert_docx_batch([docx_path], docx_path.parent)
+    return docx_path.with_suffix(".pdf") in produced
+
+
+def convert_docx_batch(docx_paths: list[Path], outdir: Path) -> set[Path]:
+    """
+    Convert many DOCX files to PDF in a single LibreOffice invocation.
+
+    LibreOffice's ~1–2s startup is the expensive part, so converting a whole
+    customer's documents in one `soffice` call instead of one-per-file is the
+    dominant doc-gen speedup. If one document is malformed LibreOffice still
+    converts the rest, so we report success per-file by checking which PDFs
+    actually landed in `outdir`.
 
     A throwaway user-profile dir is passed via -env:UserInstallation so the
     conversion never collides with (or hangs behind) a LibreOffice window the
-    user may already have open, and so parallel conversions stay isolated.
+    user may already have open, and so concurrent batches stay isolated.
+
+    Returns the set of PDF paths that were produced.
     """
-    pdf_path = docx_path.with_suffix(".pdf")
+    docx_paths = [p for p in docx_paths if p.exists()]
+    if not docx_paths:
+        return set()
+
+    expected = {outdir / (p.stem + ".pdf") for p in docx_paths}
     profile_dir = Path(tempfile.mkdtemp(prefix="lo_profile_"))
     profile_uri = profile_dir.as_uri()
+    # One LibreOffice startup serves the whole batch; scale the timeout with the
+    # number of files (with generous headroom) rather than the old flat 120s.
+    timeout = min(120 + 30 * len(docx_paths), 600)
     try:
         soffice = _find_soffice()
         result = subprocess.run(
             [soffice, "--headless", "--nologo", "--nofirststartwizard",
              f"-env:UserInstallation={profile_uri}",
-             "--convert-to", "pdf", "--outdir", str(docx_path.parent), str(docx_path)],
-            capture_output=True, text=True, timeout=120,
+             "--convert-to", "pdf", "--outdir", str(outdir),
+             *[str(p) for p in docx_paths]],
+            capture_output=True, text=True, timeout=timeout,
         )
         if result.returncode != 0:
-            print(f"LibreOffice error [{docx_path.name}]: {result.stderr.strip() or result.stdout.strip()}")
-            return False
-        return pdf_path.exists()
+            print(f"LibreOffice batch error: {result.stderr.strip() or result.stdout.strip()}")
     except subprocess.TimeoutExpired:
-        print(f"PDF conversion timed out [{docx_path.name}]")
-        return False
+        print(f"PDF batch conversion timed out ({len(docx_paths)} files)")
     except Exception as e:
-        print(f"PDF conversion failed [{docx_path.name}]: {e}")
-        return False
+        print(f"PDF batch conversion failed: {e}")
     finally:
         shutil.rmtree(profile_dir, ignore_errors=True)
+
+    produced = {p for p in expected if p.exists()}
+    for missing in expected - produced:
+        print(f"PDF failed: {missing.stem}")
+    return produced
 
 
 async def generate_for_customer(customer: dict) -> str:
@@ -260,24 +289,28 @@ async def generate_for_customer(customer: dict) -> str:
         for key in stale:
             await loop.run_in_executor(None, storage.delete_prefix, key)
 
+        # Phase 1 — fill every template's DOCX.
+        docx_paths: list[Path] = []
         for doc_type, template_file in TEMPLATES.items():
             template_path = TEMPLATE_DIR / template_file
             if not template_path.exists():
                 print(f"Template not found: {template_path}")
                 continue
-
             docx_path = work_dir / f"{safe_name}_{doc_type}.docx"
             await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements, images)
+            docx_paths.append(docx_path)
 
-            success = await loop.run_in_executor(None, convert_docx_to_pdf, docx_path)
-            pdf_path = docx_path.with_suffix(".pdf")
-            if success and pdf_path.exists():
-                await loop.run_in_executor(
-                    None, storage.upload_file, pdf_path, prefix + pdf_path.name, "application/pdf"
-                )
-                print(f"Uploaded to R2: {prefix + pdf_path.name}")
-            else:
-                print(f"PDF failed: {docx_path.stem}")
+        # Phase 2 — convert them all to PDF in a single LibreOffice startup.
+        produced = await loop.run_in_executor(None, convert_docx_batch, docx_paths, work_dir)
+
+        # Phase 3 — upload the produced PDFs to R2 in parallel (independent I/O).
+        async def _upload(pdf_path: Path):
+            await loop.run_in_executor(
+                None, storage.upload_file, pdf_path, prefix + pdf_path.name, "application/pdf"
+            )
+            print(f"Uploaded to R2: {prefix + pdf_path.name}")
+
+        await asyncio.gather(*(_upload(p) for p in sorted(produced)))
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
 
