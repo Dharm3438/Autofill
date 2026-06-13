@@ -416,24 +416,34 @@ async def build_signing_manifest(prefix: str, customer: dict) -> list[dict]:
     return signing_document_list(prefix, objects, customer)
 
 
+async def resolve_signing_item(prefix: str, customer: dict, key: str,
+                               manifest: list[dict] | None = None) -> dict | None:
+    """
+    Resolve a signing-page document `key` to its manifest item
+    ({label, r2_key, merge_stamp, key}) without downloading anything. Uses the
+    persisted `manifest` when given (no R2 LIST); otherwise rebuilds it from R2
+    for links sent before the manifest existed. Returns the item or None.
+    """
+    if manifest is None:
+        loop = asyncio.get_event_loop()
+        objects = await loop.run_in_executor(None, storage.list_objects, prefix)
+        manifest = signing_document_list(prefix, objects, customer)
+    return next((it for it in manifest if it["key"] == key), None)
+
+
 async def fetch_signing_document(prefix: str, customer: dict, key: str,
                                  manifest: list[dict] | None = None) -> tuple[str, bytes] | None:
     """
     Fetch a single signing-page document's PDF bytes by its stable `key`.
-    Uses the persisted `manifest` when given (no R2 LIST); otherwise rebuilds it
-    from R2 for backward compatibility with links sent before the manifest was
-    stored. Applies the same stamped-first-page merge as the delivered bundle so
-    the NP Agreement the customer reviews matches the final document. Returns
+    Applies the same stamped-first-page merge as the delivered bundle so the
+    NP Agreement the customer reviews matches the final document. Returns
     (label, pdf_bytes) or None if the key doesn't resolve.
     """
-    loop = asyncio.get_event_loop()
-    if manifest is None:
-        objects = await loop.run_in_executor(None, storage.list_objects, prefix)
-        manifest = signing_document_list(prefix, objects, customer)
-    item = next((it for it in manifest if it["key"] == key), None)
+    item = await resolve_signing_item(prefix, customer, key, manifest)
     if not item:
         return None
 
+    loop = asyncio.get_event_loop()
     data = await loop.run_in_executor(None, storage.download_bytes, item["r2_key"])
     if item["merge_stamp"]:
         stamp_key = prefix + NP_STAMP_UPLOAD_KEY

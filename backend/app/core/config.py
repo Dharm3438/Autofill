@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = "solar-docs"
     R2_PUBLIC_URL: str = ""
 
+    # When true, the signing review page redirects each (non-merged) document to
+    # a short-lived presigned R2 URL so the browser downloads it straight from R2
+    # instead of streaming through the backend. Requires R2 bucket CORS to allow
+    # the frontend origin (see backend/scripts/configure_r2_cors.py). Off by
+    # default so the code can deploy before CORS is configured, then be flipped.
+    R2_PRESIGNED_REVIEW: bool = False
+
     DOWNLOAD_WINDOW_DAYS: int = 3
 
 
