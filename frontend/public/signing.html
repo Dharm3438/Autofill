@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/signature_pad/4.1.7/signature_pad.umd.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -573,6 +574,129 @@
     display: none;
   }
   .sig-preview-small.show { display: block; opacity: 1; }
+
+  /* ── Document review (PDF viewer) ── */
+  .doc-review-body {
+    padding: 16px 20px;
+    background: #fafaf8;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--accent-light);
+    background: var(--white);
+    color: var(--accent);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .doc-view-btn:hover { background: var(--accent); color: #fff; }
+  .doc-view-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .doc-view-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+    font-size: 0.78rem;
+    color: var(--accent-light);
+    font-weight: 500;
+  }
+  .doc-view-status svg { width: 15px; height: 15px; stroke: var(--accent-light); fill: none; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+  .review-check.disabled { opacity: 0.45; cursor: not-allowed; }
+  .review-check.disabled input { cursor: not-allowed; }
+  .review-check-hint { font-size: 0.72rem; color: var(--ink-faint); font-style: italic; }
+
+  /* PDF viewer modal */
+  .pdf-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15,17,23,0.72);
+    backdrop-filter: blur(2px);
+    flex-direction: column;
+  }
+  .pdf-modal.show { display: flex; }
+  .pdf-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--accent);
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .pdf-modal-title { font-size: 0.92rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pdf-modal-close {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .pdf-modal-close:hover { background: rgba(255,255,255,0.28); }
+  .pdf-modal-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 16px 12px 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+  }
+  .pdf-page-canvas {
+    max-width: 100%;
+    height: auto;
+    background: #fff;
+    box-shadow: 0 2px 14px rgba(0,0,0,0.35);
+    border-radius: 2px;
+  }
+  .pdf-modal-loading, .pdf-modal-error {
+    color: #fff;
+    font-size: 0.88rem;
+    text-align: center;
+    margin: auto;
+    padding: 40px 20px;
+    line-height: 1.6;
+  }
+  .pdf-modal-error { color: #ffb4ab; }
+  .pdf-modal-footer {
+    flex-shrink: 0;
+    padding: 12px 16px;
+    background: var(--white);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .pdf-scroll-hint { font-size: 0.8rem; color: var(--ink-muted); display: flex; align-items: center; gap: 8px; }
+  .pdf-scroll-hint svg { width: 16px; height: 16px; stroke: var(--ink-faint); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .pdf-confirm-btn {
+    display: none;
+    padding: 11px 22px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent-light);
+    color: #fff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .pdf-confirm-btn:hover { background: var(--accent); }
 
   /* ── Consent ── */
   .consent-box {
@@ -1394,10 +1518,35 @@
 
 </div><!-- /container -->
 
+<!-- ══════════════════════════════════════
+     PDF DOCUMENT VIEWER MODAL
+══════════════════════════════════════ -->
+<div class="pdf-modal" id="pdf-modal" aria-hidden="true">
+  <div class="pdf-modal-header">
+    <span class="pdf-modal-title" id="pdf-modal-title">Document</span>
+    <button class="pdf-modal-close" onclick="closeDocViewer()">✕ Close</button>
+  </div>
+  <div class="pdf-modal-body" id="pdf-modal-body"></div>
+  <div class="pdf-modal-footer">
+    <span class="pdf-scroll-hint" id="pdf-scroll-hint">
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      Scroll to the end to confirm you've read it
+    </span>
+    <button class="pdf-confirm-btn" id="pdf-confirm-btn" onclick="confirmDocRead()">✓ I have read this — Confirm</button>
+  </div>
+</div>
+
 <script>
   // ── API config ─────────────────────────
   const API_BASE = 'https://autofill-blgf.onrender.com/api';
   const TOKEN = new URLSearchParams(window.location.search).get('token');
+
+  // PDF.js worker (renders document pages to canvas — reliable on mobile and
+  // lets us detect scroll-to-end for the review gate).
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
 
   // ── State ──────────────────────────────
   const state = {
@@ -1405,43 +1554,13 @@
     signatureDataURL: null,
     aadhar:     { front: null, back: null },   // cropped data URLs (submitted)
     aadharOrig: { front: null, back: null },   // original uploads (for re-fit)
-    reviewedDocs: new Set(),
+    documents: [],                             // [{key, name}] from the backend
+    viewedDocs: new Set(),                     // keys scrolled through to the end
+    reviewedDocs: new Set(),                   // keys the customer ticked as read
     sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
     customerName: '',
     appNo: '',
   };
-
-  // ── Solar installation documents (matches backend templates) ───
-  const DOCUMENTS = [
-    {
-      id: 'annexure-1', name: 'Annexure-1', meta: 'Solar Installation Declaration',
-      preview: `<strong>Annexure-1</strong><p>This document is generated with your solar installation details. Your signature and photo will be embedded where required before it is finalized.</p>`
-    },
-    {
-      id: 'aadhar', name: 'Aadhar Declaration', meta: 'Identity Declaration',
-      preview: `<strong>Aadhar Declaration</strong><p>Confirms your identity details for the solar net-metering application. Generated from your registered information.</p>`
-    },
-    {
-      id: 'wcr', name: 'Work Completion Report', meta: 'Installation Completion',
-      preview: `<strong>Work Completion Report (WCR)</strong><p>Certifies completion of your rooftop solar installation as per the sanctioned capacity and specifications on record.</p>`
-    },
-    {
-      id: 'annexure-3', name: 'Annexure-3 — Net Metering', meta: 'Net Metering',
-      preview: `<strong>Annexure-3 (Net Metering)</strong><p>Net-metering declaration submitted to the DISCOM for your solar connection.</p>`
-    },
-    {
-      id: 'np-agreement', name: 'Net-Metering Agreement', meta: 'Power Purchase / Net Metering',
-      preview: `<strong>Net-Metering Agreement</strong><p>Agreement between you and the DISCOM governing export/import of solar energy under the net-metering scheme.</p>`
-    },
-    {
-      id: 'meter-testing', name: 'Meter Testing Letter', meta: 'Meter Testing',
-      preview: `<strong>Meter Testing Letter</strong><p>Request/declaration for testing and installation of the generation meter for your solar system.</p>`
-    },
-    {
-      id: 'dcr', name: 'DCR Declaration', meta: 'Domestic Content Requirement',
-      preview: `<strong>DCR Declaration</strong><p>Declaration confirming use of Domestic Content Requirement compliant solar cells and modules.</p>`
-    }
-  ];
 
   // ── Panel navigation ───────────────────
   function goTo(n) {
@@ -2138,44 +2257,196 @@
   function renderDocReview() {
     const container = document.getElementById('doc-review-list');
     container.innerHTML = '';
-    DOCUMENTS.forEach((doc, idx) => {
-      const reviewed = state.reviewedDocs.has(doc.id);
-      container.innerHTML += `
-        <div class="doc-review-card">
-          <div class="doc-review-header">
-            <span class="doc-review-title">${doc.name}</span>
-            <span class="doc-review-num">Document ${idx+1} of ${DOCUMENTS.length}</span>
-          </div>
-          <div class="doc-preview">${doc.preview}</div>
-          <div class="doc-review-footer">
-            <label class="review-check">
-              <input type="checkbox" ${reviewed ? 'checked' : ''} onchange="toggleReview('${doc.id}', this.checked)"/>
-              I have read this document
-            </label>
-            ${state.signatureDataURL ? `<img class="sig-preview-small ${reviewed ? 'show' : ''}" id="sig-prev-${doc.id}" src="${state.signatureDataURL}" alt="sig"/>` : ''}
-          </div>
+    if (!state.documents.length) {
+      container.innerHTML = `<div class="card"><p style="font-size:0.85rem;color:var(--ink-muted);line-height:1.6;">
+        Your documents are being prepared. Please reload this page in a few moments.</p></div>`;
+      document.getElementById('btn-review-next').disabled = true;
+      return;
+    }
+    state.documents.forEach((doc, idx) => {
+      const viewed = state.viewedDocs.has(doc.key);
+      const reviewed = state.reviewedDocs.has(doc.key);
+      const card = document.createElement('div');
+      card.className = 'doc-review-card';
+      card.innerHTML = `
+        <div class="doc-review-header">
+          <span class="doc-review-title">${doc.name}</span>
+          <span class="doc-review-num">Document ${idx + 1} of ${state.documents.length}</span>
         </div>
-      `;
+        <div class="doc-review-body">
+          <button class="doc-view-btn" onclick="openDocViewer('${doc.key}')">
+            <svg viewBox="0 0 24 24"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            View document
+          </button>
+          <span class="doc-view-status" id="status-${doc.key}" style="display:${viewed ? 'inline-flex' : 'none'};">
+            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Reviewed
+          </span>
+        </div>
+        <div class="doc-review-footer">
+          <label class="review-check ${viewed ? '' : 'disabled'}" id="check-wrap-${doc.key}">
+            <input type="checkbox" id="chk-doc-${doc.key}" ${reviewed ? 'checked' : ''} ${viewed ? '' : 'disabled'} onchange="toggleReview('${doc.key}', this.checked)"/>
+            <span>I have read this document</span>
+            ${viewed ? '' : `<span class="review-check-hint" id="hint-${doc.key}">— open &amp; scroll to the end first</span>`}
+          </label>
+          ${state.signatureDataURL ? `<img class="sig-preview-small ${reviewed ? 'show' : ''}" id="sig-prev-${doc.key}" src="${state.signatureDataURL}" alt="sig"/>` : ''}
+        </div>`;
+      container.appendChild(card);
     });
     checkAllReviewed();
   }
-  function toggleReview(docId, checked) {
-    if (checked) state.reviewedDocs.add(docId);
-    else state.reviewedDocs.delete(docId);
-    const img = document.getElementById(`sig-prev-${docId}`);
+
+  function toggleReview(key, checked) {
+    if (checked) state.reviewedDocs.add(key);
+    else state.reviewedDocs.delete(key);
+    const img = document.getElementById(`sig-prev-${key}`);
     if (img) img.classList.toggle('show', checked);
     checkAllReviewed();
   }
+
   function checkAllReviewed() {
-    const allDone = DOCUMENTS.every(d => state.reviewedDocs.has(d.id));
+    const allDone = state.documents.length > 0 && state.documents.every(d => state.reviewedDocs.has(d.key));
     document.getElementById('btn-review-next').disabled = !allDone;
+  }
+
+  // ── PDF document viewer (modal + scroll-to-end gating) ─────────
+  let pdfViewer = { key: null, pdf: null, io: null, onScroll: null, reachedEnd: false };
+
+  async function openDocViewer(key) {
+    const doc = state.documents.find(d => d.key === key);
+    if (!doc) return;
+    const modal = document.getElementById('pdf-modal');
+    const body  = document.getElementById('pdf-modal-body');
+    pdfViewer.key = key;
+    pdfViewer.reachedEnd = state.viewedDocs.has(key);
+    document.getElementById('pdf-modal-title').textContent = doc.name;
+    body.innerHTML = '<div class="pdf-modal-loading">Loading document…</div>';
+    modal.classList.add('show');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    updateViewerGate();
+
+    if (!window.pdfjsLib) {
+      body.innerHTML = '<div class="pdf-modal-error">Document viewer failed to load. Please check your connection and reopen.</div>';
+      return;
+    }
+
+    try {
+      const url = `${API_BASE}/signing/document/${TOKEN}/${key}`;
+      const pdf = await pdfjsLib.getDocument({ url }).promise;
+      pdfViewer.pdf = pdf;
+      body.innerHTML = '';
+
+      // Lazy-render: pages render to canvas only as they scroll into view, but
+      // placeholders are pre-sized to true page dimensions so the scrollbar
+      // (and our scroll-to-end check) is accurate from the start.
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(en => {
+          if (en.isIntersecting && !en.target.dataset.rendered) {
+            en.target.dataset.rendered = '1';
+            renderPdfPage(pdf, +en.target.dataset.page, en.target);
+            io.unobserve(en.target);
+          }
+        });
+      }, { root: body, rootMargin: '400px 0px' });
+      pdfViewer.io = io;
+
+      const containerWidth = Math.min(body.clientWidth - 24, 900);
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const base = page.getViewport({ scale: 1 });
+        const scale = containerWidth / base.width;
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        canvas.dataset.page = p;
+        canvas.dataset.scale = scale;
+        canvas.dataset.dpr = dpr;
+        canvas.width = Math.floor(vp.width * dpr);
+        canvas.height = Math.floor(vp.height * dpr);
+        canvas.style.width = vp.width + 'px';
+        canvas.style.height = vp.height + 'px';
+        body.appendChild(canvas);
+        io.observe(canvas);
+      }
+
+      const onScroll = () => {
+        if (body.scrollTop + body.clientHeight >= body.scrollHeight - 32) {
+          pdfViewer.reachedEnd = true;
+          markDocViewed(key);
+          updateViewerGate();
+        }
+      };
+      pdfViewer.onScroll = onScroll;
+      body.addEventListener('scroll', onScroll, { passive: true });
+
+      // A short document that already fits without scrolling counts as read.
+      setTimeout(() => {
+        if (body.scrollHeight <= body.clientHeight + 32) {
+          pdfViewer.reachedEnd = true;
+          markDocViewed(key);
+          updateViewerGate();
+        }
+      }, 80);
+    } catch (e) {
+      body.innerHTML = '<div class="pdf-modal-error">Could not load this document. Please close and try again.</div>';
+    }
+  }
+
+  async function renderPdfPage(pdf, num, canvas) {
+    try {
+      const page = await pdf.getPage(num);
+      const vp = page.getViewport({ scale: (+canvas.dataset.scale) * (+canvas.dataset.dpr) });
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+    } catch (e) { /* a single page failing to paint shouldn't break the viewer */ }
+  }
+
+  function updateViewerGate() {
+    const reached = pdfViewer.reachedEnd;
+    document.getElementById('pdf-scroll-hint').style.display = reached ? 'none' : 'flex';
+    document.getElementById('pdf-confirm-btn').style.display = reached ? 'inline-block' : 'none';
+  }
+
+  function markDocViewed(key) {
+    if (state.viewedDocs.has(key)) return;
+    state.viewedDocs.add(key);
+    const cb = document.getElementById(`chk-doc-${key}`);
+    if (cb) cb.disabled = false;
+    document.getElementById(`check-wrap-${key}`)?.classList.remove('disabled');
+    const hint = document.getElementById(`hint-${key}`);
+    if (hint) hint.style.display = 'none';
+    const status = document.getElementById(`status-${key}`);
+    if (status) status.style.display = 'inline-flex';
+  }
+
+  function confirmDocRead() {
+    const key = pdfViewer.key;
+    closeDocViewer();
+    if (key !== null) {
+      const cb = document.getElementById(`chk-doc-${key}`);
+      if (cb) cb.checked = true;
+      toggleReview(key, true);
+    }
+  }
+
+  function closeDocViewer() {
+    const modal = document.getElementById('pdf-modal');
+    const body  = document.getElementById('pdf-modal-body');
+    if (pdfViewer.onScroll) body.removeEventListener('scroll', pdfViewer.onScroll);
+    if (pdfViewer.io) pdfViewer.io.disconnect();
+    if (pdfViewer.pdf) { try { pdfViewer.pdf.destroy(); } catch (e) {} }
+    pdfViewer = { key: null, pdf: null, io: null, onScroll: null, reachedEnd: false };
+    body.innerHTML = '';
+    modal.classList.remove('show');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
   }
 
   // ── Consent render ─────────────────────
   function renderConsent() {
     const name = state.customerName || 'the customer';
-    const n = DOCUMENTS.length;
-    const docList = DOCUMENTS.map((d, i) => `<strong>${i+1}.</strong> ${d.name}`).join(' · ');
+    const n = state.documents.length;
+    const docList = state.documents.map((d, i) => `<strong>${i+1}.</strong> ${d.name}`).join(' · ');
     document.getElementById('consent-box').innerHTML = `
       I, <strong>${name}</strong>, confirm that I have personally reviewed all <strong>${n} documents</strong> listed below and agree that my signature above shall be applied to each of them as my lawful electronic signature. I understand that this constitutes a legally binding agreement under the <strong>Information Technology Act, 2000</strong>.
       <br/><br/>Documents included:<br/>${docList}`;
@@ -2204,17 +2475,17 @@
   // ── Success render ─────────────────────
   function renderSuccess() {
     const doneList = document.getElementById('done-list');
-    doneList.innerHTML = DOCUMENTS.map(d => `
+    doneList.innerHTML = state.documents.map(d => `
       <div class="doc-done-item">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-        ${d.name} — <span style="font-size:0.78rem;color:var(--accent-light)">${d.meta}</span>
+        ${d.name}
       </div>
     `).join('');
     document.getElementById('done-time').textContent = new Date().toLocaleString('en-IN', { dateStyle: 'long', timeStyle: 'medium' });
     document.getElementById('done-session').textContent = 'SES-' + state.sessionId;
     document.getElementById('done-signed-by').textContent = state.customerName || 'Customer';
     document.getElementById('done-subtitle').textContent =
-      `Your signature has been successfully applied to all ${DOCUMENTS.length} documents. A confirmation has been sent to your registered contact.`;
+      `Your signature has been successfully applied to all ${state.documents.length} documents. A confirmation has been sent to your registered contact.`;
   }
   async function downloadAll() {
     const btn = document.querySelector('#panel-6 .btn-primary');
@@ -2258,11 +2529,12 @@
       }
       state.customerName = data.data.customer_name || 'Customer';
       state.appNo = data.data.app_no || '—';
+      state.documents = Array.isArray(data.data.documents) ? data.data.documents : [];
 
       // Fill in customer info on panel 1
       document.querySelectorAll('.info-field-value')[0].textContent = state.customerName;
       document.querySelectorAll('.info-field-value')[1].textContent = state.appNo;
-      document.querySelectorAll('.info-field-value')[2].textContent = `${DOCUMENTS.length} documents`;
+      document.querySelectorAll('.info-field-value')[2].textContent = `${state.documents.length} documents`;
       document.querySelectorAll('.info-field-value')[3].textContent = 'Solar Docs Platform';
 
       // Update remaining hardcoded names with the real customer name

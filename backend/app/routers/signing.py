@@ -80,11 +80,55 @@ async def verify_token(token: str):
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
+    # List the customer's generated documents so the signing page can show each
+    # one (filled with their details) for review before they consent.
+    from ..services.doc_generation import signing_document_list
+    prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
+    objects = await asyncio.to_thread(storage.list_objects, prefix)
+    documents = [
+        {"key": d["key"], "name": d["label"]}
+        for d in signing_document_list(prefix, objects, customer)
+    ]
+
     return {"success": True, "data": {
         "customer_name": customer.get("CONSUMER_NAME"),
         "customer_email": customer.get("CONSUMER_EMAIL"),
         "app_no": customer.get("CONSUMER_APP_NO"),
+        "documents": documents,
     }}
+
+
+# ── Public: stream a single document inline (PDF.js review viewer) ────────────
+
+@router.get("/document/{token}/{key}")
+async def get_signing_document(token: str, key: str):
+    db = get_db()
+    submission = await db.signing_submissions.find_one({"token": token})
+    if not submission:
+        raise HTTPException(status_code=404, detail="Invalid link")
+    if submission.get("expires_at") and submission["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(status_code=410, detail="This link has expired")
+
+    customer = await db.customers.find_one({"_id": ObjectId(submission["customer_id"])})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    from ..services.doc_generation import fetch_signing_document
+    prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
+    result = await fetch_signing_document(prefix, customer, key)
+    if not result:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    name, data = result
+    safe_name = name.replace('"', "")
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{safe_name}.pdf"',
+            "Cache-Control": "private, max-age=600",
+        },
+    )
 
 
 # ── Public: send OTP to customer email ───────────────────────────────────────
