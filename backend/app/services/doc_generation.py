@@ -324,6 +324,75 @@ def _is_deliverable(prefix: str, obj: dict) -> bool:
     return name.lower().endswith(".pdf")
 
 
+# Friendly, customer-facing labels for the documents shown on the signing page.
+# Keyed by the generated doc_type (the suffix of the R2 object name).
+SIGNING_DOC_LABELS = {
+    "Annexure_1":           "Annexure-1 — Solar Installation Declaration",
+    "Aadhar":               "Aadhaar Declaration",
+    "WCR":                  "Work Completion Report",
+    "Annexure_3":           "Annexure-3 — Net Metering",
+    "NP_Agreement":         "Net-Metering Agreement",
+    "Meter_testing_letter": "Meter Testing Letter",
+}
+
+
+def signing_document_list(prefix: str, objects: list[dict], customer: dict) -> list[dict]:
+    """
+    Ordered list of documents shown to the customer on the signing page for
+    review-before-consent. Mirrors `build_customer_bundle` so what they review
+    is exactly what gets delivered (minus the signature/photo, which are added
+    after they sign). Each item carries a stable `key`, a friendly `label`, and
+    the internal fetch info (`r2_key`, `merge_stamp`) used by
+    `fetch_signing_document`.
+    """
+    safe_name = sanitize(customer.get("CONSUMER_NAME", "customer"))
+    keys = {o["key"]: o for o in objects}
+    items: list[dict] = []
+
+    # Generated deliverables, sorted by name for a stable, deterministic order.
+    for o in sorted((o for o in objects if _is_deliverable(prefix, o)), key=lambda o: o["name"]):
+        name = o["name"]
+        doc_type = name[len(safe_name) + 1:-4] if name.startswith(safe_name + "_") else name[:-4]
+        label = SIGNING_DOC_LABELS.get(doc_type) or doc_type.replace("_", " ")
+        items.append({
+            "label": label,
+            "r2_key": o["key"],
+            "merge_stamp": name.endswith(NP_AGREEMENT_SUFFIX),
+        })
+
+    # Admin uploads delivered alongside the generated docs.
+    if prefix + INSTALLATION_UPLOAD_KEY in keys:
+        items.append({"label": "Installation Photo", "r2_key": prefix + INSTALLATION_UPLOAD_KEY, "merge_stamp": False})
+    if prefix + DCR_UPLOAD_KEY in keys:
+        items.append({"label": "DCR Declaration", "r2_key": prefix + DCR_UPLOAD_KEY, "merge_stamp": False})
+
+    for i, item in enumerate(items):
+        item["key"] = str(i)
+    return items
+
+
+async def fetch_signing_document(prefix: str, customer: dict, key: str) -> tuple[str, bytes] | None:
+    """
+    Fetch a single signing-page document's PDF bytes by its stable `key`.
+    Applies the same stamped-first-page merge as the delivered bundle so the
+    NP Agreement the customer reviews matches the final document. Returns
+    (label, pdf_bytes) or None if the key doesn't resolve.
+    """
+    loop = asyncio.get_event_loop()
+    objects = await loop.run_in_executor(None, storage.list_objects, prefix)
+    item = next((it for it in signing_document_list(prefix, objects, customer) if it["key"] == key), None)
+    if not item:
+        return None
+
+    data = await loop.run_in_executor(None, storage.download_bytes, item["r2_key"])
+    if item["merge_stamp"]:
+        stamp_key = prefix + NP_STAMP_UPLOAD_KEY
+        if await loop.run_in_executor(None, storage.object_exists, stamp_key):
+            stamp_bytes = await loop.run_in_executor(None, storage.download_bytes, stamp_key)
+            data = merge_pdf_front(stamp_bytes, data)
+    return item["label"], data
+
+
 def list_customer_documents(prefix: str, objects: list[dict]) -> list[dict]:
     """Logical document list (name/size) for the admin panel — no downloads."""
     docs = [
