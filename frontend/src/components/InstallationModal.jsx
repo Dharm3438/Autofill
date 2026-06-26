@@ -1,20 +1,27 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Loader2, Calendar, User, Save } from 'lucide-react'
-import { getInstallation, updateInstallationStep } from '../api/installations'
+import { X, Check, Loader2, Calendar, User, Save, IndianRupee } from 'lucide-react'
+import { getInstallation, updateInstallationStep, updateInstallationPayment } from '../api/installations'
 import toast from 'react-hot-toast'
+
+const fmtINR = (n) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
 export default function InstallationModal({ customer, onClose, onChanged }) {
   const [steps, setSteps] = useState([])      // server truth (with labels)
   const [edits, setEdits] = useState({})      // key -> { status, completed_date, performed_by, notes }
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState({})    // key -> bool
+  const [pay, setPay] = useState({ total_payment: 0, received_payment: 0 })  // server truth
+  const [payEdit, setPayEdit] = useState({ total: '', received: '' })        // form strings
+  const [savingPay, setSavingPay] = useState(false)
   const changedRef = useRef(false)
 
   async function load() {
     setLoading(true)
     try {
       const res = await getInstallation(customer.id)
-      const s = res.data.data.steps
+      const data = res.data.data
+      const s = data.steps
       setSteps(s)
       const e = {}
       s.forEach((step) => {
@@ -26,6 +33,10 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
         }
       })
       setEdits(e)
+      const total = data.total_payment || 0
+      const received = data.received_payment || 0
+      setPay({ total_payment: total, received_payment: received })
+      setPayEdit({ total: total ? String(total) : '', received: received ? String(received) : '' })
     } catch {
       toast.error('Failed to load installation steps')
     } finally {
@@ -100,7 +111,39 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
     }
   }
 
+  async function savePayment() {
+    const total = parseFloat(payEdit.total) || 0
+    const received = parseFloat(payEdit.received) || 0
+    if (received > total) {
+      toast.error('Received payment cannot exceed total payment')
+      return
+    }
+    setSavingPay(true)
+    try {
+      const res = await updateInstallationPayment(customer.id, {
+        total_payment: total,
+        received_payment: received,
+      })
+      changedRef.current = true
+      const d = res.data.data
+      setPay({ total_payment: d.total_payment, received_payment: d.received_payment })
+      setPayEdit({
+        total: d.total_payment ? String(d.total_payment) : '',
+        received: d.received_payment ? String(d.received_payment) : '',
+      })
+      toast.success('Payment updated')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update payment')
+    } finally {
+      setSavingPay(false)
+    }
+  }
+
   const doneCount = steps.filter((s) => s.status === 'done').length
+  const payDirty =
+    (parseFloat(payEdit.total) || 0) !== pay.total_payment ||
+    (parseFloat(payEdit.received) || 0) !== pay.received_payment
+  const remaining = Math.max((parseFloat(payEdit.total) || 0) - (parseFloat(payEdit.received) || 0), 0)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
@@ -123,6 +166,61 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Payment */}
+        {!loading && (
+          <div className="px-6 pt-6">
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <IndianRupee className="w-4 h-4 text-[#1a3a2a] dark:text-emerald-400" />
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Payment</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
+                  <span className="text-xs text-gray-400 flex-shrink-0">Total ₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={payEdit.total}
+                    onChange={(ev) => setPayEdit((p) => ({ ...p, total: ev.target.value }))}
+                    className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none"
+                  />
+                </label>
+                <label className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
+                  <span className="text-xs text-gray-400 flex-shrink-0">Received ₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={payEdit.received}
+                    onChange={(ev) => setPayEdit((p) => ({ ...p, received: ev.target.value }))}
+                    className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">
+                  {remaining > 0 ? (
+                    <span className="text-amber-600 dark:text-amber-400">{fmtINR(remaining)} remaining</span>
+                  ) : (
+                    <span className="text-emerald-600 dark:text-emerald-400">Fully paid</span>
+                  )}
+                </span>
+                {payDirty && (
+                  <button
+                    onClick={savePayment}
+                    disabled={savingPay}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-50 transition-colors"
+                  >
+                    {savingPay ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Save
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Steps */}
         <div className="p-6 space-y-3">

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List, Literal
 
 
@@ -15,6 +15,8 @@ INSTALLATION_STEPS = [
     {"key": "inverter", "label": "Inverter Installation"},
     {"key": "panels", "label": "Solar Panel Installation"},
     {"key": "generation_meter", "label": "Generation Meter Installation"},
+    {"key": "net_meter", "label": "Net Meter Installation"},
+    {"key": "document_upload", "label": "Documents Uploaded"},
 ]
 
 STEP_KEYS = {s["key"] for s in INSTALLATION_STEPS}
@@ -78,3 +80,29 @@ class InstallationStepUpdate(BaseModel):
     completed_date: Optional[str] = None  # "YYYY-MM-DD"
     performed_by: Optional[str] = None
     notes: Optional[str] = None
+
+
+def payment_info(customer: dict) -> dict:
+    """Normalize a customer's payment fields into total/received/remaining.
+
+    Tolerates missing or null values (customers created before this feature)
+    by treating them as 0. Remaining never goes negative.
+    """
+    total = customer.get("total_payment") or 0
+    received = customer.get("received_payment") or 0
+    return {
+        "total_payment": total,
+        "received_payment": received,
+        "remaining_payment": max(total - received, 0),
+    }
+
+
+class PaymentUpdate(BaseModel):
+    total_payment: float = Field(ge=0)
+    received_payment: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _received_not_over_total(self):
+        if self.received_payment > self.total_payment:
+            raise ValueError("Received payment cannot exceed total payment")
+        return self
