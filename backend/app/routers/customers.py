@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
 from ..core.deps import get_current_user
 from ..models.customer import CustomerCreate, CustomerUpdate, CustomerOut
+from ..models.installation import default_installation_steps
 from bson import ObjectId
 from datetime import datetime, timezone
 
@@ -45,6 +46,7 @@ async def create_customer(body: CustomerCreate, _=Depends(get_current_user)):
         "doc_status": "none",
         "signing_status": "none",
         "uploads": {"installation": False, "np_stamp": False, "dcr": False},
+        "installation_steps": default_installation_steps(),
         "signing_token": None,
         "r2_prefix": None,
         "created_at": now,

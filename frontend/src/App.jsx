@@ -7,6 +7,7 @@ import Layout from './components/Layout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import CustomersPage from './pages/CustomersPage'
+import InstallationsPage from './pages/InstallationsPage'
 
 export default function App() {
   return (
@@ -29,6 +30,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <Layout><CustomersPage /></Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/installations"
+              element={
+                <ProtectedRoute>
+                  <Layout><InstallationsPage /></Layout>
                 </ProtectedRoute>
               }
             />

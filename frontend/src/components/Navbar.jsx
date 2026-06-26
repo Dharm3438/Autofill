@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { logout } from '../api/auth'
-import { LogOut, LayoutDashboard, Users, Sun, Moon, Menu, X } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Wrench, Sun, Moon, Menu, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function Navbar() {
@@ -30,6 +30,7 @@ export default function Navbar() {
   const links = [
     { path: '/dashboard', Icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/customers', Icon: Users, label: 'Customers' },
+    { path: '/installations', Icon: Wrench, label: 'Installations' },
   ]
 
   function navBtn({ path, Icon, label }) {
