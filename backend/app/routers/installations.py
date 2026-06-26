@@ -6,7 +6,9 @@ from ..models.installation import (
     STEP_KEYS,
     merge_steps,
     compute_overall_status,
+    payment_info,
     InstallationStepUpdate,
+    PaymentUpdate,
 )
 from bson import ObjectId
 from datetime import datetime, timezone, date
@@ -86,6 +88,7 @@ async def installations_overview(
                 "CONSUMER_PHONE": c.get("CONSUMER_PHONE"),
                 "INSTALLATION_CITY": c.get("INSTALLATION_CITY"),
                 **info,
+                **payment_info(c),
             }
         )
 
@@ -110,7 +113,37 @@ async def get_installation(customer_id: str, _=Depends(get_current_user)):
             "customer_id": customer_id,
             "CONSUMER_NAME": c.get("CONSUMER_NAME"),
             **_summarize(steps),
+            **payment_info(c),
         },
+    }
+
+
+@router.put("/{customer_id}/payment")
+async def update_installation_payment(
+    customer_id: str,
+    body: PaymentUpdate,
+    _=Depends(get_current_user),
+):
+    db = get_db()
+    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    await db.customers.update_one(
+        {"_id": ObjectId(customer_id)},
+        {
+            "$set": {
+                "total_payment": body.total_payment,
+                "received_payment": body.received_payment,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+    merged = {**c, "total_payment": body.total_payment, "received_payment": body.received_payment}
+    return {
+        "success": True,
+        "data": {"customer_id": customer_id, **payment_info(merged)},
     }
 
 

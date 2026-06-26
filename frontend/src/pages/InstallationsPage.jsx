@@ -16,6 +16,10 @@ const STATUS_LABEL = {
   not_started: 'Not Started',
 }
 
+// ₹ with Indian thousands grouping, no decimals (e.g. ₹50,000).
+const fmtINR = (n) =>
+  `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+
 export default function InstallationsPage() {
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -145,6 +149,14 @@ export default function InstallationsPage() {
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                             {c.CONSUMER_NAME || 'Unnamed'}
                           </p>
+                          {c.received_payment > 0 && (
+                            <span
+                              title="Payment received"
+                              className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+                            >
+                              +{fmtINR(c.received_payment)}
+                            </span>
+                          )}
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[c.overall_status]}`}>
                             {STATUS_LABEL[c.overall_status]}
                           </span>
@@ -184,10 +196,26 @@ export default function InstallationsPage() {
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{c.done_count}/{c.total}</span>
                     </div>
 
-                    {/* Expanded step chips */}
+                    {/* Expanded: payment summary + step chips */}
                     {open && (
-                      <div className="mt-4 pl-9 flex flex-wrap gap-2">
-                        {c.steps.map((s) => {
+                      <div className="mt-4 pl-9">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs">
+                          <span className="text-gray-500 dark:text-gray-400">
+                            Total: <span className="font-medium text-gray-700 dark:text-gray-200">{fmtINR(c.total_payment)}</span>
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            Received: <span className="font-medium text-emerald-700 dark:text-emerald-300">{fmtINR(c.received_payment)}</span>
+                          </span>
+                          {c.remaining_payment > 0 ? (
+                            <span className="font-medium text-amber-600 dark:text-amber-400">
+                              {fmtINR(c.remaining_payment)} remaining
+                            </span>
+                          ) : (
+                            <span className="font-medium text-emerald-600 dark:text-emerald-400">Fully paid</span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {c.steps.map((s) => {
                           const done = s.status === 'done'
                           return (
                             <div
@@ -207,6 +235,7 @@ export default function InstallationsPage() {
                             </div>
                           )
                         })}
+                        </div>
                       </div>
                     )}
                   </li>
