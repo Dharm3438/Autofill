@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import date
 
 
@@ -53,5 +53,6 @@ class CustomerOut(CustomerCreate):
     doc_status: str = "none"       # none | generating | complete
     signing_status: str = "none"   # none | sent | signed
     uploads: UploadStatus = UploadStatus()
+    installation_steps: Optional[List[dict]] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

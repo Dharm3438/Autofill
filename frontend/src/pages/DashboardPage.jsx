@@ -1,10 +1,31 @@
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Users, UserPlus, FileText, Sun } from 'lucide-react'
+import { Users, UserPlus, FileText, Sun, Wrench, ArrowRight } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { getInstallationOverview } from '../api/installations'
+import InstallationStats from '../components/InstallationStats'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [summary, setSummary] = useState(null)
+  const [steps, setSteps] = useState([])
+
+  useEffect(() => {
+    getInstallationOverview()
+      .then((res) => {
+        setSummary(res.data.summary)
+        setSteps(res.data.steps)
+      })
+      .catch(() => {})
+  }, [])
+
+  // Most-pending steps first, drop the ones nobody is waiting on.
+  const topRemaining = steps
+    .map((s) => ({ ...s, count: summary?.per_step_pending?.[s.key] ?? 0 }))
+    .filter((s) => s.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0e1512]">
@@ -65,6 +86,46 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Auto-generate Annexure, WCR, DCR, and all required regulatory documents.</p>
             </div>
           </button>
+        </div>
+
+        {/* Installation Progress overview */}
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Installation Progress</p>
+            <button
+              onClick={() => navigate('/installations')}
+              className="inline-flex items-center gap-1 text-sm font-medium text-[#1a3a2a] dark:text-emerald-400 hover:underline"
+            >
+              View all
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <InstallationStats summary={summary} />
+
+          {topRemaining.length > 0 && (
+            <div className="mt-4 bg-white dark:bg-[#16201b] rounded-2xl border border-gray-200 dark:border-white/10 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Wrench className="w-4 h-4 text-[#1a3a2a] dark:text-emerald-400" />
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Top remaining steps</p>
+              </div>
+              <ul className="space-y-2">
+                {topRemaining.map((s) => (
+                  <li key={s.key}>
+                    <button
+                      onClick={() => navigate('/installations')}
+                      className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-left"
+                    >
+                      <span className="text-sm text-gray-700 dark:text-gray-200">{s.label}</span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                        {s.count} pending
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>
