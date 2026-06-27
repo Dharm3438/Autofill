@@ -161,9 +161,18 @@ export default function InstallationsPage() {
                             {STATUS_LABEL[c.overall_status]}
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                          {[c.INSTALLATION_CITY, c.CONSUMER_PHONE].filter(Boolean).join(' · ') || '—'}
-                        </p>
+                        <div className="mt-0.5 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                          {c.DEALER_NAME && (
+                            <p>Dealer: <span className="text-gray-600 dark:text-gray-300">{c.DEALER_NAME}</span></p>
+                          )}
+                          <p>{[c.CONSUMER_NO, c.INSTALLATION_CITY, c.CONSUMER_PHONE].filter(Boolean).join(' · ') || '—'}</p>
+                          {[c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).length > 0 && (
+                            <p>{[c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).join(' · ')}</p>
+                          )}
+                          {[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).length > 0 && (
+                            <p>{[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).join(' · ')}</p>
+                          )}
+                        </div>
                       </div>
 
                       {/* Progress */}

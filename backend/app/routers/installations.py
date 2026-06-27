@@ -85,8 +85,15 @@ async def installations_overview(
             {
                 "id": str(c["_id"]),
                 "CONSUMER_NAME": c.get("CONSUMER_NAME"),
+                "DEALER_NAME": c.get("DEALER_NAME"),
+                "CONSUMER_NO": c.get("CONSUMER_NO"),
                 "CONSUMER_PHONE": c.get("CONSUMER_PHONE"),
                 "INSTALLATION_CITY": c.get("INSTALLATION_CITY"),
+                "INVERTER_MAKE": c.get("INVERTER_MAKE"),
+                "INVERTER_CAPACITY": c.get("INVERTER_CAPACITY"),
+                "PANEL_COMPANY": c.get("PANEL_COMPANY"),
+                "PANEL_WATT": c.get("PANEL_WATT"),
+                "NO_OF_PANEL": c.get("NO_OF_PANEL"),
                 **info,
                 **payment_info(c),
             }
@@ -129,18 +136,23 @@ async def update_installation_payment(
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
+    # Persist the full list of dated received-payment entries; the total is
+    # derived from SYSTEM_COST and is never written here.
+    entries = [p.model_dump() for p in body.received_payments]
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
         {
             "$set": {
-                "total_payment": body.total_payment,
-                "received_payment": body.received_payment,
+                "received_payments": entries,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            },
+            # Drop the obsolete single-value field if it lingers from old records.
+            "$unset": {"received_payment": "", "total_payment": ""},
         },
     )
 
-    merged = {**c, "total_payment": body.total_payment, "received_payment": body.received_payment}
+    merged = {**c, "received_payments": entries}
+    merged.pop("received_payment", None)
     return {
         "success": True,
         "data": {"customer_id": customer_id, **payment_info(merged)},

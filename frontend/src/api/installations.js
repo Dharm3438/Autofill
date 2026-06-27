@@ -11,6 +11,6 @@ export const getInstallation = (customerId) =>
 export const updateInstallationStep = (customerId, stepKey, data) =>
   api.put(`/installations/${customerId}/steps/${stepKey}`, data)
 
-// data: { total_payment, received_payment }
+// data: { received_payments: [{ amount, date }] }
 export const updateInstallationPayment = (customerId, data) =>
   api.put(`/installations/${customerId}/payment`, data)

@@ -16,6 +16,7 @@ const SECTIONS = [
       { key: 'CONSUMER_EMAIL',   label: 'Email',            type: 'email' },
       { key: 'CONSUMER_AADHAR',  label: 'Aadhar Number' },
       { key: 'CONSUMER_NO',      label: 'Consumer No' },
+      { key: 'DEALER_NAME',      label: 'Dealer Name' },
       { key: 'CONSUMER_APP_NO',  label: 'Application No' },
       { key: 'CONSUMER_APP_DATE',label: 'Application Date', type: 'date' },
       { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity' },
