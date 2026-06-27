@@ -5,18 +5,20 @@ import toast from 'react-hot-toast'
 
 const SLOTS = [
   {
-    kind: 'installation',
-    title: 'Customer Installation Photo',
-    hint: 'Upload one photo (JPG/PNG). Converted to PDF for the customer.',
-    accept: 'image/png,image/jpeg',
-    icon: Image,
-  },
-  {
     kind: 'np_stamp',
     title: 'Stamped NP Agreement First Page',
     hint: 'Print the first page on ₹100 stamp paper, then upload it back as a PDF.',
     accept: 'application/pdf',
     icon: Stamp,
+    required: true,
+  },
+  {
+    kind: 'installation',
+    title: 'Customer Installation Photo',
+    hint: 'Upload one photo (JPG/PNG). Converted to PDF for the customer.',
+    accept: 'image/png,image/jpeg',
+    icon: Image,
+    required: false,
   },
   {
     kind: 'dcr',
@@ -24,6 +26,7 @@ const SLOTS = [
     hint: 'Upload the official DCR PDF downloaded from the government portal.',
     accept: 'application/pdf',
     icon: FileText,
+    required: false,
   },
 ]
 
@@ -113,6 +116,7 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     }
   }
 
+  const canSend = status.np_stamp
   const allDone = status.installation && status.np_stamp && status.dcr
 
   return (
@@ -134,7 +138,7 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
 
         {/* Slots */}
         <div className="p-6 space-y-4">
-          {SLOTS.map(({ kind, title, hint, accept, icon: Icon }) => {
+          {SLOTS.map(({ kind, title, hint, accept, icon: Icon, required }) => {
             const uploaded = status[kind]
             const isUploading = !!busy[`${kind}:upload`]
             const isViewing = !!busy[`${kind}:view`]
@@ -149,7 +153,12 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
                     {uploaded ? <Check className="w-5 h-5" /> : <Icon className="w-5 h-5" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{title}</p>
+                      <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${required ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
+                        {required ? 'Required' : 'Optional'}
+                      </span>
+                    </div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{hint}</p>
 
                     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -204,8 +213,12 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-100 dark:border-white/10 flex items-center justify-between">
-          <p className={`text-sm font-medium ${allDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
-            {allDone ? 'All documents uploaded — ready to send signing link.' : 'All three required before sending the link.'}
+          <p className={`text-sm font-medium ${canSend ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+            {canSend
+              ? (allDone
+                  ? 'All documents uploaded — ready to send signing link.'
+                  : 'Stamped NP page uploaded — ready to send signing link.')
+              : 'Upload the Stamped NP first page before sending the link.'}
           </p>
           <button
             onClick={handleClose}
