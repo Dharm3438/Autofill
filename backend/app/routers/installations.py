@@ -85,8 +85,15 @@ async def installations_overview(
             {
                 "id": str(c["_id"]),
                 "CONSUMER_NAME": c.get("CONSUMER_NAME"),
+                "DEALER_NAME": c.get("DEALER_NAME"),
+                "CONSUMER_NO": c.get("CONSUMER_NO"),
                 "CONSUMER_PHONE": c.get("CONSUMER_PHONE"),
                 "INSTALLATION_CITY": c.get("INSTALLATION_CITY"),
+                "INVERTER_MAKE": c.get("INVERTER_MAKE"),
+                "INVERTER_CAPACITY": c.get("INVERTER_CAPACITY"),
+                "PANEL_COMPANY": c.get("PANEL_COMPANY"),
+                "PANEL_WATT": c.get("PANEL_WATT"),
+                "NO_OF_PANEL": c.get("NO_OF_PANEL"),
                 **info,
                 **payment_info(c),
             }

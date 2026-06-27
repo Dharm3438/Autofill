@@ -10,6 +10,7 @@ class CustomerCreate(BaseModel):
     CONSUMER_EMAIL: Optional[EmailStr] = None
     CONSUMER_AADHAR: Optional[str] = None
     CONSUMER_NO: Optional[str] = None
+    DEALER_NAME: Optional[str] = None
     SANCTIONED_CAPACITY: Optional[str] = None
     CONSUMER_APP_DATE: Optional[str] = None
     CONSUMER_APP_NO: Optional[str] = None
