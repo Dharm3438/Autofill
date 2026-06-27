@@ -54,6 +54,14 @@ NP_STAMP_UPLOAD_KEY     = UPLOAD_PREFIX + "np_first_page_stamped.pdf"
 INSTALLATION_OUT_NAME = "Customer_Installation_Photo.pdf"
 DCR_OUT_NAME          = "DCR.pdf"
 
+# WCR and Aadhaar declaration are delivered as a single combined PDF (WCR pages
+# first, then the Aadhaar declaration). They are filled and converted as separate
+# templates, then merged into one file before upload so every downstream view
+# (signing-page review, admin doc list, delivered bundle) shows just one document.
+COMBINED_WCR_AADHAR_TYPE = "WCR_Aadhar"
+WCR_DOC_TYPE = "WCR"
+AADHAR_DOC_TYPE = "Aadhar"
+
 # Internal artifacts that are never delivered to the customer.
 HIDDEN_DOC_NAMES = {SIGNATURE_KEY, PHOTO_KEY, AADHAR_FRONT_KEY, AADHAR_BACK_KEY}
 # Generated, unstamped NP first page — for the admin to print only.
@@ -303,6 +311,15 @@ async def generate_for_customer(customer: dict) -> str:
         # Phase 2 — convert them all to PDF in a single LibreOffice startup.
         produced = await loop.run_in_executor(None, convert_docx_batch, docx_paths, work_dir)
 
+        # Phase 2.5 — merge WCR + Aadhaar declaration into one combined PDF so the
+        # customer (and admin download) get a single document instead of two.
+        wcr_pdf = work_dir / f"{safe_name}_{WCR_DOC_TYPE}.pdf"
+        aadhar_pdf = work_dir / f"{safe_name}_{AADHAR_DOC_TYPE}.pdf"
+        if wcr_pdf in produced and aadhar_pdf in produced:
+            combined_pdf = work_dir / f"{safe_name}_{COMBINED_WCR_AADHAR_TYPE}.pdf"
+            await loop.run_in_executor(None, _merge_pdf_files, [wcr_pdf, aadhar_pdf], combined_pdf)
+            produced = (produced - {wcr_pdf, aadhar_pdf}) | {combined_pdf}
+
         # Phase 3 — upload the produced PDFs to R2 in parallel (independent I/O).
         async def _upload(pdf_path: Path):
             await loop.run_in_executor(
@@ -329,6 +346,22 @@ def uploaded_docs_present(prefix: str) -> dict:
 
 
 # ── Final-bundle assembly (delivered to the customer / admin download) ────────
+
+def _merge_pdf_files(paths: list[Path], out_path: Path) -> None:
+    """Concatenate the given PDF files (in order) into a single PDF at out_path."""
+    out = fitz.open()
+    opened = []
+    try:
+        for p in paths:
+            doc = fitz.open(p)
+            opened.append(doc)
+            out.insert_pdf(doc)
+        out.save(out_path)
+    finally:
+        out.close()
+        for doc in opened:
+            doc.close()
+
 
 def merge_pdf_front(front: bytes, base: bytes) -> bytes:
     """Return a single PDF with `front` pages prepended to `base` pages."""
@@ -363,6 +396,7 @@ SIGNING_DOC_LABELS = {
     "Annexure_1":           "Annexure-1 — Solar Installation Declaration",
     "Aadhar":               "Aadhaar Declaration",
     "WCR":                  "Work Completion Report",
+    "WCR_Aadhar":           "Work Completion Report & Aadhaar Declaration",
     "Annexure_3":           "Annexure-3 — Net Metering",
     "NP_Agreement":         "Net-Metering Agreement",
     "Meter_testing_letter": "Meter Testing Letter",

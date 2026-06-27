@@ -5,9 +5,10 @@ import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFir
 import UploadsModal from './UploadsModal'
 import toast from 'react-hot-toast'
 
-function uploadsComplete(c) {
-  const u = c.uploads || {}
-  return Boolean(u.installation && u.np_stamp && u.dcr)
+// The stamped NP first page is the only upload required before the signing
+// link can be sent; the installation photo and DCR are optional.
+function canSendLink(c) {
+  return Boolean((c.uploads || {}).np_stamp)
 }
 
 const DOC_STATUS_STYLES = {
@@ -185,18 +186,18 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         <button
           title="Upload Documents (Installation Photo, Stamped NP Page, DCR)"
           onClick={() => setUploadsFor(c)}
-          className={`relative p-2 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors ${uploadsComplete(c) ? 'text-violet-600 dark:text-violet-400' : 'text-violet-400 dark:text-violet-400/60'}`}
+          className={`relative p-2 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors ${canSendLink(c) ? 'text-violet-600 dark:text-violet-400' : 'text-violet-400 dark:text-violet-400/60'}`}
         >
           <UploadCloud className="w-4 h-4" />
-          {!uploadsComplete(c) && (
+          {!canSendLink(c) && (
             <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
           )}
         </button>
 
         <button
-          title={uploadsComplete(c) ? 'Send Signing Link' : 'Upload all three documents before sending'}
+          title={canSendLink(c) ? 'Send Signing Link' : 'Upload the Stamped NP first page before sending'}
           onClick={() => handleSendLink(c)}
-          disabled={loadingId === `send-${c.id}` || c.doc_status !== 'complete' || !uploadsComplete(c)}
+          disabled={loadingId === `send-${c.id}` || c.doc_status !== 'complete' || !canSendLink(c)}
           className="p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-500/10 text-blue-600 dark:text-blue-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
           {loadingId === `send-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

@@ -34,22 +34,18 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
     if not customer.get("CONSUMER_EMAIL"):
         raise HTTPException(status_code=400, detail="Customer has no email address")
 
-    # All three admin documents must be uploaded before the customer is sent the
-    # signing link, so they never receive an incomplete bundle. Check R2 directly
-    # (authoritative) rather than trusting the cached Mongo flags.
+    # Only the stamped NP first page is mandatory before the customer is sent the
+    # signing link; the installation photo and DCR are optional and may be added
+    # later. Check R2 directly (authoritative) rather than trusting the cached
+    # Mongo flags.
     from ..services.doc_generation import uploaded_docs_present
     prefix = storage.customer_prefix(customer_id)
     present = await asyncio.to_thread(uploaded_docs_present, prefix)
     await db.customers.update_one({"_id": ObjectId(customer_id)}, {"$set": {"uploads": present}})
-    missing = [label for flag, label in (
-        ("installation", "Installation Photo"),
-        ("np_stamp", "Stamped NP First Page"),
-        ("dcr", "DCR Document"),
-    ) if not present.get(flag)]
-    if missing:
+    if not present.get("np_stamp"):
         raise HTTPException(
             status_code=400,
-            detail=f"Upload required document(s) before sending the link: {', '.join(missing)}",
+            detail="Upload the Stamped NP First Page before sending the link.",
         )
 
     from ..services.signing import create_signing_token, send_signing_email
