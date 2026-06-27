@@ -7,17 +7,19 @@ from typing import Optional, List, Literal
 # Editing this list (add / rename / reorder) automatically flows everywhere because
 # stored customer steps are merged against it on every read/write (see merge_steps).
 INSTALLATION_STEPS = [
-    {"key": "structure", "label": "Mounting Structure"},
+    {"key": "structure", "label": "Solar Structure"},
     {"key": "painting", "label": "Painting / Coating"},
     {"key": "cement_grouting", "label": "Cement Grouting"},
-    {"key": "wiring", "label": "DC/AC Wiring"},
+    {"key": "wiring", "label": "Solar Wiring"},
     {"key": "acdb", "label": "ACDB Installation"},
     {"key": "dcdb", "label": "DCDB Installation"},
     {"key": "inverter", "label": "Inverter Installation"},
     {"key": "panels", "label": "Solar Panel Installation"},
     {"key": "generation_meter", "label": "Generation Meter Installation"},
-    {"key": "net_meter", "label": "Net Meter Installation"},
+    {"key": "dcr_ready", "label": "DCR Ready"},
     {"key": "document_upload", "label": "Documents Uploaded"},
+    {"key": "net_meter", "label": "Net Meter Installation"},
+    {"key": "subsidy_received", "label": "Subsidy Received"},
 ]
 
 STEP_KEYS = {s["key"] for s in INSTALLATION_STEPS}
