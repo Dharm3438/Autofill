@@ -130,7 +130,14 @@ export default function InstallationsPage() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-white/10">
-              {rows.map((c) => {
+              {[...rows]
+                .sort((a, b) => {
+                  const pctA = a.total ? a.done_count / a.total : 0
+                  const pctB = b.total ? b.done_count / b.total : 0
+                  if (pctB !== pctA) return pctB - pctA
+                  return (a.CONSUMER_NAME || '').localeCompare(b.CONSUMER_NAME || '', undefined, { sensitivity: 'base' })
+                })
+                .map((c) => {
                 const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
                 const open = !!expanded[c.id]
                 return (
