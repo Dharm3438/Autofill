@@ -334,16 +334,30 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                               className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none"
                             />
                           </label>
-                          <label className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
+                          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
                             <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            <input
-                              type="text"
-                              placeholder="Done by (name)"
+                            <select
                               value={e.performed_by || ''}
                               onChange={(ev) => patch(step.key, 'performed_by', ev.target.value)}
-                              className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none"
-                            />
-                          </label>
+                              className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
+                            >
+                              <option value="">Done by (select)</option>
+                              <option value="Manoj Agone">Manoj Agone</option>
+                              <option value="Swapnil Jane">Swapnil Jane</option>
+                              <option value="Vaibhav Gaikwad">Vaibhav Gaikwad</option>
+                              <option value="Firoz Bhai">Firoz Bhai</option>
+                              <option value="Yogesh Agone">Yogesh Agone</option>
+                              <option value="Pranav">Pranav</option>
+                              <option value="Sidhesh">Sidhesh</option>
+                              <option value="Kalpesh">Kalpesh</option>
+                              <option value="Hussein">Hussein</option>
+                              <option value="Aavesh">Aavesh</option>
+                              <option value="Anil Bachav">Anil Bachav</option>
+                              <option value="Sonu Jadhav">Sonu Jadhav</option>
+                              <option value="Satish Khairnar">Satish Khairnar</option>
+                              <option value="Kiran Chavan">Kiran Chavan</option>
+                            </select>
+                          </div>
                           <input
                             type="text"
                             placeholder="Notes (optional)"
