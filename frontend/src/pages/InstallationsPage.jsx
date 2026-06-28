@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Wrench, Search, RefreshCw, ChevronDown, ChevronRight, Settings2, Check } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { Wrench, Search, RefreshCw, ChevronDown, ChevronRight, Settings2, Check, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
+import { printInstallations } from '../utils/printInstallations'
 import toast from 'react-hot-toast'
 
 const STATUS_BADGE = {
@@ -73,8 +74,40 @@ export default function InstallationsPage() {
     fetchData()
   }, [fetchData])
 
+  // The list exactly as rendered below — sorted by completion %, then name.
+  // Shared by the on-screen list and the print sheet so they stay in sync.
+  const sortedRows = useMemo(
+    () =>
+      [...rows].sort((a, b) => {
+        const pctA = a.total ? a.done_count / a.total : 0
+        const pctB = b.total ? b.done_count / b.total : 0
+        if (pctB !== pctA) return pctB - pctA
+        return (a.CONSUMER_NAME || '').localeCompare(b.CONSUMER_NAME || '', undefined, { sensitivity: 'base' })
+      }),
+    [rows],
+  )
+
   function toggleRow(id) {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function handlePrint() {
+    if (sortedRows.length === 0) {
+      toast.error('Nothing to print — no customers match the current filters')
+      return
+    }
+    const pendingLabel = pendingStep
+      ? stepDefs.find((s) => s.key === pendingStep)?.label || pendingStep
+      : ''
+    const ok = printInstallations(sortedRows, {
+      filters: [
+        { label: 'Search', value: search },
+        { label: 'Dealer', value: dealerFilter },
+        { label: 'Status', value: STATUS_LABEL[statusFilter] || '' },
+        { label: 'Pending step', value: pendingLabel },
+      ],
+    })
+    if (!ok) toast.error('Allow pop-ups to print the report')
   }
 
   return (
@@ -141,6 +174,15 @@ export default function InstallationsPage() {
               <option key={s.key} value={s.key}>Pending: {s.label}</option>
             ))}
           </select>
+          <button
+            onClick={handlePrint}
+            disabled={loading || rows.length === 0}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            title="Print the list shown below (filters applied)"
+          >
+            <Printer className="w-4 h-4" />
+            <span className="hidden sm:inline">Print</span>
+          </button>
         </div>
 
         {/* List */}
@@ -160,14 +202,7 @@ export default function InstallationsPage() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-white/10">
-              {[...rows]
-                .sort((a, b) => {
-                  const pctA = a.total ? a.done_count / a.total : 0
-                  const pctB = b.total ? b.done_count / b.total : 0
-                  if (pctB !== pctA) return pctB - pctA
-                  return (a.CONSUMER_NAME || '').localeCompare(b.CONSUMER_NAME || '', undefined, { sensitivity: 'base' })
-                })
-                .map((c) => {
+              {sortedRows.map((c) => {
                 const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
                 const open = !!expanded[c.id]
                 return (
