@@ -21,6 +21,23 @@ const STATUS_LABEL = {
 const fmtINR = (n) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
+// Order the status circles are shown in below each customer's name.
+// Independent of the checklist order — this is purely the at-a-glance row.
+const CIRCLE_ORDER = [
+  'structure', 'painting', 'cement_grouting', 'wiring', 'earthing_la',
+  'acdb', 'dcdb', 'inverter', 'panels', 'generation_meter',
+  'net_meter', 'document_upload', 'dcr_ready', 'subsidy_received',
+]
+
+// Return a customer's steps ordered for the circle row. Any step not listed in
+// CIRCLE_ORDER (e.g. a future addition) is appended at the end so nothing is lost.
+function orderedCircleSteps(steps) {
+  const byKey = new Map((steps || []).map((s) => [s.key, s]))
+  const ordered = CIRCLE_ORDER.map((k) => byKey.get(k)).filter(Boolean)
+  const extras = (steps || []).filter((s) => !CIRCLE_ORDER.includes(s.key))
+  return [...ordered, ...extras]
+}
+
 export default function InstallationsPage() {
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -192,6 +209,29 @@ export default function InstallationsPage() {
                           {[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).length > 0 && (
                             <p>{[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).join(' · ')}</p>
                           )}
+                        </div>
+
+                        {/* At-a-glance status circles — red = pending, green = done */}
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          {orderedCircleSteps(c.steps).map((s) => {
+                            const done = s.status === 'done'
+                            const tip = done
+                              ? `${s.label} — Done${[s.completed_date, s.performed_by].filter(Boolean).length ? ' (' + [s.completed_date, s.performed_by].filter(Boolean).join(' · ') + ')' : ''}`
+                              : `${s.label} — Pending`
+                            return (
+                              <span
+                                key={s.key}
+                                title={tip}
+                                className={`inline-flex items-center justify-center min-w-[1.4rem] h-5 px-1 rounded-full text-[10px] font-bold leading-none cursor-default select-none transition-colors ${
+                                  done
+                                    ? 'bg-emerald-500 text-white'
+                                    : 'bg-red-500 text-white'
+                                }`}
+                              >
+                                {s.short || s.label?.slice(0, 2)}
+                              </span>
+                            )
+                          })}
                         </div>
                       </div>
 

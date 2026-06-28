@@ -6,20 +6,23 @@ from typing import Optional, List, Literal
 # Single source of truth for the physical installation steps tracked per customer.
 # Editing this list (add / rename / reorder) automatically flows everywhere because
 # stored customer steps are merged against it on every read/write (see merge_steps).
+# `short` is the abbreviation shown inside the status circles on the
+# installation list (red = pending, green = done). Keep them unique.
 INSTALLATION_STEPS = [
-    {"key": "structure", "label": "Solar Structure"},
-    {"key": "painting", "label": "Painting / Coating"},
-    {"key": "cement_grouting", "label": "Cement Grouting"},
-    {"key": "wiring", "label": "Solar Wiring"},
-    {"key": "acdb", "label": "ACDB Installation"},
-    {"key": "dcdb", "label": "DCDB Installation"},
-    {"key": "inverter", "label": "Inverter Installation"},
-    {"key": "panels", "label": "Solar Panel Installation"},
-    {"key": "generation_meter", "label": "Generation Meter Installation"},
-    {"key": "dcr_ready", "label": "DCR Ready"},
-    {"key": "document_upload", "label": "Documents Uploaded"},
-    {"key": "net_meter", "label": "Net Meter Installation"},
-    {"key": "subsidy_received", "label": "Subsidy Received"},
+    {"key": "structure", "label": "Solar Structure", "short": "S"},
+    {"key": "painting", "label": "Painting / Coating", "short": "C"},
+    {"key": "cement_grouting", "label": "Cement Grouting", "short": "G"},
+    {"key": "wiring", "label": "Solar Wiring", "short": "W"},
+    {"key": "earthing_la", "label": "Earthing + LA", "short": "EL"},
+    {"key": "acdb", "label": "ACDB Installation", "short": "A"},
+    {"key": "dcdb", "label": "DCDB Installation", "short": "D"},
+    {"key": "inverter", "label": "Inverter Installation", "short": "I"},
+    {"key": "panels", "label": "Solar Panel Installation", "short": "P"},
+    {"key": "generation_meter", "label": "Generation Meter Installation", "short": "M"},
+    {"key": "dcr_ready", "label": "DCR Ready", "short": "DR"},
+    {"key": "document_upload", "label": "Documents Uploaded", "short": "DU"},
+    {"key": "net_meter", "label": "Net Meter Installation", "short": "N"},
+    {"key": "subsidy_received", "label": "Subsidy Received", "short": "SR"},
 ]
 
 STEP_KEYS = {s["key"] for s in INSTALLATION_STEPS}
@@ -58,6 +61,7 @@ def merge_steps(stored: Optional[list]) -> List[dict]:
             {
                 "key": s["key"],
                 "label": s["label"],
+                "short": s["short"],
                 "status": existing.get("status", "pending"),
                 "completed_date": existing.get("completed_date"),
                 "performed_by": existing.get("performed_by"),
