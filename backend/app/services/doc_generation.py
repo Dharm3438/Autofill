@@ -94,6 +94,187 @@ def build_replacements(customer: dict) -> dict:
     return replacements
 
 
+# ── Placeholder discovery & pre-generation validation ─────────────────────────
+# Templates use ${FIELD_NAME}$ placeholders. Before generating we scan every
+# template, collect the data fields each one needs, and confirm the customer has
+# a non-blank value for all of them — otherwise the produced documents would
+# carry leftover ${...}$ markers or blanks. Templates are read only, never
+# modified, here.
+
+# Matches a single ${FIELD_NAME}$ placeholder and captures FIELD_NAME.
+_PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z0-9_]+)\}\$")
+
+# These placeholders are filled with images collected on the signing page (the
+# customer's signature, photo and Aadhaar card scans), not from the customer
+# data form, so they are intentionally excluded from the data-field check.
+IMAGE_FIELD_KEYS = {k.strip("${}$") for k in IMAGE_PLACEHOLDERS}
+
+# Friendly, admin-facing labels for each generated document.
+DOCUMENT_LABELS = {
+    "Annexure_1":              "Annexure-1 — Solar Installation Declaration",
+    "Aadhar":                  "Aadhaar Declaration",
+    "WCR":                     "Work Completion Report",
+    "Annexure_3":              "Annexure-3 — Net Metering",
+    "NP_Agreement":            "Net-Metering Agreement",
+    "NP_Agreement_First_Page": "Net-Metering Agreement (First Page)",
+    "Meter_testing_letter":    "Meter Testing Letter",
+}
+
+# Friendly, admin-facing labels for each customer data field.
+FIELD_LABELS = {
+    "CONSUMER_NAME":            "Consumer Name",
+    "CONSUMER_ADDRESS":         "Consumer Address",
+    "CONSUMER_PHONE":           "Consumer Phone",
+    "CONSUMER_EMAIL":           "Consumer Email",
+    "CONSUMER_AADHAR":          "Consumer Aadhaar No.",
+    "CONSUMER_NO":              "Consumer No.",
+    "CONSUMER_APP_DATE":        "Application Date",
+    "CONSUMER_APP_NO":          "Application No.",
+    "DEALER_NAME":              "Dealer Name",
+    "SANCTIONED_CAPACITY":      "Sanctioned Capacity",
+    "SOLAR_CAPACITY":           "Solar Capacity",
+    "INVERTER_MAKE":            "Inverter Make",
+    "INVERTER_CAPACITY":        "Inverter Capacity",
+    "INVERTER_GURANTEE":        "Inverter Guarantee",
+    "INVERTER_SR_NO":           "Inverter Serial No.",
+    "PANEL_COMPANY":            "Panel Company",
+    "PANEL_WATT":               "Panel Wattage",
+    "NO_OF_PANEL":              "Number of Panels",
+    "TOTAL_PANEL_CAPACITY":     "Total Panel Capacity",
+    "PANEL_SR_NO":              "Panel Serial No.",
+    "CELL_MANUFACTURER":        "Cell Manufacturer",
+    "PANEL_GURANTEE":           "Panel Guarantee",
+    "INSTALLATION_DATE":        "Installation Date",
+    "INSTALLATION_CITY":        "Installation City",
+    "INSTALLATION_DISTRICT":    "Installation District",
+    "DISCOM_REGISTERED_OFFICE": "DISCOM Registered Office",
+    "SYSTEM_COST":              "System Cost",
+    "METER_TESTING_DATE":       "Meter Testing Date",
+    "METER_RECIPT_NO":          "Meter Receipt No.",
+    "GENERATION_METER_MAKE":    "Generation Meter Make",
+    "GENERATION_METER_NO":      "Generation Meter No.",
+}
+
+
+def field_label(key: str) -> str:
+    """Human-readable label for a field key (falls back to a title-cased key)."""
+    return FIELD_LABELS.get(key) or key.replace("_", " ").title()
+
+
+def document_label(doc_type: str) -> str:
+    """Human-readable label for a generated document type."""
+    return DOCUMENT_LABELS.get(doc_type) or doc_type.replace("_", " ")
+
+
+def _placeholders_in_template(template_path: Path) -> set[str]:
+    """
+    Return the set of field keys referenced by ${...}$ placeholders in a single
+    template (paragraphs + table cells). Image placeholders are excluded — only
+    data fields the admin fills in are returned.
+    """
+    doc = Document(template_path)
+    keys: set[str] = set()
+
+    def scan(paragraph):
+        # Join runs so placeholders split across runs are still detected — this
+        # mirrors how process_paragraph reconstructs the text before replacing.
+        text = "".join(r.text for r in paragraph.runs)
+        keys.update(_PLACEHOLDER_RE.findall(text))
+
+    for para in doc.paragraphs:
+        scan(para)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    scan(para)
+
+    return keys - IMAGE_FIELD_KEYS
+
+
+@lru_cache(maxsize=1)
+def required_fields_by_document() -> dict[str, frozenset]:
+    """
+    Map each generated document type to the set of data fields it requires,
+    discovered by scanning the templates. Cached because the templates don't
+    change at runtime. Missing template files are skipped (they simply won't be
+    generated either).
+    """
+    result: dict[str, frozenset] = {}
+    for doc_type, template_file in TEMPLATES.items():
+        template_path = TEMPLATE_DIR / template_file
+        if not template_path.exists():
+            continue
+        result[doc_type] = frozenset(_placeholders_in_template(template_path))
+    return result
+
+
+def _has_value(customer: dict, key: str) -> bool:
+    """True when the customer has a non-blank value for `key`."""
+    value = customer.get(key)
+    if value is None:
+        return False
+    return str(value).strip() != ""
+
+
+def validate_customer_for_generation(customer: dict) -> dict | None:
+    """
+    Check that the customer has a value for every data field the templates need.
+
+    Returns None when everything required is present. Otherwise returns a
+    structured report the API/UI can show:
+        {
+          "missing_fields": [
+            {"key": "SOLAR_CAPACITY", "label": "Solar Capacity",
+             "documents": ["Work Completion Report", ...]},
+            ...
+          ],
+          "documents": [
+            {"document": "Work Completion Report",
+             "missing": [{"key": "...", "label": "..."}], ...},
+            ...
+          ],
+        }
+    """
+    required = required_fields_by_document()
+
+    # field key -> document types that need it and are missing it
+    missing_field_docs: dict[str, list[str]] = {}
+    # document type -> missing field keys
+    missing_by_doc: dict[str, list[str]] = {}
+
+    for doc_type, fields in required.items():
+        for key in fields:
+            if not _has_value(customer, key):
+                missing_field_docs.setdefault(key, []).append(doc_type)
+                missing_by_doc.setdefault(doc_type, []).append(key)
+
+    if not missing_field_docs:
+        return None
+
+    missing_fields = [
+        {
+            "key": key,
+            "label": field_label(key),
+            "documents": [document_label(dt) for dt in sorted(doc_types)],
+        }
+        for key, doc_types in sorted(missing_field_docs.items(), key=lambda kv: field_label(kv[0]))
+    ]
+
+    documents = [
+        {
+            "document": document_label(doc_type),
+            "missing": [
+                {"key": key, "label": field_label(key)}
+                for key in sorted(keys, key=field_label)
+            ],
+        }
+        for doc_type, keys in sorted(missing_by_doc.items(), key=lambda kv: document_label(kv[0]))
+    ]
+
+    return {"missing_fields": missing_fields, "documents": documents}
+
+
 def _copy_run_format(src_run, dst_run):
     """Copy character-level formatting from src_run to dst_run (font name, size, italic, underline, color)."""
     sf, df = src_run.font, dst_run.font

@@ -3,6 +3,7 @@ import { Pencil, Trash2, FileText, Send, Download, Printer, ChevronDown, Chevron
 import { deleteCustomer } from '../api/customers'
 import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
 import UploadsModal from './UploadsModal'
+import MissingFieldsModal from './MissingFieldsModal'
 import toast from 'react-hot-toast'
 
 // The stamped NP first page is the only upload required before the signing
@@ -37,6 +38,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   const [expanded, setExpanded]   = useState(null)
   const [loadingId, setLoadingId] = useState(null)
   const [uploadsFor, setUploadsFor] = useState(null)
+  // When generation is blocked by missing fields, hold { customer, report }.
+  const [missingFor, setMissingFor] = useState(null)
   const pollingRef = useRef({})
 
   useEffect(() => {
@@ -90,7 +93,14 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
       toast.success('Document generation started')
       onRefresh()
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to start generation')
+      const detail = err.response?.data?.detail
+      // 422 carries a structured report of which required fields are missing —
+      // show the blocking popup instead of a generic toast.
+      if (err.response?.status === 422 && detail && typeof detail === 'object') {
+        setMissingFor({ customer, report: detail })
+      } else {
+        toast.error((typeof detail === 'string' && detail) || 'Failed to start generation')
+      }
     } finally {
       setLoadingId(null)
     }
@@ -357,6 +367,19 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           customer={uploadsFor}
           onClose={() => setUploadsFor(null)}
           onChanged={onRefresh}
+        />
+      )}
+
+      {missingFor && (
+        <MissingFieldsModal
+          customerName={missingFor.customer.CONSUMER_NAME}
+          report={missingFor.report}
+          onClose={() => setMissingFor(null)}
+          onEdit={() => {
+            const c = missingFor.customer
+            setMissingFor(null)
+            onEdit(c)
+          }}
         />
       )}
     </>
