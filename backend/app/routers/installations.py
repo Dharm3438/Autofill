@@ -39,6 +39,7 @@ async def installations_overview(
     search: str = Query(default=""),
     status: str = Query(default=""),          # not_started | in_progress | completed
     pending_step: str = Query(default=""),    # a step key still pending
+    dealer: str = Query(default=""),          # exact dealer name to filter by
     _=Depends(get_current_user),
 ):
     db = get_db()
@@ -49,6 +50,8 @@ async def installations_overview(
             {"CONSUMER_APP_NO": {"$regex": search, "$options": "i"}},
             {"CONSUMER_PHONE": {"$regex": search, "$options": "i"}},
         ]
+    if dealer:
+        query["DEALER_NAME"] = dealer
 
     customers = []
     summary = {

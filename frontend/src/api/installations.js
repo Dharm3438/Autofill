@@ -1,6 +1,6 @@
 import api from './client'
 
-// params: { search, status, pending_step }
+// params: { search, status, pending_step, dealer }
 export const getInstallationOverview = (params) =>
   api.get('/installations/overview', { params })
 
