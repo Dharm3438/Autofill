@@ -11,6 +11,7 @@ from bson import ObjectId
 from ..services.doc_generation import (
     build_customer_bundle,
     list_customer_documents,
+    validate_customer_for_generation,
     NP_FIRST_PAGE_SUFFIX as _NP_FIRST_PAGE_SUFFIX,
 )
 
@@ -30,6 +31,19 @@ async def generate_documents(
 
     if customer.get("doc_status") == "generating":
         raise HTTPException(status_code=400, detail="Document generation already in progress")
+
+    # Safety gate: never generate documents while required template fields are
+    # blank, or the output would contain leftover ${...}$ markers / empty values.
+    # 422 carries a structured report so the UI can list exactly what's missing.
+    missing = validate_customer_for_generation(customer)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Some required fields are missing. Fill them in before generating documents.",
+                **missing,
+            },
+        )
 
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
