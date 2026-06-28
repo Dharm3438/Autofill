@@ -27,12 +27,12 @@ const INVERTER_OPTIONS = [
 ]
 
 const PANEL_OPTIONS = [
-  { label: 'UTL 27 YEAR',     value: 'UTL',     warranty: '27 YEAR' },
-  { label: 'ADANI 30 YEAR',   value: 'ADANI',   warranty: '30 YEAR' },
-  { label: 'WAAREE 30 YEAR',  value: 'WAAREE',  warranty: '30 YEAR' },
-  { label: 'TATA 30 YEAR',    value: 'TATA',    warranty: '30 YEAR' },
-  { label: 'PREMIER 30 YEAR', value: 'PREMIER', warranty: '30 YEAR' },
-  { label: 'APS 30 YEAR',     value: 'APS',     warranty: '30 YEAR' },
+  { label: 'UTL',     value: 'UTL',     warranty: '27 YEAR' },
+  { label: 'ADANI',   value: 'ADANI',   warranty: '30 YEAR' },
+  { label: 'WAAREE',  value: 'WAAREE',  warranty: '30 YEAR' },
+  { label: 'TATA',    value: 'TATA',    warranty: '30 YEAR' },
+  { label: 'PREMIER', value: 'PREMIER', warranty: '30 YEAR' },
+  { label: 'APS',     value: 'APS',     warranty: '30 YEAR' },
 ]
 
 const PANEL_WATT_OPTIONS = [
@@ -67,7 +67,7 @@ const SECTIONS = [
       },
       { key: 'CONSUMER_APP_NO',     label: 'Application No' },
       { key: 'CONSUMER_APP_DATE',   label: 'Application Date', type: 'date' },
-      { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity' },
+      { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity (kW)' },
     ],
   },
   {
