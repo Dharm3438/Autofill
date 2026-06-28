@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Wrench, Search, RefreshCw, ChevronDown, ChevronRight, Settings2, Check } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
+import { DEALER_OPTIONS } from '../constants/dealers'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
 import toast from 'react-hot-toast'
@@ -27,6 +28,7 @@ export default function InstallationsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [pendingStep, setPendingStep] = useState('')
+  const [dealerFilter, setDealerFilter] = useState('')
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState({})
   const [manageCustomer, setManageCustomer] = useState(null)
@@ -38,6 +40,7 @@ export default function InstallationsPage() {
         search,
         status: statusFilter,
         pending_step: pendingStep,
+        dealer: dealerFilter,
       })
       setRows(res.data.data)
       setSummary(res.data.summary)
@@ -47,7 +50,7 @@ export default function InstallationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, pendingStep])
+  }, [search, statusFilter, pendingStep, dealerFilter])
 
   useEffect(() => {
     fetchData()
@@ -91,6 +94,16 @@ export default function InstallationsPage() {
               className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 transition-all shadow-sm"
             />
           </div>
+          <select
+            value={dealerFilter}
+            onChange={(e) => setDealerFilter(e.target.value)}
+            className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
+          >
+            <option value="">All dealers</option>
+            {DEALER_OPTIONS.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}

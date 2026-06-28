@@ -1,20 +1,8 @@
 import { useState, useEffect } from 'react'
 import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil } from 'lucide-react'
 import { createCustomer, updateCustomer } from '../api/customers'
+import { DEALER_OPTIONS } from '../constants/dealers'
 import toast from 'react-hot-toast'
-
-const DEALER_OPTIONS = [
-  'Devicharan Katkar',
-  'Sadguru electronic',
-  'Pravin Ranalkar',
-  'Rajesh Khona Pachora',
-  'Somnath Chaudhary',
-  'Santosh Gadia',
-  'Nilkanth Salunkhe',
-  'Adiwal Pachora',
-  'Balasaheb Karmad',
-  'Satish Khairnar Bhoras',
-]
 
 const INVERTER_OPTIONS = [
   { label: 'UTL',     value: 'UTL',     warranty: '10 YEAR' },
