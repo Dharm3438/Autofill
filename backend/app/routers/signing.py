@@ -4,7 +4,6 @@ import asyncio
 from PIL import Image
 import random
 import string
-import zipfile
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -51,7 +50,9 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
     from ..services.signing import create_signing_token, send_signing_email
     from ..services.doc_generation import build_signing_manifest
     token = await create_signing_token(db, customer_id)
-    send_signing_email(customer, token)
+    # send_signing_email does a blocking requests.post (up to 15s). Run it off
+    # the event loop so it never stalls other in-flight requests.
+    await asyncio.to_thread(send_signing_email, customer, token)
 
     # Persist the document manifest now (one R2 LIST) so each review-page
     # document view resolves from this list instead of re-LISTing R2 every time.
@@ -197,7 +198,8 @@ async def send_otp(token: str, force: bool = False):
         )
 
     from ..services.signing import send_otp_email
-    send_otp_email(customer, otp)
+    # Blocking requests.post — keep it off the event loop (see send-link).
+    await asyncio.to_thread(send_otp_email, customer, otp)
 
     return {"success": True, "message": "OTP sent to customer email"}
 
@@ -309,16 +311,14 @@ async def download_signed_docs(token: str):
     if customer.get("doc_status") == "generating":
         raise HTTPException(status_code=425, detail="Your documents are still being finalized. Please try again in a few seconds.")
 
-    from ..services.doc_generation import build_customer_bundle
+    from ..services.doc_generation import build_customer_bundle, zip_bundle
     bundle = await build_customer_bundle(customer["r2_prefix"])
     if not bundle:
         raise HTTPException(status_code=404, detail="No finalized documents available")
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in bundle:
-            zf.writestr(name, data)
-    buf.seek(0)
+    # PDFs are already compressed, so zip with ZIP_STORED (no wasted DEFLATE CPU)
+    # and build it off the event loop so the sync zip work never blocks others.
+    buf = await asyncio.to_thread(zip_bundle, bundle)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")
     return StreamingResponse(

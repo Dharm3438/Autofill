@@ -1,6 +1,5 @@
 import io
 import asyncio
-import zipfile
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from ..core.database import get_db
@@ -10,6 +9,7 @@ from bson import ObjectId
 
 from ..services.doc_generation import (
     build_customer_bundle,
+    zip_bundle,
     list_customer_documents,
     validate_customer_for_generation,
     NP_FIRST_PAGE_SUFFIX as _NP_FIRST_PAGE_SUFFIX,
@@ -131,11 +131,9 @@ async def download_zip(customer_id: str, _=Depends(get_current_user)):
     if not bundle:
         raise HTTPException(status_code=404, detail="No documents found")
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for name, data in bundle:
-            zf.writestr(name, data)
-    buf.seek(0)
+    # PDFs are already compressed, so zip with ZIP_STORED (no wasted DEFLATE CPU)
+    # and build it off the event loop so the sync zip work never blocks others.
+    buf = await asyncio.to_thread(zip_bundle, bundle)
 
     safe_name = customer.get("CONSUMER_NAME", "documents").replace(" ", "_")
     return StreamingResponse(

@@ -77,10 +77,25 @@ def delete_prefix(prefix: str):
     for page in paginator.paginate(Bucket=settings.R2_BUCKET_NAME, Prefix=prefix):
         for obj in page.get("Contents", []):
             to_delete.append({"Key": obj["Key"]})
-    for i in range(0, len(to_delete), 1000):
+    _delete_keys([d["Key"] for d in to_delete])
+
+
+def delete_keys(keys: list[str]):
+    """Delete an explicit list of object keys in batched delete_objects calls.
+
+    Avoids a separate LIST+DELETE per key when the caller already knows the
+    exact keys (e.g. stale PDFs from a prior generation)."""
+    _delete_keys(keys)
+
+
+def _delete_keys(keys: list[str]):
+    if not keys:
+        return
+    client = _client()
+    for i in range(0, len(keys), 1000):
         client.delete_objects(
             Bucket=settings.R2_BUCKET_NAME,
-            Delete={"Objects": to_delete[i:i + 1000]},
+            Delete={"Objects": [{"Key": k} for k in keys[i:i + 1000]]},
         )
 
 
