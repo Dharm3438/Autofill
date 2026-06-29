@@ -44,6 +44,10 @@ export default function InstallationsPage() {
   const [summary, setSummary] = useState(null)
   const [stepDefs, setStepDefs] = useState([])
   const [search, setSearch] = useState('')
+  // Debounced copy of `search` so a full-scan overview isn't re-run on every
+  // keystroke — only once typing settles. Other filters are dropdowns (one
+  // change at a time), so they fetch immediately.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [pendingStep, setPendingStep] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
@@ -51,11 +55,16 @@ export default function InstallationsPage() {
   const [expanded, setExpanded] = useState({})
   const [manageCustomer, setManageCustomer] = useState(null)
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
       const res = await getInstallationOverview({
-        search,
+        search: debouncedSearch,
         status: statusFilter,
         pending_step: pendingStep,
         dealer: dealerFilter,
@@ -68,7 +77,7 @@ export default function InstallationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter, pendingStep, dealerFilter])
+  }, [debouncedSearch, statusFilter, pendingStep, dealerFilter])
 
   useEffect(() => {
     fetchData()

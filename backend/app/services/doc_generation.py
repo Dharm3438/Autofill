@@ -8,9 +8,11 @@ the Docker image ships LibreOffice. There is intentionally no docx2pdf / MS
 Word path — keeping a single conversion stack means "looks right locally"
 also means "looks right in prod".
 """
+import io
 import os
 import re
 import shutil
+import zipfile
 import asyncio
 import tempfile
 import subprocess
@@ -457,26 +459,35 @@ async def generate_for_customer(customer: dict) -> str:
 
     work_dir = Path(tempfile.mkdtemp(prefix=f"docgen_{customer_id}_"))
     try:
-        # Pull signature + Aadhaar images down from R2 (saved during signing) so they get embedded
-        images = {}
-        for img_key, fname in (("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY),
-                               ("aadhar_front", AADHAR_FRONT_KEY), ("aadhar_back", AADHAR_BACK_KEY)):
-            r2_key = prefix + fname
+        # Pull signature + Aadhaar images down from R2 (saved during signing) so
+        # they get embedded. Fetch all four concurrently and skip the existence
+        # HEAD — just attempt the download and treat a miss as "not present", so
+        # each image costs one round trip instead of two serial ones.
+        async def _fetch_image(img_key: str, fname: str):
             local = work_dir / fname
-            if await loop.run_in_executor(None, storage.object_exists, r2_key):
-                data = await loop.run_in_executor(None, storage.download_bytes, r2_key)
-                local.write_bytes(data)
-                images[img_key] = local
-            else:
-                images[img_key] = None
+            try:
+                data = await loop.run_in_executor(None, storage.download_bytes, prefix + fname)
+            except Exception:
+                return img_key, None
+            local.write_bytes(data)
+            return img_key, local
+
+        fetched = await asyncio.gather(*(
+            _fetch_image(k, f) for k, f in (
+                ("signature", SIGNATURE_KEY), ("photo", PHOTO_KEY),
+                ("aadhar_front", AADHAR_FRONT_KEY), ("aadhar_back", AADHAR_BACK_KEY),
+            )
+        ))
+        images = {k: v for k, v in fetched}
 
         # Remove any stale PDFs from a previous generation before uploading fresh
         # ones — but never touch admin uploads under the uploads/ sub-prefix.
+        # Delete them in one batched call rather than a LIST+DELETE per key.
         upload_prefix = prefix + UPLOAD_PREFIX
         stale = [o["key"] for o in await loop.run_in_executor(None, storage.list_objects, prefix)
                  if o["key"].lower().endswith(".pdf") and not o["key"].startswith(upload_prefix)]
-        for key in stale:
-            await loop.run_in_executor(None, storage.delete_prefix, key)
+        if stale:
+            await loop.run_in_executor(None, storage.delete_keys, stale)
 
         # Phase 1 — fill every template's DOCX.
         docx_paths: list[Path] = []
@@ -719,3 +730,20 @@ async def build_customer_bundle(prefix: str) -> list[tuple[str, bytes]]:
 
     # gather preserves input order, so the bundle stays deterministic.
     return list(await asyncio.gather(*(_fetch(n, k, m) for n, k, m in plan)))
+
+
+def zip_bundle(bundle: list[tuple[str, bytes]]) -> io.BytesIO:
+    """
+    Pack a list of (filename, bytes) into an in-memory ZIP.
+
+    Uses ZIP_STORED (no compression): the bundle is entirely PDFs, which are
+    already compressed, so DEFLATE would burn CPU for ~no size reduction. This
+    is synchronous CPU work — call it via asyncio.to_thread from async handlers
+    so it never blocks the event loop.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
+        for name, data in bundle:
+            zf.writestr(name, data)
+    buf.seek(0)
+    return buf

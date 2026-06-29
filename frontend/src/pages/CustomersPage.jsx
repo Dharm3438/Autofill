@@ -9,16 +9,24 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
+  // Debounced copy of `search` — the input updates `search` on every keystroke,
+  // but we only hit the backend (an unindexed regex scan) once typing settles.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [editCustomer, setEditCustomer] = useState(null)
   const LIMIT = 20
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const fetchCustomers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getCustomers({ search, page, limit: LIMIT })
+      const res = await getCustomers({ search: debouncedSearch, page, limit: LIMIT })
       setCustomers(res.data.data)
       setTotal(res.data.total)
     } catch {
@@ -26,7 +34,7 @@ export default function CustomersPage() {
     } finally {
       setLoading(false)
     }
-  }, [search, page])
+  }, [debouncedSearch, page])
 
   useEffect(() => {
     fetchCustomers()
@@ -34,7 +42,7 @@ export default function CustomersPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search])
+  }, [debouncedSearch])
 
   function openAdd() {
     setEditCustomer(null)
