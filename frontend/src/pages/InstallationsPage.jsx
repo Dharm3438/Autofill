@@ -259,8 +259,8 @@ export default function InstallationsPage() {
                                 title={tip}
                                 className={`inline-flex items-center justify-center min-w-[1.4rem] h-5 px-1 rounded-full text-[10px] font-bold leading-none cursor-default select-none transition-colors ${
                                   done
-                                    ? 'bg-emerald-500 text-white'
-                                    : 'bg-red-500 text-white'
+                                    ? 'bg-emerald-100 text-emerald-700 border border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30'
+                                    : 'bg-red-100 text-red-600 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20'
                                 }`}
                               >
                                 {s.short || s.label?.slice(0, 2)}
