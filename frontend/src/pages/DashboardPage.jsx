@@ -12,7 +12,9 @@ export default function DashboardPage() {
   const [steps, setSteps] = useState([])
 
   useEffect(() => {
-    getInstallationOverview()
+    // The dashboard only shows aggregate stats, so ask for the summary alone —
+    // the backend then skips building/serializing the full customer list.
+    getInstallationOverview({ summary_only: true })
       .then((res) => {
         setSummary(res.data.summary)
         setSteps(res.data.steps)

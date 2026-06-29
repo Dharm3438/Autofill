@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
 from ..core.deps import get_current_user
@@ -7,6 +8,22 @@ from bson import ObjectId
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/customers", tags=["customers"])
+
+
+def search_or(term: str) -> list[dict]:
+    """Case-insensitive substring match across name / app-no / phone.
+
+    The term is regex-escaped so characters a user might type (e.g. '(' or '+'
+    in a phone number) are matched literally instead of being interpreted as
+    regex metacharacters — both a correctness fix and a guard against
+    pathological regex input.
+    """
+    pattern = re.escape(term)
+    return [
+        {"CONSUMER_NAME": {"$regex": pattern, "$options": "i"}},
+        {"CONSUMER_APP_NO": {"$regex": pattern, "$options": "i"}},
+        {"CONSUMER_PHONE": {"$regex": pattern, "$options": "i"}},
+    ]
 
 
 def customer_to_out(c: dict) -> dict:
@@ -24,11 +41,7 @@ async def list_customers(
     db = get_db()
     query = {}
     if search:
-        query["$or"] = [
-            {"CONSUMER_NAME": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_APP_NO": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_PHONE": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = search_or(search)
 
     total = await db.customers.count_documents(query)
     cursor = db.customers.find(query).skip((page - 1) * limit).limit(limit).sort("created_at", -1)

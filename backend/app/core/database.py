@@ -34,6 +34,10 @@ async def _ensure_indexes():
         await db.signing_submissions.create_index("token", unique=True)
         await db.signing_submissions.create_index("customer_id")
         await db.customers.create_index("created_at")
+        # DEALER_NAME is an exact-match filter on the installations overview,
+        # which scans the whole collection — an index turns that filter from a
+        # COLLSCAN into an index lookup.
+        await db.customers.create_index("DEALER_NAME")
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")

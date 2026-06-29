@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
 from ..core.deps import get_current_user
+from .customers import search_or
 from ..models.installation import (
     INSTALLATION_STEPS,
     STEP_KEYS,
@@ -34,22 +35,34 @@ def _summarize(steps: list) -> dict:
     }
 
 
+# Fields read to build a customer row in the overview list. Projecting to just
+# these (instead of fetching the full ~30-column document) cuts how much each
+# customer transfers from MongoDB. payment_info needs SYSTEM_COST /
+# received_payments / received_payment; _summarize needs installation_steps.
+_OVERVIEW_ROW_FIELDS = {
+    "CONSUMER_NAME": 1, "DEALER_NAME": 1, "CONSUMER_NO": 1, "CONSUMER_PHONE": 1,
+    "INSTALLATION_CITY": 1, "INVERTER_MAKE": 1, "INVERTER_CAPACITY": 1,
+    "PANEL_COMPANY": 1, "PANEL_WATT": 1, "NO_OF_PANEL": 1,
+    "installation_steps": 1, "SYSTEM_COST": 1,
+    "received_payments": 1, "received_payment": 1, "created_at": 1,
+}
+# The summary only needs each customer's steps — nothing else.
+_OVERVIEW_SUMMARY_FIELDS = {"installation_steps": 1}
+
+
 @router.get("/overview")
 async def installations_overview(
     search: str = Query(default=""),
     status: str = Query(default=""),          # not_started | in_progress | completed
     pending_step: str = Query(default=""),    # a step key still pending
     dealer: str = Query(default=""),          # exact dealer name to filter by
+    summary_only: bool = Query(default=False),  # dashboard: skip the customer list
     _=Depends(get_current_user),
 ):
     db = get_db()
     query = {}
     if search:
-        query["$or"] = [
-            {"CONSUMER_NAME": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_APP_NO": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_PHONE": {"$regex": search, "$options": "i"}},
-        ]
+        query["$or"] = search_or(search)
     if dealer:
         query["DEALER_NAME"] = dealer
 
@@ -62,7 +75,10 @@ async def installations_overview(
         "per_step_pending": {s["key"]: 0 for s in INSTALLATION_STEPS},
     }
 
-    cursor = db.customers.find(query).sort("created_at", -1)
+    # The dashboard only renders `summary`, so it sends summary_only=1 and we
+    # fetch just installation_steps and never build/serialize the row list.
+    projection = _OVERVIEW_SUMMARY_FIELDS if summary_only else _OVERVIEW_ROW_FIELDS
+    cursor = db.customers.find(query, projection).sort("created_at", -1)
     async for c in cursor:
         steps = merge_steps(c.get("installation_steps"))
         info = _summarize(steps)
@@ -75,6 +91,8 @@ async def installations_overview(
             if s.get("status") != "done":
                 summary["per_step_pending"][s["key"]] += 1
 
+        if summary_only:
+            continue
         if status and info["overall_status"] != status:
             continue
         if pending_step:
