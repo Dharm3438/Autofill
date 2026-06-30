@@ -14,3 +14,8 @@ export const updateInstallationStep = (customerId, stepKey, data) =>
 // data: { received_payments: [{ amount, date }] }
 export const updateInstallationPayment = (customerId, data) =>
   api.put(`/installations/${customerId}/payment`, data)
+
+// data: { INVERTER_SR_NO, PANEL_SR_NO }
+// Installation date is derived server-side from when both serials were filled.
+export const updateInstallationSerials = (customerId, data) =>
+  api.put(`/installations/${customerId}/serials`, data)

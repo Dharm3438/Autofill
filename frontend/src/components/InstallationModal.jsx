@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { X, Check, Loader2, Calendar, User, Save, IndianRupee, Plus, Trash2 } from 'lucide-react'
-import { getInstallation, updateInstallationStep, updateInstallationPayment } from '../api/installations'
+import { X, Check, Loader2, Calendar, User, Save, IndianRupee, Plus, Trash2, Hash, CalendarCheck } from 'lucide-react'
+import { getInstallation, updateInstallationStep, updateInstallationPayment, updateInstallationSerials } from '../api/installations'
 import toast from 'react-hot-toast'
+
+// Display a stored ISO date (YYYY-MM-DD) as DD-MM-YYYY for the admin.
+const fmtDate = (iso) => {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return y && m && d ? `${d}-${m}-${y}` : iso
+}
 
 const fmtINR = (n) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
@@ -29,8 +36,12 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   const [pay, setPay] = useState({ total_payment: 0, received_payment: 0, remaining_payment: 0 })  // server truth
   const [payRows, setPayRows] = useState([])   // editable [{ amount: string, date: string }]
   const [savingPay, setSavingPay] = useState(false)
+  const [serials, setSerials] = useState({ INVERTER_SR_NO: '', PANEL_SR_NO: '' })  // editable
+  const [installationDate, setInstallationDate] = useState('')  // server-derived, read-only
+  const [savingSerials, setSavingSerials] = useState(false)
   const changedRef = useRef(false)
   const savedRowsRef = useRef('')              // serialized snapshot of last-saved rows
+  const savedSerialsRef = useRef('')           // JSON snapshot of last-saved serials
 
   async function load() {
     setLoading(true)
@@ -57,6 +68,13 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
       const rows = toRows(data.received_payments)
       setPayRows(rows)
       savedRowsRef.current = serializeRows(rows)
+      const sr = {
+        INVERTER_SR_NO: data.INVERTER_SR_NO || '',
+        PANEL_SR_NO: data.PANEL_SR_NO || '',
+      }
+      setSerials(sr)
+      savedSerialsRef.current = JSON.stringify(sr)
+      setInstallationDate(data.INSTALLATION_DATE || '')
     } catch {
       toast.error('Failed to load installation steps')
     } finally {
@@ -168,7 +186,41 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
     }
   }
 
+  function updateSerial(field, value) {
+    setSerials((s) => ({ ...s, [field]: value }))
+  }
+
+  async function saveSerials() {
+    setSavingSerials(true)
+    try {
+      const res = await updateInstallationSerials(customer.id, {
+        INVERTER_SR_NO: serials.INVERTER_SR_NO.trim(),
+        PANEL_SR_NO: serials.PANEL_SR_NO.trim(),
+      })
+      changedRef.current = true
+      const d = res.data.data
+      const sr = {
+        INVERTER_SR_NO: d.INVERTER_SR_NO || '',
+        PANEL_SR_NO: d.PANEL_SR_NO || '',
+      }
+      setSerials(sr)
+      savedSerialsRef.current = JSON.stringify(sr)
+      setInstallationDate(d.INSTALLATION_DATE || '')
+      toast.success(
+        d.INSTALLATION_DATE
+          ? `Serials saved · Installation date set to ${fmtDate(d.INSTALLATION_DATE)}`
+          : 'Serials saved'
+      )
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save serial numbers')
+    } finally {
+      setSavingSerials(false)
+    }
+  }
+
   const doneCount = steps.filter((s) => s.status === 'done').length
+  const serialsDirty = JSON.stringify(serials) !== savedSerialsRef.current
+  const bothSerialsFilled = serials.INVERTER_SR_NO.trim() !== '' && serials.PANEL_SR_NO.trim() !== ''
   const payDirty = serializeRows(payRows) !== savedRowsRef.current
   const liveReceived = payRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
   const remaining = Math.max(pay.total_payment - liveReceived, 0)
@@ -281,6 +333,76 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                   </button>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Equipment serial numbers + derived installation date */}
+        {!loading && (
+          <div className="px-6 pt-6">
+            <div className="rounded-xl border border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5 p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <Hash className="w-4 h-4 text-[#1a3a2a] dark:text-emerald-400" />
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Equipment Serial Numbers</p>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Enter these once the equipment is installed. The installation date is set
+                automatically to the later of the two dates both serials were filled in.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Inverter Serial No</span>
+                  <input
+                    type="text"
+                    value={serials.INVERTER_SR_NO}
+                    onChange={(ev) => updateSerial('INVERTER_SR_NO', ev.target.value)}
+                    placeholder="Inverter serial number"
+                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/30"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Panel Serial Nos</span>
+                  <input
+                    type="text"
+                    value={serials.PANEL_SR_NO}
+                    onChange={(ev) => updateSerial('PANEL_SR_NO', ev.target.value)}
+                    placeholder="Comma separated"
+                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/30"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs">
+                  <CalendarCheck className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  {installationDate ? (
+                    <span className="text-gray-600 dark:text-gray-300">
+                      Installation date: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{fmtDate(installationDate)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      Installation date not set — fill in both serial numbers
+                    </span>
+                  )}
+                </span>
+                {serialsDirty && (
+                  <button
+                    onClick={saveSerials}
+                    disabled={savingSerials}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-50 transition-colors flex-shrink-0"
+                  >
+                    {savingSerials ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Save
+                  </button>
+                )}
+              </div>
+              {serialsDirty && !bothSerialsFilled && (
+                <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                  Saving with a serial number blank will clear the installation date and keep
+                  document generation blocked.
+                </p>
+              )}
             </div>
           </div>
         )}

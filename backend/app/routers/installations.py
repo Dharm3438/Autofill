@@ -7,8 +7,10 @@ from ..models.installation import (
     merge_steps,
     compute_overall_status,
     payment_info,
+    compute_serials_update,
     InstallationStepUpdate,
     PaymentUpdate,
+    SerialsUpdate,
 )
 from bson import ObjectId
 from datetime import datetime, timezone, date
@@ -122,8 +124,50 @@ async def get_installation(customer_id: str, _=Depends(get_current_user)):
         "data": {
             "customer_id": customer_id,
             "CONSUMER_NAME": c.get("CONSUMER_NAME"),
+            "INVERTER_SR_NO": c.get("INVERTER_SR_NO") or "",
+            "PANEL_SR_NO": c.get("PANEL_SR_NO") or "",
+            "INSTALLATION_DATE": c.get("INSTALLATION_DATE") or "",
             **_summarize(steps),
             **payment_info(c),
+        },
+    }
+
+
+@router.put("/{customer_id}/serials")
+async def update_installation_serials(
+    customer_id: str,
+    body: SerialsUpdate,
+    _=Depends(get_current_user),
+):
+    """Save the inverter / panel serial numbers entered after installation.
+
+    The installation date is derived here, never entered directly: it is the
+    later of the two dates the serials were filled in, and only set once BOTH
+    serials are present. Until then INSTALLATION_DATE stays blank, which keeps
+    document generation gated (Annexure-1 requires it)."""
+    db = get_db()
+    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    fields = compute_serials_update(c, body, date.today().isoformat())
+    await db.customers.update_one(
+        {"_id": ObjectId(customer_id)},
+        {
+            "$set": {
+                **fields,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        },
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "customer_id": customer_id,
+            "INVERTER_SR_NO": fields["INVERTER_SR_NO"],
+            "PANEL_SR_NO": fields["PANEL_SR_NO"],
+            "INSTALLATION_DATE": fields["INSTALLATION_DATE"],
         },
     }
 

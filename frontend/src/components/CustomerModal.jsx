@@ -78,7 +78,6 @@ const SECTIONS = [
         options: INVERTER_CAPACITY_OPTIONS.map(v => ({ label: v, value: v })),
       },
       { key: 'INVERTER_GURANTEE', label: 'Inverter Guarantee', readOnly: true },
-      { key: 'INVERTER_SR_NO',    label: 'Inverter Serial No' },
       {
         key: 'PANEL_COMPANY',
         label: 'Panel Company',
@@ -93,7 +92,6 @@ const SECTIONS = [
       },
       { key: 'NO_OF_PANEL',          label: 'No of Panels', type: 'number' },
       { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', readOnly: true },
-      { key: 'PANEL_SR_NO',          label: 'Panel Serial Nos', span: 2, hint: 'Comma separated' },
       { key: 'PANEL_GURANTEE',       label: 'Panel Guarantee', readOnly: true },
     ],
   },
@@ -103,7 +101,6 @@ const SECTIONS = [
     color: 'text-emerald-600',
     bg: 'bg-emerald-50',
     fields: [
-      { key: 'INSTALLATION_DATE',        label: 'Installation Date',        type: 'date' },
       { key: 'INSTALLATION_CITY',        label: 'City' },
       { key: 'INSTALLATION_DISTRICT',    label: 'District' },
       { key: 'DISCOM_REGISTERED_OFFICE', label: 'DISCOM Registered Office', span: 2 },
