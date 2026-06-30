@@ -37,9 +37,27 @@ async def list_customers(
     return {"success": True, "data": customers, "total": total, "page": page, "limit": limit}
 
 
+@router.get("/check-consumer-no")
+async def check_consumer_no(
+    consumer_no: str = Query(...),
+    exclude_id: str = Query(default=None),
+    _=Depends(get_current_user),
+):
+    db = get_db()
+    query = {"CONSUMER_NO": consumer_no}
+    if exclude_id:
+        query["_id"] = {"$ne": ObjectId(exclude_id)}
+    existing = await db.customers.find_one(query, {"_id": 1})
+    return {"success": True, "exists": existing is not None}
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_customer(body: CustomerCreate, _=Depends(get_current_user)):
     db = get_db()
+    if body.CONSUMER_NO:
+        existing = await db.customers.find_one({"CONSUMER_NO": body.CONSUMER_NO}, {"_id": 1})
+        if existing:
+            raise HTTPException(status_code=409, detail="Consumer number already exists")
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         **body.model_dump(),
@@ -70,6 +88,13 @@ async def get_customer(customer_id: str, _=Depends(get_current_user)):
 @router.put("/{customer_id}")
 async def update_customer(customer_id: str, body: CustomerUpdate, _=Depends(get_current_user)):
     db = get_db()
+    if body.CONSUMER_NO:
+        existing = await db.customers.find_one(
+            {"CONSUMER_NO": body.CONSUMER_NO, "_id": {"$ne": ObjectId(customer_id)}},
+            {"_id": 1},
+        )
+        if existing:
+            raise HTTPException(status_code=409, detail="Consumer number already exists")
     update_data = {k: v for k, v in body.model_dump().items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
 

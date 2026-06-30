@@ -14,3 +14,8 @@ export const updateCustomer = (id, data) =>
 
 export const deleteCustomer = (id) =>
   api.delete(`/customers/${id}`)
+
+export const checkConsumerNo = (consumer_no, exclude_id = null) =>
+  api.get('/customers/check-consumer-no', {
+    params: { consumer_no, ...(exclude_id && { exclude_id }) },
+  })
