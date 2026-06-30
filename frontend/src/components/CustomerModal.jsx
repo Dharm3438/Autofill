@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil } from 'lucide-react'
-import { createCustomer, updateCustomer } from '../api/customers'
+import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import toast from 'react-hot-toast'
 
@@ -135,6 +135,7 @@ function calcTotalCapacity(watt, qty) {
 export default function CustomerModal({ customer, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY)
   const [loading, setLoading] = useState(false)
+  const [consumerNoError, setConsumerNoError] = useState('')
   const isEdit = Boolean(customer)
 
   useEffect(() => {
@@ -170,8 +171,20 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
     })
   }
 
+  async function handleConsumerNoBlur() {
+    const val = form.CONSUMER_NO.trim()
+    if (!val) { setConsumerNoError(''); return }
+    try {
+      const res = await checkConsumerNo(val, isEdit ? customer.id : null)
+      setConsumerNoError(res.data.exists ? 'This consumer number already exists in the system.' : '')
+    } catch {
+      setConsumerNoError('')
+    }
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
+    if (consumerNoError) return
     setLoading(true)
     try {
       if (isEdit) {
@@ -260,15 +273,27 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                             ))}
                           </select>
                         ) : (
-                          <input
-                            type={field.type || 'text'}
-                            required={field.required}
-                            readOnly={field.readOnly}
-                            value={form[field.key]}
-                            onChange={field.readOnly ? undefined : e => set(field.key, e.target.value)}
-                            placeholder={field.hint || ''}
-                            className={field.readOnly ? readOnlyCls : inputCls}
-                          />
+                          <>
+                            <input
+                              type={field.type || 'text'}
+                              required={field.required}
+                              readOnly={field.readOnly}
+                              value={form[field.key]}
+                              onChange={field.readOnly ? undefined : e => set(field.key, e.target.value)}
+                              onBlur={field.key === 'CONSUMER_NO' ? handleConsumerNoBlur : undefined}
+                              placeholder={field.hint || ''}
+                              className={
+                                field.readOnly
+                                  ? readOnlyCls
+                                  : field.key === 'CONSUMER_NO' && consumerNoError
+                                    ? `${inputCls} border-red-400 dark:border-red-500 focus:border-red-400 dark:focus:border-red-500`
+                                    : inputCls
+                              }
+                            />
+                            {field.key === 'CONSUMER_NO' && consumerNoError && (
+                              <p className="mt-1 text-xs text-red-500 dark:text-red-400">{consumerNoError}</p>
+                            )}
+                          </>
                         )}
                       </div>
                     ))}
