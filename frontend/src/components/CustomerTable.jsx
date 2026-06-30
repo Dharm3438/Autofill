@@ -89,8 +89,19 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   async function handleGenerateDocs(customer) {
     setLoadingId(`gen-${customer.id}`)
     try {
-      await generateDocs(customer.id)
+      const res = await generateDocs(customer.id)
       toast.success('Document generation started')
+      // Optional documents (e.g. the Meter Testing Letter) are skipped — not
+      // blocked — when their late-filled fields aren't ready yet. Let the admin
+      // know which one wasn't produced so they can fill the details and regenerate.
+      const skipped = res?.data?.skipped_optional || []
+      if (skipped.length > 0) {
+        const names = skipped.map(s => s.document).join(', ')
+        toast(
+          `Skipped (missing details): ${names}. Fill in the details and generate again to produce it.`,
+          { icon: '⚠️', duration: 7000 },
+        )
+      }
       onRefresh()
     } catch (err) {
       const detail = err.response?.data?.detail

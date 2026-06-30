@@ -24,7 +24,6 @@ class CustomerCreate(BaseModel):
     NO_OF_PANEL: Optional[str] = None
     TOTAL_PANEL_CAPACITY: Optional[str] = None
     PANEL_SR_NO: Optional[str] = None
-    CELL_MANUFACTURER: Optional[str] = None
     PANEL_GURANTEE: Optional[str] = None
     INSTALLATION_DATE: Optional[str] = None
     INSTALLATION_CITY: Optional[str] = None

@@ -94,7 +94,6 @@ const SECTIONS = [
       { key: 'NO_OF_PANEL',          label: 'No of Panels', type: 'number' },
       { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', readOnly: true },
       { key: 'PANEL_SR_NO',          label: 'Panel Serial Nos', span: 2, hint: 'Comma separated' },
-      { key: 'CELL_MANUFACTURER',    label: 'Cell Manufacturer' },
       { key: 'PANEL_GURANTEE',       label: 'Panel Guarantee', readOnly: true },
     ],
   },

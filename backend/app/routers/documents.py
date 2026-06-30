@@ -12,6 +12,7 @@ from ..services.doc_generation import (
     zip_bundle,
     list_customer_documents,
     validate_customer_for_generation,
+    skipped_optional_documents,
     NP_FIRST_PAGE_SUFFIX as _NP_FIRST_PAGE_SUFFIX,
 )
 
@@ -51,7 +52,16 @@ async def generate_documents(
     )
 
     background_tasks.add_task(_generate_task, customer_id, customer)
-    return {"success": True, "message": "Document generation started"}
+
+    # Optional documents (e.g. the Meter Testing Letter) are skipped — not blocked —
+    # when their late-filled fields are still blank. Report them so the UI can tell
+    # the admin which document wasn't produced and what to fill in to regenerate it.
+    skipped = skipped_optional_documents(customer)
+    return {
+        "success": True,
+        "message": "Document generation started",
+        "skipped_optional": skipped,
+    }
 
 
 async def _generate_task(customer_id: str, customer: dict):
