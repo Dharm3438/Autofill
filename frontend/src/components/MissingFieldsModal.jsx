@@ -1,4 +1,9 @@
-import { X, AlertTriangle, Pencil, FileWarning } from 'lucide-react'
+import { X, AlertTriangle, Pencil, FileWarning, Wrench } from 'lucide-react'
+
+// Fields that are no longer edited on the customer form — they're filled on the
+// Installation page (Manage → Equipment Serial Numbers). The installation date
+// is derived there from the two serials, so it can't be entered directly.
+const INSTALLATION_MANAGED_KEYS = new Set(['INVERTER_SR_NO', 'PANEL_SR_NO', 'INSTALLATION_DATE'])
 
 /**
  * Blocking popup shown when document generation is refused because the customer
@@ -14,6 +19,7 @@ export default function MissingFieldsModal({ customerName, report, onClose, onEd
   if (!report) return null
   const missingFields = report.missing_fields || []
   const documents = report.documents || []
+  const hasInstallationManaged = missingFields.some((f) => INSTALLATION_MANAGED_KEYS.has(f.key))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -42,6 +48,19 @@ export default function MissingFieldsModal({ customerName, report, onClose, onEd
             {report.message ||
               'Documents can’t be generated until these fields are filled in. Please complete them and try again.'}
           </p>
+
+          {hasInstallationManaged && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-[#1a3a2a]/20 bg-[#1a3a2a]/5 dark:border-emerald-500/20 dark:bg-emerald-500/10 px-3 py-2.5">
+              <Wrench className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#1a3a2a] dark:text-emerald-400" />
+              <p className="text-xs text-gray-600 dark:text-gray-300">
+                Serial numbers and the installation date are entered on the{' '}
+                <span className="font-semibold">Installation</span> page — open{' '}
+                <span className="font-semibold">Manage</span> for this customer and fill in the
+                inverter and panel serial numbers. The installation date is set automatically once
+                both are entered.
+              </p>
+            </div>
+          )}
 
           {/* Missing fields */}
           {missingFields.length > 0 && (

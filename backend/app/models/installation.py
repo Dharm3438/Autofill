@@ -139,3 +139,70 @@ class ReceivedPayment(BaseModel):
 
 class PaymentUpdate(BaseModel):
     received_payments: List[ReceivedPayment] = Field(default_factory=list)
+
+
+class SerialsUpdate(BaseModel):
+    """Inverter / panel serial numbers entered on the installation page.
+
+    The installation date is NOT accepted here — it is derived from the dates
+    these serials were filled in (see compute_serials_update).
+    """
+    INVERTER_SR_NO: Optional[str] = None
+    PANEL_SR_NO: Optional[str] = None
+
+
+def _stamp_serial(new_val: Optional[str], old_val: Optional[str],
+                  prior_date: Optional[str], fallback_date: Optional[str],
+                  today: str) -> tuple[str, Optional[str]]:
+    """Resolve a serial's stored value and the date it was set.
+
+    Returns (clean_value, set_date):
+      • blank value          → ("", None)            — no date recorded
+      • value changed        → (value, today)        — stamped now
+      • value unchanged      → (value, prior_date or fallback_date or today)
+
+    `fallback_date` lets a customer created before this feature (serial already
+    filled, but no recorded set-date) keep their existing INSTALLATION_DATE
+    instead of being re-stamped to today on the first save.
+    """
+    new_clean = (new_val or "").strip()
+    if not new_clean:
+        return "", None
+    old_clean = (old_val or "").strip()
+    effective_prior = prior_date or fallback_date
+    if new_clean != old_clean or not effective_prior:
+        return new_clean, today
+    return new_clean, effective_prior
+
+
+def compute_serials_update(customer: dict, body: "SerialsUpdate", today: str) -> dict:
+    """Build the $set fields for a serials update.
+
+    Stamps each serial's set-date, then derives INSTALLATION_DATE as the LATEST
+    of the two set-dates — but only when BOTH serials are filled. If either is
+    blank the installation date is cleared (""), which keeps document generation
+    blocked until the installation is genuinely complete.
+    """
+    inv_val, inv_date = _stamp_serial(
+        body.INVERTER_SR_NO, customer.get("INVERTER_SR_NO"),
+        customer.get("inverter_sr_set_date"), customer.get("INSTALLATION_DATE"), today,
+    )
+    pan_val, pan_date = _stamp_serial(
+        body.PANEL_SR_NO, customer.get("PANEL_SR_NO"),
+        customer.get("panel_sr_set_date"), customer.get("INSTALLATION_DATE"), today,
+    )
+
+    # Installation date only exists once BOTH serials are filled; take the later
+    # of the two dates they were entered on.
+    if inv_val and pan_val and inv_date and pan_date:
+        installation_date = max(inv_date, pan_date)
+    else:
+        installation_date = ""
+
+    return {
+        "INVERTER_SR_NO": inv_val,
+        "PANEL_SR_NO": pan_val,
+        "inverter_sr_set_date": inv_date,
+        "panel_sr_set_date": pan_date,
+        "INSTALLATION_DATE": installation_date,
+    }
