@@ -12,6 +12,8 @@ const INVERTER_OPTIONS = [
   { label: 'GOODWE',  value: 'GOODWE',  warranty: '10 YEAR' },
   { label: 'Xwatt',   value: 'Xwatt',   warranty: '10 YEAR' },
   { label: 'Polycab', value: 'Polycab', warranty: '8 YEAR'  },
+  { label: 'Microtek Inverter', value: 'Microtek Inverter', warranty: '10 YEAR' },
+  { label: 'Pv blink', value: 'Pv blink', warranty: '10 YEAR' },
 ]
 
 const PANEL_OPTIONS = [
@@ -24,13 +26,13 @@ const PANEL_OPTIONS = [
 ]
 
 const PANEL_WATT_OPTIONS = [
-  '500', '530', '540', '545', '550',
+  '500', '525', '530', '540', '545', '550',
   '570', '575', '580', '585', '590', '600',
   '610', '615', '620',
 ]
 
 const INVERTER_CAPACITY_OPTIONS = [
-  '1 kW', '2 kW', '3 kW', '3.3 kW', '4 kW', '4.6 kW',
+  '1 kW', '2 kW', '3 kW', '3.3 kW', '3.6 kW', '4 kW', '4.6 kW',
   '5 kW', '5.5 kW', '6 kW', '8 kW', '10 kW', '12 kW', '15 kW', '20 kW',
 ]
 
