@@ -12,5 +12,6 @@ export const DEALER_OPTIONS = [
   'Balasaheb Karmad',
   'Satish Khairnar Bhoras',
   'Sudhir kumbhar',
+  'Sagar Rajput',
   'Office',
 ]
