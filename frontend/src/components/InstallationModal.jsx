@@ -128,6 +128,9 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
       changedRef.current = true
       const fresh = res.data.data.steps
       setSteps(fresh)
+      // Marking the Inverter / Solar Panel Installation steps done (or clearing
+      // their dates) re-derives the installation date server-side.
+      setInstallationDate(res.data.data.INSTALLATION_DATE || '')
       // Re-sync this row from server (e.g. cleared fields when set back to pending).
       const updated = fresh.find((s) => s.key === key)
       if (updated) {
@@ -205,12 +208,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
       }
       setSerials(sr)
       savedSerialsRef.current = JSON.stringify(sr)
-      setInstallationDate(d.INSTALLATION_DATE || '')
-      toast.success(
-        d.INSTALLATION_DATE
-          ? `Serials saved · Installation date set to ${fmtDate(d.INSTALLATION_DATE)}`
-          : 'Serials saved'
-      )
+      toast.success('Serials saved')
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to save serial numbers')
     } finally {
@@ -220,7 +218,6 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
 
   const doneCount = steps.filter((s) => s.status === 'done').length
   const serialsDirty = JSON.stringify(serials) !== savedSerialsRef.current
-  const bothSerialsFilled = serials.INVERTER_SR_NO.trim() !== '' && serials.PANEL_SR_NO.trim() !== ''
   const payDirty = serializeRows(payRows) !== savedRowsRef.current
   const liveReceived = payRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
   const remaining = Math.max(pay.total_payment - liveReceived, 0)
@@ -337,7 +334,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
           </div>
         )}
 
-        {/* Equipment serial numbers + derived installation date */}
+        {/* Equipment serial numbers (recorded as data only) */}
         {!loading && (
           <div className="px-6 pt-6">
             <div className="rounded-xl border border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5 p-4">
@@ -346,8 +343,8 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                 <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Equipment Serial Numbers</p>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Enter these once the equipment is installed. The installation date is set
-                automatically to the later of the two dates both serials were filled in.
+                Enter these once the equipment is installed. They're recorded as equipment
+                data for the documents.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -373,20 +370,8 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                 </label>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-xs">
-                  <CalendarCheck className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                  {installationDate ? (
-                    <span className="text-gray-600 dark:text-gray-300">
-                      Installation date: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{fmtDate(installationDate)}</span>
-                    </span>
-                  ) : (
-                    <span className="text-amber-600 dark:text-amber-400">
-                      Installation date not set — fill in both serial numbers
-                    </span>
-                  )}
-                </span>
-                {serialsDirty && (
+              {serialsDirty && (
+                <div className="mt-3 flex items-center justify-end">
                   <button
                     onClick={saveSerials}
                     disabled={savingSerials}
@@ -395,13 +380,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                     {savingSerials ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     Save
                   </button>
-                )}
-              </div>
-              {serialsDirty && !bothSerialsFilled && (
-                <p className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
-                  Saving with a serial number blank will clear the installation date and keep
-                  document generation blocked.
-                </p>
+                </div>
               )}
             </div>
           </div>
@@ -409,6 +388,23 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
 
         {/* Steps */}
         <div className="p-6 space-y-3">
+          {!loading && (
+            <div className="flex items-center justify-between gap-2 pb-1">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Installation Checklist</p>
+              <span className="inline-flex items-center gap-1.5 text-xs">
+                <CalendarCheck className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                {installationDate ? (
+                  <span className="text-gray-600 dark:text-gray-300">
+                    Installation date: <span className="font-semibold text-emerald-700 dark:text-emerald-300">{fmtDate(installationDate)}</span>
+                  </span>
+                ) : (
+                  <span className="text-amber-600 dark:text-amber-400">
+                    Not set — mark the Inverter or Solar Panel Installation step done
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
           {loading ? (
             <div className="flex items-center justify-center py-10 text-gray-400">
               <Loader2 className="w-6 h-6 animate-spin" />

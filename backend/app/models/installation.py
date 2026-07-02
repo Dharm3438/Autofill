@@ -82,6 +82,28 @@ def compute_overall_status(steps: List[dict]) -> str:
     return "in_progress"
 
 
+# The checklist steps whose completion dates drive INSTALLATION_DATE.
+INSTALLATION_DATE_STEP_KEYS = ("inverter", "panels")
+
+
+def compute_installation_date(steps: List[dict]) -> str:
+    """Derive INSTALLATION_DATE from the checklist.
+
+    It is the completed date of the Inverter Installation and Solar Panel
+    Installation steps — whichever is present. If only one of the two has a
+    date, that date is used; if both are present, the later of the two wins.
+    Blank until at least one of them is marked done with a date.
+
+    Completed dates are ISO strings (YYYY-MM-DD), so lexical max == latest.
+    """
+    dates = [
+        s["completed_date"]
+        for s in steps
+        if s.get("key") in INSTALLATION_DATE_STEP_KEYS and s.get("completed_date")
+    ]
+    return max(dates) if dates else ""
+
+
 class InstallationStepUpdate(BaseModel):
     status: Optional[Literal["pending", "done"]] = None
     completed_date: Optional[str] = None  # "YYYY-MM-DD"
@@ -144,65 +166,17 @@ class PaymentUpdate(BaseModel):
 class SerialsUpdate(BaseModel):
     """Inverter / panel serial numbers entered on the installation page.
 
-    The installation date is NOT accepted here — it is derived from the dates
-    these serials were filled in (see compute_serials_update).
+    These are recorded purely as equipment data — they no longer drive the
+    installation date, which is derived from the checklist's Inverter / Solar
+    Panel Installation steps (see compute_installation_date).
     """
     INVERTER_SR_NO: Optional[str] = None
     PANEL_SR_NO: Optional[str] = None
 
 
-def _stamp_serial(new_val: Optional[str], old_val: Optional[str],
-                  prior_date: Optional[str], fallback_date: Optional[str],
-                  today: str) -> tuple[str, Optional[str]]:
-    """Resolve a serial's stored value and the date it was set.
-
-    Returns (clean_value, set_date):
-      • blank value          → ("", None)            — no date recorded
-      • value changed        → (value, today)        — stamped now
-      • value unchanged      → (value, prior_date or fallback_date or today)
-
-    `fallback_date` lets a customer created before this feature (serial already
-    filled, but no recorded set-date) keep their existing INSTALLATION_DATE
-    instead of being re-stamped to today on the first save.
-    """
-    new_clean = (new_val or "").strip()
-    if not new_clean:
-        return "", None
-    old_clean = (old_val or "").strip()
-    effective_prior = prior_date or fallback_date
-    if new_clean != old_clean or not effective_prior:
-        return new_clean, today
-    return new_clean, effective_prior
-
-
-def compute_serials_update(customer: dict, body: "SerialsUpdate", today: str) -> dict:
-    """Build the $set fields for a serials update.
-
-    Stamps each serial's set-date, then derives INSTALLATION_DATE as the LATEST
-    of the two set-dates — but only when BOTH serials are filled. If either is
-    blank the installation date is cleared (""), which keeps document generation
-    blocked until the installation is genuinely complete.
-    """
-    inv_val, inv_date = _stamp_serial(
-        body.INVERTER_SR_NO, customer.get("INVERTER_SR_NO"),
-        customer.get("inverter_sr_set_date"), customer.get("INSTALLATION_DATE"), today,
-    )
-    pan_val, pan_date = _stamp_serial(
-        body.PANEL_SR_NO, customer.get("PANEL_SR_NO"),
-        customer.get("panel_sr_set_date"), customer.get("INSTALLATION_DATE"), today,
-    )
-
-    # Installation date only exists once BOTH serials are filled; take the later
-    # of the two dates they were entered on.
-    if inv_val and pan_val and inv_date and pan_date:
-        installation_date = max(inv_date, pan_date)
-    else:
-        installation_date = ""
-
+def compute_serials_update(body: "SerialsUpdate") -> dict:
+    """Build the $set fields for a serials update — just the cleaned values."""
     return {
-        "INVERTER_SR_NO": inv_val,
-        "PANEL_SR_NO": pan_val,
-        "inverter_sr_set_date": inv_date,
-        "panel_sr_set_date": pan_date,
-        "INSTALLATION_DATE": installation_date,
+        "INVERTER_SR_NO": (body.INVERTER_SR_NO or "").strip(),
+        "PANEL_SR_NO": (body.PANEL_SR_NO or "").strip(),
     }
