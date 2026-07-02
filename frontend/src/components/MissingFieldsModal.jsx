@@ -1,8 +1,8 @@
 import { X, AlertTriangle, Pencil, FileWarning, Wrench } from 'lucide-react'
 
 // Fields that are no longer edited on the customer form — they're filled on the
-// Installation page (Manage → Equipment Serial Numbers). The installation date
-// is derived there from the two serials, so it can't be entered directly.
+// Installation page (Manage). The installation date is derived from the Inverter
+// and Solar Panel Installation checklist steps, so it can't be entered directly.
 const INSTALLATION_MANAGED_KEYS = new Set(['INVERTER_SR_NO', 'PANEL_SR_NO', 'INSTALLATION_DATE'])
 
 /**

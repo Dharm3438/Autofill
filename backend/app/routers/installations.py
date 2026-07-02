@@ -6,6 +6,7 @@ from ..models.installation import (
     STEP_KEYS,
     merge_steps,
     compute_overall_status,
+    compute_installation_date,
     payment_info,
     compute_serials_update,
     InstallationStepUpdate,
@@ -141,23 +142,24 @@ async def update_installation_serials(
 ):
     """Save the inverter / panel serial numbers entered after installation.
 
-    The installation date is derived here, never entered directly: it is the
-    later of the two dates the serials were filled in, and only set once BOTH
-    serials are present. Until then INSTALLATION_DATE stays blank, which keeps
-    document generation gated (Annexure-1 requires it)."""
+    These are recorded as equipment data only. The installation date is no
+    longer derived here — it comes from the checklist's Inverter / Solar Panel
+    Installation completion dates (see update_installation_step)."""
     db = get_db()
     c = await db.customers.find_one({"_id": ObjectId(customer_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    fields = compute_serials_update(c, body, date.today().isoformat())
+    fields = compute_serials_update(body)
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
         {
             "$set": {
                 **fields,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
+            },
+            # Drop the obsolete set-date fields from the old serial-driven logic.
+            "$unset": {"inverter_sr_set_date": "", "panel_sr_set_date": ""},
         },
     )
 
@@ -167,7 +169,6 @@ async def update_installation_serials(
             "customer_id": customer_id,
             "INVERTER_SR_NO": fields["INVERTER_SR_NO"],
             "PANEL_SR_NO": fields["PANEL_SR_NO"],
-            "INSTALLATION_DATE": fields["INSTALLATION_DATE"],
         },
     }
 
@@ -244,11 +245,15 @@ async def update_installation_step(
         target["performed_by"] = None
         target["notes"] = body.notes if body.notes is not None else None
 
+    # INSTALLATION_DATE tracks the Inverter / Solar Panel Installation steps:
+    # the later of their two completion dates (or whichever is present).
+    installation_date = compute_installation_date(steps)
     await db.customers.update_one(
         {"_id": ObjectId(customer_id)},
         {
             "$set": {
                 "installation_steps": _storable(steps),
+                "INSTALLATION_DATE": installation_date,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         },
@@ -256,5 +261,9 @@ async def update_installation_step(
 
     return {
         "success": True,
-        "data": {"customer_id": customer_id, **_summarize(steps)},
+        "data": {
+            "customer_id": customer_id,
+            "INSTALLATION_DATE": installation_date,
+            **_summarize(steps),
+        },
     }
