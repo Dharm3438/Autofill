@@ -34,6 +34,10 @@ async def _ensure_indexes():
         await db.signing_submissions.create_index("token", unique=True)
         await db.signing_submissions.create_index("customer_id")
         await db.customers.create_index("created_at")
+        # One base-stock document per equipment combination.
+        await db.inventory.create_index(
+            [("category", 1), ("company", 1), ("spec", 1)], unique=True
+        )
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")

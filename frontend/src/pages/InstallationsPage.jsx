@@ -4,6 +4,7 @@ import { getInstallationOverview } from '../api/installations'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
+import InventorySidebar from '../components/InventorySidebar'
 import { printInstallations } from '../utils/printInstallations'
 import toast from 'react-hot-toast'
 
@@ -54,6 +55,9 @@ export default function InstallationsPage() {
   const [loading, setLoading] = useState(false)
   const [expanded, setExpanded] = useState({})
   const [manageCustomer, setManageCustomer] = useState(null)
+  // Bumped whenever an installation change is saved, so the inventory sidebar
+  // refetches (a completed step moves a unit from "required" to "in stock used").
+  const [inventoryRefresh, setInventoryRefresh] = useState(0)
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 350)
@@ -121,7 +125,7 @@ export default function InstallationsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0e1512]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-[88rem] mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
@@ -140,6 +144,10 @@ export default function InstallationsPage() {
         <div className="mb-6">
           <InstallationStats summary={summary} />
         </div>
+
+        {/* Two-column: list (left) + inventory sidebar (right on desktop, below on mobile) */}
+        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 min-w-0">
 
         {/* Filter bar */}
         <div className="flex flex-col sm:flex-row gap-3 mb-5">
@@ -357,13 +365,23 @@ export default function InstallationsPage() {
             </ul>
           )}
         </div>
+
+        </div>{/* /list column */}
+
+        {/* Inventory sidebar — sticky on desktop, stacked below on mobile */}
+        <aside className="lg:w-80 xl:w-96 flex-shrink-0">
+          <div className="lg:sticky lg:top-8">
+            <InventorySidebar refreshSignal={inventoryRefresh} />
+          </div>
+        </aside>
+        </div>{/* /two-column */}
       </div>
 
       {manageCustomer && (
         <InstallationModal
           customer={manageCustomer}
           onClose={() => setManageCustomer(null)}
-          onChanged={fetchData}
+          onChanged={() => { fetchData(); setInventoryRefresh((n) => n + 1) }}
         />
       )}
     </div>
