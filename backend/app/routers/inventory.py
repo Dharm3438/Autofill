@@ -139,9 +139,13 @@ async def inventory_overview(_=Depends(get_current_user)):
             "shortfall": max(v["required"] - in_stock, 0),
         })
 
-    # Sort each category: shortfalls first, then by name.
+    # Sort each category by need: most-required first so the admin sees which
+    # items are in highest demand at a glance. Ties break by shortfall (the
+    # more short, the higher) and then by name for a stable order.
     for cat in grouped:
-        grouped[cat].sort(key=lambda r: (r["shortfall"] == 0, r["label"].lower()))
+        grouped[cat].sort(
+            key=lambda r: (-r["required"], -r["shortfall"], r["label"].lower())
+        )
 
     categories = [
         {"key": cat, "label": CATEGORY_LABEL[cat], "items": grouped[cat]}
