@@ -9,7 +9,7 @@ export const getInstallationOverview = (params) =>
 export const getInstallation = (customerId) =>
   api.get(`/installations/${customerId}`)
 
-// data: { status, completed_date, performed_by, notes } (all optional)
+// data: { status, completed_date, performed_by } (all optional)
 export const updateInstallationStep = (customerId, stepKey, data) =>
   api.put(`/installations/${customerId}/steps/${stepKey}`, data)
 
@@ -22,3 +22,9 @@ export const updateInstallationPayment = (customerId, data) =>
 // checklist steps, not from serials.
 export const updateInstallationSerials = (customerId, data) =>
   api.put(`/installations/${customerId}/serials`, data)
+
+// Save a step group (e.g. wiring) at once: which members are done, plus the
+// single completed date and "done by" shared by all done members.
+// data: { done_keys: string[], completed_date, performed_by }
+export const updateInstallationGroup = (customerId, groupKey, data) =>
+  api.put(`/installations/${customerId}/groups/${groupKey}`, data)

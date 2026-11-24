@@ -1,4 +1,5 @@
 import re
+from datetime import date
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
@@ -8,17 +9,20 @@ from typing import Optional, List, Literal
 # stored customer steps are merged against it on every read/write (see merge_steps).
 # `short` is the abbreviation shown inside the status circles on the
 # installation list (red = pending, green = done). Keep them unique.
+# `group` (optional) bundles steps that are done together by the same person:
+# they keep individual done/pending checkboxes but share one completed date and
+# one "done by" (see INSTALLATION_STEP_GROUPS). Grouped steps must be adjacent.
 INSTALLATION_STEPS = [
     {"key": "structure", "label": "Solar Structure", "short": "S"},
     {"key": "painting", "label": "Painting / Coating", "short": "C"},
     {"key": "cement_grouting", "label": "Cement Grouting", "short": "G"},
-    {"key": "wiring", "label": "Solar Wiring", "short": "W"},
-    {"key": "earthing_la", "label": "Earthing + LA", "short": "EL"},
-    {"key": "acdb", "label": "ACDB Installation", "short": "A"},
-    {"key": "dcdb", "label": "DCDB Installation", "short": "D"},
+    {"key": "wiring", "label": "Solar Wiring", "short": "W", "group": "wiring"},
+    {"key": "earthing_la", "label": "Earthing + LA", "short": "EL", "group": "wiring"},
+    {"key": "acdb", "label": "ACDB Installation", "short": "A", "group": "wiring"},
+    {"key": "dcdb", "label": "DCDB Installation", "short": "D", "group": "wiring"},
+    {"key": "generation_meter", "label": "Generation Meter Installation", "short": "M", "group": "wiring"},
     {"key": "inverter", "label": "Inverter Installation", "short": "I"},
     {"key": "panels", "label": "Solar Panel Installation", "short": "P"},
-    {"key": "generation_meter", "label": "Generation Meter Installation", "short": "M"},
     {"key": "dcr_ready", "label": "DCR Ready", "short": "DR"},
     {"key": "document_upload", "label": "Documents Uploaded", "short": "DU"},
     {"key": "net_meter", "label": "Net Meter Installation", "short": "N"},
@@ -27,6 +31,17 @@ INSTALLATION_STEPS = [
 
 STEP_KEYS = {s["key"] for s in INSTALLATION_STEPS}
 STEP_LABELS = {s["key"]: s["label"] for s in INSTALLATION_STEPS}
+
+INSTALLATION_STEP_GROUPS = [
+    {"key": "wiring", "label": "Wiring & Electrical"},
+]
+GROUP_KEYS = {g["key"] for g in INSTALLATION_STEP_GROUPS}
+GROUP_LABELS = {g["key"]: g["label"] for g in INSTALLATION_STEP_GROUPS}
+
+
+def group_step_keys(group_key: str) -> List[str]:
+    """Member step keys of a group, in canonical order."""
+    return [s["key"] for s in INSTALLATION_STEPS if s.get("group") == group_key]
 
 
 def default_installation_steps() -> List[dict]:
@@ -37,7 +52,6 @@ def default_installation_steps() -> List[dict]:
             "status": "pending",
             "completed_date": None,
             "performed_by": None,
-            "notes": None,
         }
         for s in INSTALLATION_STEPS
     ]
@@ -46,7 +60,7 @@ def default_installation_steps() -> List[dict]:
 def merge_steps(stored: Optional[list]) -> List[dict]:
     """
     Reconcile a customer's stored steps against the current INSTALLATION_STEPS:
-      • keep existing data (status/date/person/notes) keyed by step key
+      • keep existing data (status/date/person) keyed by step key
       • add any new keys as pending
       • drop unknown/removed keys
       • preserve canonical order
@@ -62,10 +76,11 @@ def merge_steps(stored: Optional[list]) -> List[dict]:
                 "key": s["key"],
                 "label": s["label"],
                 "short": s["short"],
+                "group": s.get("group"),
+                "group_label": GROUP_LABELS.get(s.get("group")),
                 "status": existing.get("status", "pending"),
                 "completed_date": existing.get("completed_date"),
                 "performed_by": existing.get("performed_by"),
-                "notes": existing.get("notes"),
             }
         )
     return merged
@@ -108,7 +123,35 @@ class InstallationStepUpdate(BaseModel):
     status: Optional[Literal["pending", "done"]] = None
     completed_date: Optional[str] = None  # "YYYY-MM-DD"
     performed_by: Optional[str] = None
-    notes: Optional[str] = None
+
+
+class InstallationGroupUpdate(BaseModel):
+    """Save a whole step group at once: which members are done, plus the one
+    completed date and "done by" shared by every done member."""
+    done_keys: List[str] = Field(default_factory=list)
+    completed_date: Optional[str] = None  # "YYYY-MM-DD"
+    performed_by: Optional[str] = None
+
+
+def apply_group_update(steps: List[dict], group_key: str, body: "InstallationGroupUpdate") -> None:
+    """Mutate merged `steps` in place for a group save.
+
+    Done members all get the same date (default today) and person; members not
+    in `done_keys` go back to pending with their details cleared."""
+    members = set(group_step_keys(group_key))
+    done = set(body.done_keys) & members
+    shared_date = body.completed_date or date.today().isoformat()
+    for s in steps:
+        if s["key"] not in members:
+            continue
+        if s["key"] in done:
+            s["status"] = "done"
+            s["completed_date"] = shared_date
+            s["performed_by"] = body.performed_by or None
+        else:
+            s["status"] = "pending"
+            s["completed_date"] = None
+            s["performed_by"] = None
 
 
 def parse_amount(value) -> float:

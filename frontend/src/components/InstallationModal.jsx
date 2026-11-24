@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Check, Loader2, Calendar, User, Save, IndianRupee, Plus, Trash2, Hash, CalendarCheck } from 'lucide-react'
-import { getInstallation, updateInstallationStep, updateInstallationPayment, updateInstallationSerials } from '../api/installations'
+import { getInstallation, updateInstallationStep, updateInstallationGroup, updateInstallationPayment, updateInstallationSerials } from '../api/installations'
 import toast from 'react-hot-toast'
 
 // Display a stored ISO date (YYYY-MM-DD) as DD-MM-YYYY for the admin.
@@ -28,9 +28,88 @@ const serializeRows = (rows) =>
       .map((r) => ({ amount: parseFloat(r.amount) || 0, date: r.date || null }))
   )
 
+const TEAM = [
+  'Manoj Agone', 'Swapnil Jane', 'Vaibhav Gaikwad', 'Firoz Bhai', 'Yogesh Agone',
+  'Pranav', 'Sidhesh', 'Kalpesh', 'Hussein', 'Aavesh', 'Anil Bachav',
+  'Sonu Jadhav', 'Satish Khairnar', 'Kiran Chavan',
+]
+
+const today = () => new Date().toISOString().slice(0, 10)
+
+// Shorter chip labels inside a group ("ACDB Installation" → "ACDB").
+const chipLabel = (label) => label.replace(/ Installation$/, '')
+
+// Steps → render items: ungrouped steps stay single, consecutive steps sharing
+// a `group` become one group item (they share a date and "done by").
+function toItems(steps) {
+  const items = []
+  steps.forEach((step) => {
+    if (!step.group) {
+      items.push({ type: 'step', key: step.key, step })
+      return
+    }
+    const last = items[items.length - 1]
+    if (last?.type === 'group' && last.key === step.group) last.steps.push(step)
+    else items.push({ type: 'group', key: step.group, label: step.group_label || step.group, steps: [step] })
+  })
+  return items
+}
+
+// A group's shared date / person, read from its first done member.
+function groupShared(members) {
+  const d = members.find((m) => m.status === 'done')
+  return { completed_date: d?.completed_date || '', performed_by: d?.performed_by || '' }
+}
+
+function DoneDetails({ date, person, onDate, onPerson }) {
+  return (
+    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <label className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
+        <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <input
+          type="date"
+          value={date || ''}
+          onChange={(ev) => onDate(ev.target.value)}
+          className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none"
+        />
+      </label>
+      <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
+        <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+        <select
+          value={person || ''}
+          onChange={(ev) => onPerson(ev.target.value)}
+          className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
+        >
+          <option value="">Done by (select)</option>
+          {TEAM.map((name) => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+          {person && !TEAM.includes(person) && <option value={person}>{person}</option>}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+function SaveButton({ onClick, saving }) {
+  return (
+    <div className="mt-3">
+      <button
+        onClick={onClick}
+        disabled={saving}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-50 transition-colors"
+      >
+        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+        Save
+      </button>
+    </div>
+  )
+}
+
 export default function InstallationModal({ customer, onClose, onChanged }) {
   const [steps, setSteps] = useState([])      // server truth (with labels)
-  const [edits, setEdits] = useState({})      // key -> { status, completed_date, performed_by, notes }
+  const [edits, setEdits] = useState({})      // step key -> { status, completed_date, performed_by }
+  const [groupEdits, setGroupEdits] = useState({})  // group key -> { completed_date, performed_by } (shared)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState({})    // key -> bool
   const [pay, setPay] = useState({ total_payment: 0, received_payment: 0, remaining_payment: 0 })  // server truth
@@ -49,17 +128,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
       const res = await getInstallation(customer.id)
       const data = res.data.data
       const s = data.steps
-      setSteps(s)
-      const e = {}
-      s.forEach((step) => {
-        e[step.key] = {
-          status: step.status,
-          completed_date: step.completed_date || '',
-          performed_by: step.performed_by || '',
-          notes: step.notes || '',
-        }
-      })
-      setEdits(e)
+      syncSteps(s)
       setPay({
         total_payment: data.total_payment || 0,
         received_payment: data.received_payment || 0,
@@ -92,6 +161,70 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
     onClose()
   }
 
+  // Reset all checklist edit state from server steps.
+  function syncSteps(s) {
+    setSteps(s)
+    const e = {}
+    s.forEach((step) => {
+      e[step.key] = {
+        status: step.status,
+        completed_date: step.completed_date || '',
+        performed_by: step.performed_by || '',
+      }
+    })
+    setEdits(e)
+    const g = {}
+    toItems(s).forEach((it) => {
+      if (it.type === 'group') g[it.key] = groupShared(it.steps)
+    })
+    setGroupEdits(g)
+  }
+
+  function patchGroup(gkey, field, value) {
+    setGroupEdits((prev) => ({ ...prev, [gkey]: { ...prev[gkey], [field]: value } }))
+  }
+
+  function toggleGroupMember(gkey, key) {
+    const markingDone = edits[key]?.status !== 'done'
+    setEdits((prev) => ({
+      ...prev,
+      [key]: { ...prev[key], status: markingDone ? 'done' : 'pending' },
+    }))
+    // Prefill today's date when the first member is ticked.
+    if (markingDone && !groupEdits[gkey]?.completed_date) patchGroup(gkey, 'completed_date', today())
+  }
+
+  async function saveGroup(item) {
+    const g = groupEdits[item.key] || {}
+    setSaving((prev) => ({ ...prev, [item.key]: true }))
+    try {
+      const res = await updateInstallationGroup(customer.id, item.key, {
+        done_keys: item.steps.filter((m) => edits[m.key]?.status === 'done').map((m) => m.key),
+        completed_date: g.completed_date || null,
+        performed_by: g.performed_by || null,
+      })
+      changedRef.current = true
+      setInstallationDate(res.data.data.INSTALLATION_DATE || '')
+      // Other cards may hold unsaved edits; keep them, refresh only this group.
+      const fresh = res.data.data.steps
+      setSteps(fresh)
+      const members = fresh.filter((st) => st.group === item.key)
+      setEdits((prev) => {
+        const next = { ...prev }
+        members.forEach((m) => {
+          next[m.key] = { status: m.status, completed_date: m.completed_date || '', performed_by: m.performed_by || '' }
+        })
+        return next
+      })
+      setGroupEdits((prev) => ({ ...prev, [item.key]: groupShared(members) }))
+      toast.success(`${item.label} updated`)
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to update steps')
+    } finally {
+      setSaving((prev) => ({ ...prev, [item.key]: false }))
+    }
+  }
+
   function patch(key, field, value) {
     setEdits((prev) => ({ ...prev, [key]: { ...prev[key], [field]: value } }))
   }
@@ -107,9 +240,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
           status: nextStatus,
           // Prefill today's date when marking done with no date yet.
           completed_date:
-            nextStatus === 'done' && !cur.completed_date
-              ? new Date().toISOString().slice(0, 10)
-              : cur.completed_date,
+            nextStatus === 'done' && !cur.completed_date ? today() : cur.completed_date,
         },
       }
     })
@@ -123,7 +254,6 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
         status: e.status,
         completed_date: e.completed_date || null,
         performed_by: e.performed_by || null,
-        notes: e.notes || null,
       })
       changedRef.current = true
       const fresh = res.data.data.steps
@@ -140,7 +270,6 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
             status: updated.status,
             completed_date: updated.completed_date || '',
             performed_by: updated.performed_by || '',
-            notes: updated.notes || '',
           },
         }))
       }
@@ -153,7 +282,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   }
 
   function addPayRow() {
-    setPayRows((rows) => [...rows, { amount: '', date: new Date().toISOString().slice(0, 10) }])
+    setPayRows((rows) => [...rows, { amount: '', date: today() }])
   }
 
   function updatePayRow(i, field, value) {
@@ -221,6 +350,108 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   const payDirty = serializeRows(payRows) !== savedRowsRef.current
   const liveReceived = payRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
   const remaining = Math.max(pay.total_payment - liveReceived, 0)
+
+  function renderStep(step) {
+    const e = edits[step.key] || {}
+    const done = e.status === 'done'
+    const dirty =
+      e.status !== step.status ||
+      (e.completed_date || '') !== (step.completed_date || '') ||
+      (e.performed_by || '') !== (step.performed_by || '')
+    return (
+      <div
+        key={step.key}
+        className={`rounded-xl border p-4 transition-colors ${done ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/10' : 'border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5'}`}
+      >
+        <div className="flex items-start gap-3">
+          <button
+            onClick={() => toggleDone(step.key)}
+            title={done ? 'Mark as pending' : 'Mark as done'}
+            className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${done ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-400 dark:hover:bg-white/20'}`}
+          >
+            <Check className="w-5 h-5" />
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{step.label}</p>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
+                {done ? 'Done' : 'Pending'}
+              </span>
+            </div>
+
+            {done && (
+              <DoneDetails
+                date={e.completed_date}
+                person={e.performed_by}
+                onDate={(v) => patch(step.key, 'completed_date', v)}
+                onPerson={(v) => patch(step.key, 'performed_by', v)}
+              />
+            )}
+
+            {dirty && <SaveButton onClick={() => save(step.key)} saving={!!saving[step.key]} />}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  function renderGroup(item) {
+    const g = groupEdits[item.key] || {}
+    const doneMembers = item.steps.filter((m) => edits[m.key]?.status === 'done')
+    const allDone = doneMembers.length === item.steps.length
+    const anyDone = doneMembers.length > 0
+    const saved = groupShared(item.steps)
+    const dirty =
+      item.steps.some((m) => (edits[m.key]?.status || m.status) !== m.status) ||
+      (anyDone &&
+        ((g.completed_date || '') !== saved.completed_date ||
+          (g.performed_by || '') !== saved.performed_by))
+    return (
+      <div
+        key={`group-${item.key}`}
+        className={`rounded-xl border p-4 transition-colors ${allDone ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/10' : 'border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5'}`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{item.label}</p>
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${allDone ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : anyDone ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
+            {allDone ? 'Done' : `${doneMembers.length}/${item.steps.length} done`}
+          </span>
+        </div>
+
+        {/* One checkbox per step, laid out horizontally */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {item.steps.map((m) => {
+            const done = edits[m.key]?.status === 'done'
+            return (
+              <button
+                key={m.key}
+                onClick={() => toggleGroupMember(item.key, m.key)}
+                title={done ? 'Mark as pending' : 'Mark as done'}
+                className={`inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${done ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-200' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-100 dark:border-white/10 dark:bg-[#16201b] dark:text-gray-300 dark:hover:bg-white/10'}`}
+              >
+                <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${done ? 'bg-emerald-500 text-white' : 'border border-gray-300 dark:border-white/20'}`}>
+                  {done && <Check className="w-3 h-3" />}
+                </span>
+                {chipLabel(m.label)}
+              </button>
+            )
+          })}
+        </div>
+
+        {anyDone && (
+          <DoneDetails
+            date={g.completed_date}
+            person={g.performed_by}
+            onDate={(v) => patchGroup(item.key, 'completed_date', v)}
+            onPerson={(v) => patchGroup(item.key, 'performed_by', v)}
+          />
+        )}
+
+        {dirty && <SaveButton onClick={() => saveGroup(item)} saving={!!saving[item.key]} />}
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={handleClose}>
@@ -410,99 +641,9 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
               <Loader2 className="w-6 h-6 animate-spin" />
             </div>
           ) : (
-            steps.map((step) => {
-              const e = edits[step.key] || {}
-              const done = e.status === 'done'
-              const isSaving = !!saving[step.key]
-              const dirty =
-                e.status !== step.status ||
-                (e.completed_date || '') !== (step.completed_date || '') ||
-                (e.performed_by || '') !== (step.performed_by || '') ||
-                (e.notes || '') !== (step.notes || '')
-              return (
-                <div
-                  key={step.key}
-                  className={`rounded-xl border p-4 transition-colors ${done ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/10' : 'border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5'}`}
-                >
-                  <div className="flex items-start gap-3">
-                    <button
-                      onClick={() => toggleDone(step.key)}
-                      title={done ? 'Mark as pending' : 'Mark as done'}
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${done ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-white/10 dark:text-gray-400 dark:hover:bg-white/20'}`}
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{step.label}</p>
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${done ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/10 dark:text-gray-400'}`}>
-                          {done ? 'Done' : 'Pending'}
-                        </span>
-                      </div>
-
-                      {done && (
-                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <label className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
-                            <Calendar className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            <input
-                              type="date"
-                              value={e.completed_date || ''}
-                              onChange={(ev) => patch(step.key, 'completed_date', ev.target.value)}
-                              className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none"
-                            />
-                          </label>
-                          <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b]">
-                            <User className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                            <select
-                              value={e.performed_by || ''}
-                              onChange={(ev) => patch(step.key, 'performed_by', ev.target.value)}
-                              className="w-full bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none cursor-pointer"
-                            >
-                              <option value="">Done by (select)</option>
-                              <option value="Manoj Agone">Manoj Agone</option>
-                              <option value="Swapnil Jane">Swapnil Jane</option>
-                              <option value="Vaibhav Gaikwad">Vaibhav Gaikwad</option>
-                              <option value="Firoz Bhai">Firoz Bhai</option>
-                              <option value="Yogesh Agone">Yogesh Agone</option>
-                              <option value="Pranav">Pranav</option>
-                              <option value="Sidhesh">Sidhesh</option>
-                              <option value="Kalpesh">Kalpesh</option>
-                              <option value="Hussein">Hussein</option>
-                              <option value="Aavesh">Aavesh</option>
-                              <option value="Anil Bachav">Anil Bachav</option>
-                              <option value="Sonu Jadhav">Sonu Jadhav</option>
-                              <option value="Satish Khairnar">Satish Khairnar</option>
-                              <option value="Kiran Chavan">Kiran Chavan</option>
-                            </select>
-                          </div>
-                          <input
-                            type="text"
-                            placeholder="Notes (optional)"
-                            value={e.notes || ''}
-                            onChange={(ev) => patch(step.key, 'notes', ev.target.value)}
-                            className="sm:col-span-2 px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/30"
-                          />
-                        </div>
-                      )}
-
-                      {dirty && (
-                        <div className="mt-3">
-                          <button
-                            onClick={() => save(step.key)}
-                            disabled={isSaving}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-50 transition-colors"
-                          >
-                            {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                            Save
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )
-            })
+            toItems(steps).map((item) =>
+              item.type === 'group' ? renderGroup(item) : renderStep(item.step)
+            )
           )}
         </div>
 
