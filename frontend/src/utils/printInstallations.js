@@ -50,7 +50,10 @@ function paymentsCell(row) {
 /**
  * Open a print window for the given installation rows.
  * @param {Array} rows   filtered + sorted customer rows (as shown in the UI)
- * @param {Object} opts  { filters: [{label, value}], generatedAt: Date }
+ * @param {Object} opts  { filters: [{label, value}], generatedAt: Date, win: Window }
+ *   `win` — a window already opened by the caller. Pass one when the rows are
+ *   fetched after the click: browsers block window.open() once an await has
+ *   passed, so the caller opens it first (see openPrintWindow) and fills it here.
  */
 export function printInstallations(rows, opts = {}) {
   const filters = (opts.filters || []).filter((f) => f.value)
@@ -188,10 +191,20 @@ export function printInstallations(rows, opts = {}) {
 </body>
 </html>`
 
-  const win = window.open('', '_blank')
-  if (!win) return false // popup blocked
+  const win = opts.win || window.open('', '_blank')
+  if (!win || win.closed) return false // popup blocked, or closed while loading
   win.document.open()
   win.document.write(html)
   win.document.close()
   return true
+}
+
+// Open a blank print window synchronously (inside the click handler) with a
+// "Preparing…" note, so it isn't treated as an unrequested popup. Returns null
+// if the browser blocked it.
+export function openPrintWindow() {
+  const win = window.open('', '_blank')
+  if (!win) return null
+  win.document.write('<p style="font-family:sans-serif;padding:24px;color:#555">Preparing report…</p>')
+  return win
 }
