@@ -32,6 +32,9 @@ const SLOTS = [
 
 export default function UploadsModal({ customer, onClose, onChanged }) {
   const [status, setStatus] = useState({ installation: false, np_stamp: false, dcr: false })
+  // False until the first status load succeeds — until then `status` is a
+  // placeholder and must not be reported to the list.
+  const [loaded, setLoaded] = useState(false)
   // Map of `${kind}:${action}` → true; each slot/action tracked independently
   const [busy, setBusy] = useState({})
   const fileRefs = useRef({})
@@ -42,7 +45,10 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     const id = ++refreshIdRef.current
     try {
       const res = await getUploadStatus(customer.id)
-      if (id === refreshIdRef.current) setStatus(res.data.data)
+      if (id === refreshIdRef.current) {
+        setStatus(res.data.data)
+        setLoaded(true)
+      }
     } catch {
       if (id === refreshIdRef.current) toast.error('Failed to load upload status')
     }
@@ -54,9 +60,13 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
   }, [customer.id])
 
   function handleClose() {
-    // Notify the parent once, on close, so the customer list / Send-link gating
-    // refreshes without unmounting this modal mid-upload.
-    onChanged?.()
+    // On close, hand the parent the upload flags we already hold so it can
+    // update this customer's row (Send-link gating) without refetching the
+    // list — and only when they differ from what the row shows. Just looking
+    // at the uploads costs no list request.
+    const before = customer.uploads || {}
+    const changed = loaded && Object.keys(status).some(k => Boolean(status[k]) !== Boolean(before[k]))
+    if (changed) onChanged?.(status)
     onClose()
   }
 

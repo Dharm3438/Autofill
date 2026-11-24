@@ -36,7 +36,11 @@ const STATUS_LABELS = {
   signed:     'Signed',
 }
 
-export default function CustomerTable({ customers, onEdit, onRefresh }) {
+// How often to ask whether document generation has finished. Generation takes
+// a while; asking more often only adds load on the server.
+const DOC_STATUS_POLL_MS = 5000
+
+export default function CustomerTable({ customers, onEdit, onRefresh, onRowReplace, onRowPatch }) {
   const [expanded, setExpanded]   = useState(null)
   const [loadingId, setLoadingId] = useState(null)
   const [uploadsFor, setUploadsFor] = useState(null)
@@ -55,38 +59,55 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   const hasDocActions = showDocs || canUpload || canSign
   const colCount = 4 + (showDocs ? 2 : 0)
 
+  // Latest row-patch callback for the polling intervals, so they never call a
+  // stale one and the polling effect doesn't restart when it changes.
+  const onRowPatchRef = useRef(onRowPatch)
+  useEffect(() => { onRowPatchRef.current = onRowPatch }, [onRowPatch])
+
+  // Poll each customer whose documents are generating until they finish, then
+  // update just that row from the status response — no list refetch. One
+  // interval per customer: started when a row turns 'generating', stopped when
+  // it stops (or leaves the page), and all stopped when the table unmounts.
   useEffect(() => {
-    const generating = customers.filter(c => c.doc_status === 'generating')
+    // The status endpoint needs the documents permission; without it every
+    // poll would only be rejected.
+    const generating = showDocs ? customers.filter(c => c.doc_status === 'generating') : []
+    const generatingIds = new Set(generating.map(c => c.id))
+
+    Object.keys(pollingRef.current).forEach(id => {
+      if (!generatingIds.has(id)) {
+        clearInterval(pollingRef.current[id])
+        delete pollingRef.current[id]
+      }
+    })
+
     generating.forEach(c => {
       if (pollingRef.current[c.id]) return
+      const stop = () => {
+        clearInterval(pollingRef.current[c.id])
+        delete pollingRef.current[c.id]
+      }
       pollingRef.current[c.id] = setInterval(async () => {
         try {
           const res = await getDocStatus(c.id)
           const status = res.data.data.doc_status
           if (status !== 'generating') {
-            clearInterval(pollingRef.current[c.id])
-            delete pollingRef.current[c.id]
-            onRefresh()
+            stop()
+            onRowPatchRef.current(c.id, { doc_status: status })
             if (status === 'complete') toast.success(`Docs ready for ${c.CONSUMER_NAME}`)
             if (status === 'failed')   toast.error(`Doc generation failed for ${c.CONSUMER_NAME}`)
           }
         } catch {
-          clearInterval(pollingRef.current[c.id])
-          delete pollingRef.current[c.id]
+          stop()
         }
-      }, 3000)
+      }, DOC_STATUS_POLL_MS)
     })
+  }, [customers, showDocs])
 
-    return () => {
-      const generatingIds = new Set(generating.map(c => c.id))
-      Object.keys(pollingRef.current).forEach(id => {
-        if (!generatingIds.has(id)) {
-          clearInterval(pollingRef.current[id])
-          delete pollingRef.current[id]
-        }
-      })
-    }
-  }, [customers, onRefresh])
+  useEffect(() => () => {
+    Object.values(pollingRef.current).forEach(clearInterval)
+    pollingRef.current = {}
+  }, [])
 
   async function handleDelete(customer) {
     if (!confirm(`Delete ${customer.CONSUMER_NAME}? This cannot be undone.`)) return
@@ -115,7 +136,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           { icon: '⚠️', duration: 7000 },
         )
       }
-      onRefresh()
+      // Show it as generating straight away; the poller above takes it from here.
+      onRowPatch(customer.id, { doc_status: 'generating' })
     } catch (err) {
       const detail = err.response?.data?.detail
       // 422 carries a structured report of which required fields are missing —
@@ -139,7 +161,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
     try {
       await sendSigningLink(customer.id)
       toast.success('Signing link sent to customer')
-      onRefresh()
+      onRowPatch(customer.id, { signing_status: 'sent' })
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Failed to send link')
     } finally {
@@ -435,7 +457,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         <UploadsModal
           customer={uploadsFor}
           onClose={() => setUploadsFor(null)}
-          onChanged={onRefresh}
+          onChanged={(uploads) => onRowPatch(uploadsFor.id, { uploads })}
         />
       )}
 
@@ -454,6 +476,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
             try {
               const res = await updateCustomer(c.id, data)
               setMissingFor(null)
+              // Show the saved values in the row without refetching the list.
+              if (res.data?.data) onRowReplace(res.data.data)
               // Retry generation. If other fields are still missing this
               // reopens the popup listing only what's left.
               await handleGenerateDocs(res.data?.data || c)
