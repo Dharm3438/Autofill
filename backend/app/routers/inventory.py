@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from datetime import datetime, timezone
 
 from ..core.database import get_db
-from ..core.deps import get_current_user
+from ..core.permissions import P, require
 from ..models.installation import merge_steps
 from ..models.inventory import (
     CATEGORIES,
@@ -80,7 +80,7 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
 
 
 @router.get("/overview")
-async def inventory_overview(_=Depends(get_current_user)):
+async def inventory_overview(_=Depends(require(P.INSTALLATIONS_READ))):
     """Aggregate required vs. available stock for every equipment combination."""
     db = get_db()
 
@@ -164,7 +164,7 @@ async def inventory_overview(_=Depends(get_current_user)):
 
 
 @router.put("/stock")
-async def set_stock(body: StockUpdate, _=Depends(get_current_user)):
+async def set_stock(body: StockUpdate, _=Depends(require(P.INSTALLATIONS_WRITE))):
     """Upsert the base on-hand stock for one equipment combination."""
     db = get_db()
     key = stock_key(body.category, body.company, body.spec)

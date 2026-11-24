@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from bson import ObjectId
 
 from ..core.database import get_db
-from ..core.deps import get_current_user
+from ..core.permissions import P, require, parse_object_id
 from ..services import storage
 from ..services.doc_generation import (
     INSTALLATION_UPLOAD_KEY,
@@ -41,7 +41,7 @@ MAX_BYTES = 15 * 1024 * 1024  # 15 MB per upload
 
 
 async def _get_customer(db, customer_id: str) -> dict:
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     return customer
@@ -76,25 +76,25 @@ def _ensure_pdf(raw: bytes):
 
 async def _set_upload_flag(db, customer_id: str, flag: str, value: bool):
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {"$set": {f"uploads.{flag}": value}},
     )
 
 
 @router.get("/{customer_id}")
-async def get_upload_status(customer_id: str, _=Depends(get_current_user)):
+async def get_upload_status(customer_id: str, _=Depends(require(P.UPLOADS_MANAGE))):
     """Report which uploads actually exist in R2, and re-sync the Mongo flags
     so the customer list / Send-link gating can never drift from reality."""
     db = get_db()
     await _get_customer(db, customer_id)
     prefix = storage.customer_prefix(customer_id)
     status = await asyncio.to_thread(uploaded_docs_present, prefix)
-    await db.customers.update_one({"_id": ObjectId(customer_id)}, {"$set": {"uploads": status}})
+    await db.customers.update_one({"_id": parse_object_id(customer_id)}, {"$set": {"uploads": status}})
     return {"success": True, "data": status}
 
 
 @router.post("/{customer_id}/installation")
-async def upload_installation(customer_id: str, file: UploadFile = File(...), _=Depends(get_current_user)):
+async def upload_installation(customer_id: str, file: UploadFile = File(...), _=Depends(require(P.UPLOADS_MANAGE))):
     db = get_db()
     await _get_customer(db, customer_id)
     raw = await _read_limited(file)
@@ -107,7 +107,7 @@ async def upload_installation(customer_id: str, file: UploadFile = File(...), _=
 
 
 @router.post("/{customer_id}/np-stamp")
-async def upload_np_stamp(customer_id: str, file: UploadFile = File(...), _=Depends(get_current_user)):
+async def upload_np_stamp(customer_id: str, file: UploadFile = File(...), _=Depends(require(P.UPLOADS_MANAGE))):
     db = get_db()
     await _get_customer(db, customer_id)
     raw = await _read_limited(file)
@@ -120,7 +120,7 @@ async def upload_np_stamp(customer_id: str, file: UploadFile = File(...), _=Depe
 
 
 @router.post("/{customer_id}/dcr")
-async def upload_dcr(customer_id: str, file: UploadFile = File(...), _=Depends(get_current_user)):
+async def upload_dcr(customer_id: str, file: UploadFile = File(...), _=Depends(require(P.UPLOADS_MANAGE))):
     db = get_db()
     await _get_customer(db, customer_id)
     raw = await _read_limited(file)
@@ -133,7 +133,7 @@ async def upload_dcr(customer_id: str, file: UploadFile = File(...), _=Depends(g
 
 
 @router.get("/{customer_id}/{kind}")
-async def preview_upload(customer_id: str, kind: str, _=Depends(get_current_user)):
+async def preview_upload(customer_id: str, kind: str, _=Depends(require(P.UPLOADS_MANAGE))):
     if kind not in UPLOAD_KINDS:
         raise HTTPException(status_code=404, detail="Unknown upload type")
     key_suffix, _flag = UPLOAD_KINDS[kind]
@@ -149,7 +149,7 @@ async def preview_upload(customer_id: str, kind: str, _=Depends(get_current_user
 
 
 @router.delete("/{customer_id}/{kind}")
-async def delete_upload(customer_id: str, kind: str, _=Depends(get_current_user)):
+async def delete_upload(customer_id: str, kind: str, _=Depends(require(P.UPLOADS_MANAGE))):
     if kind not in UPLOAD_KINDS:
         raise HTTPException(status_code=404, detail="Unknown upload type")
     db = get_db()

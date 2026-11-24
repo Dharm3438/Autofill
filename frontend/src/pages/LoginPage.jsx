@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { login, register } from '../api/auth'
+import { homePath } from '../utils/access'
 import { Sun, Lock, Mail, User } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -36,7 +37,7 @@ export default function LoginPage() {
         res = await register(name.trim(), email, password)
       }
       setUser(res.data.data)
-      navigate('/dashboard')
+      navigate(homePath(res.data.data))
     } catch (err) {
       toast.error(err.response?.data?.detail || (mode === 'login' ? 'Invalid credentials' : 'Registration failed'))
     } finally {

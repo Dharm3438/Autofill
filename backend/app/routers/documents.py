@@ -3,7 +3,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from ..core.database import get_db
-from ..core.deps import get_current_user
+from ..core.permissions import P, require, parse_object_id
 from ..services import storage
 from bson import ObjectId
 
@@ -23,10 +23,10 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 async def generate_documents(
     customer_id: str,
     background_tasks: BackgroundTasks,
-    _=Depends(get_current_user),
+    _=Depends(require(P.DOCUMENTS_MANAGE)),
 ):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -47,7 +47,7 @@ async def generate_documents(
         )
 
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {"$set": {"doc_status": "generating"}}
     )
 
@@ -71,23 +71,23 @@ async def _generate_task(customer_id: str, customer: dict):
     try:
         prefix = await generate_for_customer(customer)
         await db.customers.update_one(
-            {"_id": ObjectId(customer_id)},
+            {"_id": parse_object_id(customer_id)},
             {"$set": {"doc_status": "complete", "r2_prefix": prefix}}
         )
         print(f"Docs complete for {customer_id}")
     except Exception as e:
         print(f"Doc generation failed for {customer_id}: {e}")
         await db.customers.update_one(
-            {"_id": ObjectId(customer_id)},
+            {"_id": parse_object_id(customer_id)},
             {"$set": {"doc_status": "failed"}}
         )
 
 
 @router.get("/status/{customer_id}")
-async def get_doc_status(customer_id: str, _=Depends(get_current_user)):
+async def get_doc_status(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
     db = get_db()
     customer = await db.customers.find_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {"doc_status": 1, "r2_prefix": 1}
     )
     if not customer:
@@ -99,9 +99,9 @@ async def get_doc_status(customer_id: str, _=Depends(get_current_user)):
 
 
 @router.get("/list/{customer_id}")
-async def list_documents(customer_id: str, _=Depends(get_current_user)):
+async def list_documents(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)}, {"r2_prefix": 1})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)}, {"r2_prefix": 1})
     if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
@@ -111,9 +111,9 @@ async def list_documents(customer_id: str, _=Depends(get_current_user)):
 
 
 @router.get("/download/{customer_id}/np-first-page")
-async def download_np_first_page(customer_id: str, _=Depends(get_current_user)):
+async def download_np_first_page(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 
@@ -131,9 +131,9 @@ async def download_np_first_page(customer_id: str, _=Depends(get_current_user)):
 
 
 @router.get("/download/{customer_id}/zip")
-async def download_zip(customer_id: str, _=Depends(get_current_user)):
+async def download_zip(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer or not customer.get("r2_prefix"):
         raise HTTPException(status_code=404, detail="No documents found")
 

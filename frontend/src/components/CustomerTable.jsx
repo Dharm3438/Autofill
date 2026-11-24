@@ -5,6 +5,8 @@ import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFir
 import UploadsModal from './UploadsModal'
 import MissingFieldsModal from './MissingFieldsModal'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
+import { PERM } from '../utils/access'
 
 // The stamped NP first page is the only upload required before the signing
 // link can be sent; the installation photo and DCR are optional.
@@ -41,6 +43,17 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   // When generation is blocked by missing fields, hold { customer, report }.
   const [missingFor, setMissingFor] = useState(null)
   const pollingRef = useRef({})
+
+  // What this user may do. Buttons they can't use aren't rendered at all; the
+  // backend rejects the calls regardless.
+  const { can } = useAuth()
+  const showDocs  = can(PERM.DOCUMENTS_MANAGE)
+  const canUpload = can(PERM.UPLOADS_MANAGE)
+  const canSign   = can(PERM.SIGNING_SEND)
+  const canEdit   = can(PERM.CUSTOMERS_UPDATE)
+  const canDelete = can(PERM.CUSTOMERS_DELETE)
+  const hasDocActions = showDocs || canUpload || canSign
+  const colCount = 4 + (showDocs ? 2 : 0)
 
   useEffect(() => {
     const generating = customers.filter(c => c.doc_status === 'generating')
@@ -204,6 +217,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   function actions(c) {
     return (
       <div className="flex items-center gap-0.5">
+        {showDocs && (<>
         <button
           title="Print Customer Details"
           onClick={() => handlePrintDetails(c)}
@@ -230,7 +244,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         >
           {loadingId === `print-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
         </button>
+        </>)}
 
+        {canUpload && (
         <button
           title="Upload Documents (Installation Photo, Stamped NP Page, DCR)"
           onClick={() => setUploadsFor(c)}
@@ -241,7 +257,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
             <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500" />
           )}
         </button>
+        )}
 
+        {canSign && (
         <button
           title={canSendLink(c) ? 'Send Signing Link' : 'Upload the Stamped NP first page before sending'}
           onClick={() => handleSendLink(c)}
@@ -250,7 +268,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         >
           {loadingId === `send-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </button>
+        )}
 
+        {showDocs && (
         <button
           title="Download All Documents"
           onClick={() => handleDownload(c)}
@@ -259,9 +279,13 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         >
           {loadingId === `dl-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
         </button>
+        )}
 
-        <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1" />
+        {hasDocActions && (canEdit || canDelete) && (
+          <div className="w-px h-4 bg-gray-200 dark:bg-white/10 mx-1" />
+        )}
 
+        {canEdit && (
         <button
           title="Edit"
           onClick={() => onEdit(c)}
@@ -269,7 +293,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         >
           <Pencil className="w-4 h-4" />
         </button>
+        )}
 
+        {canDelete && (
         <button
           title="Delete"
           onClick={() => handleDelete(c)}
@@ -277,6 +303,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
         >
           <Trash2 className="w-4 h-4" />
         </button>
+        )}
       </div>
     )
   }
@@ -317,8 +344,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subsidy App No</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Docs</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Signing</th>
+              {showDocs && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Docs</th>}
+              {showDocs && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Signing</th>}
               <th className="text-right px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
@@ -343,8 +370,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
                   </td>
                   <td className="px-5 py-4 text-gray-500 dark:text-gray-400 font-mono text-xs">{c.CONSUMER_APP_NO || '—'}</td>
                   <td className="px-5 py-4 text-gray-600 dark:text-gray-300">{c.CONSUMER_PHONE}</td>
-                  <td className="px-5 py-4">{docBadge(c)}</td>
-                  <td className="px-5 py-4">{signBadge(c)}</td>
+                  {showDocs && <td className="px-5 py-4">{docBadge(c)}</td>}
+                  {showDocs && <td className="px-5 py-4">{signBadge(c)}</td>}
                   <td className="px-5 py-4">
                     <div className="flex justify-end">{actions(c)}</div>
                   </td>
@@ -352,7 +379,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
 
                 {expanded === c.id && (
                   <tr className="bg-[#f0f7f3]/70 dark:bg-white/5">
-                    <td colSpan={6} className="px-5 py-4">{detailGrid(c)}</td>
+                    <td colSpan={colCount} className="px-5 py-4">{detailGrid(c)}</td>
                   </tr>
                 )}
               </Fragment>
@@ -384,10 +411,12 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
               {c.CONSUMER_PHONE && <span>{c.CONSUMER_PHONE}</span>}
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              {docBadge(c)}
-              {signBadge(c)}
-            </div>
+            {showDocs && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {docBadge(c)}
+                {signBadge(c)}
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap items-center gap-0.5 border-t border-gray-100 dark:border-white/10 pt-2">
               {actions(c)}

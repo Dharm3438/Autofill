@@ -4,8 +4,14 @@ import { getCustomers } from '../api/customers'
 import CustomerModal from '../components/CustomerModal'
 import CustomerTable from '../components/CustomerTable'
 import toast from 'react-hot-toast'
+import { useAuth } from '../context/AuthContext'
+import { PERM } from '../utils/access'
 
 export default function CustomersPage() {
+  const { can } = useAuth()
+  const canCreate = can(PERM.CUSTOMERS_CREATE)
+  // Data-entry users only ever receive their own customers from the API.
+  const ownOnly = !can(PERM.CUSTOMERS_READ_ALL)
   const [customers, setCustomers] = useState([])
   const [total, setTotal] = useState(0)
   const [search, setSearch] = useState('')
@@ -74,17 +80,19 @@ export default function CustomersPage() {
             <div>
               <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Customers</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-                {total} {total === 1 ? 'customer' : 'customers'} total
+                {total} {total === 1 ? 'customer' : 'customers'} {ownOnly ? 'added by you' : 'total'}
               </p>
             </div>
           </div>
-          <button
-            onClick={openAdd}
-            className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add Customer
-          </button>
+          {canCreate && (
+            <button
+              onClick={openAdd}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm"
+            >
+              <UserPlus className="w-4 h-4" />
+              Add Customer
+            </button>
+          )}
         </div>
 
         {/* Search */}
@@ -113,9 +121,9 @@ export default function CustomersPage() {
               </div>
               <p className="text-gray-600 dark:text-gray-300 font-medium mb-1">No customers found</p>
               <p className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-                {search ? 'Try a different search term' : 'Get started by adding your first customer'}
+                {search ? 'Try a different search term' : canCreate ? 'Get started by adding your first customer' : 'Nothing here yet'}
               </p>
-              {!search && (
+              {!search && canCreate && (
                 <button
                   onClick={openAdd}
                   className="flex items-center gap-2 px-4 py-2 bg-[#1a3a2a] text-white text-sm font-medium rounded-xl hover:bg-[#2d5a3d] transition-colors"
