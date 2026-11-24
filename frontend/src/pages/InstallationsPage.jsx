@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Wrench, Search, RefreshCw, ChevronDown, ChevronRight, Settings2, Check, Printer } from 'lucide-react'
+import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import InstallationStats from '../components/InstallationStats'
@@ -40,6 +40,67 @@ function orderedCircleSteps(steps) {
   return [...ordered, ...extras]
 }
 
+// Panel watt and count are stored as bare numbers ("540", "10"); add units so
+// the line reads naturally ("540 W", "10 panels"). Text values pass through as-is.
+function panelWatt(w) {
+  if (w == null || w === '') return ''
+  const str = String(w).trim()
+  return /^\d+(\.\d+)?$/.test(str) ? `${str} W` : str
+}
+
+function panelCount(n) {
+  if (n == null || n === '') return ''
+  const str = String(n).trim()
+  if (!/^\d+$/.test(str)) return str
+  return `${str} ${str === '1' ? 'panel' : 'panels'}`
+}
+
+// One line: "Inverter: Growatt · 5 kW | Panels: Waaree · 540 W · 10 panels".
+// A side with no data is left out; the whole line is hidden if both are empty.
+function EquipmentLine({ customer: c }) {
+  const inverter = [c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).join(' · ')
+  const panels = [c.PANEL_COMPANY, panelWatt(c.PANEL_WATT), panelCount(c.NO_OF_PANEL)].filter(Boolean).join(' · ')
+  if (!inverter && !panels) return null
+  return (
+    <p className="flex flex-wrap items-center gap-x-2">
+      {inverter && (
+        <span>Inverter: <span className="text-gray-600 dark:text-gray-300">{inverter}</span></span>
+      )}
+      {inverter && panels && <span aria-hidden="true" className="text-gray-300 dark:text-gray-600">|</span>}
+      {panels && (
+        <span>Panels: <span className="text-gray-600 dark:text-gray-300">{panels}</span></span>
+      )}
+    </p>
+  )
+}
+
+// "Payment: ₹20,000 of ₹1,00,000 · ₹80,000 remaining" (or "Fully paid").
+// Without a system cost there's no total to compare against, so only the
+// received amount is shown with a hint that the total is missing.
+function PaymentLine({ customer: c }) {
+  const received = c.received_payment || 0
+  const total = c.total_payment || 0
+  return (
+    <p>
+      Payment:{' '}
+      <span className="font-medium text-gray-700 dark:text-gray-200">{fmtINR(received)}</span>
+      {total > 0 ? (
+        <>
+          {' '}of <span className="font-medium text-gray-700 dark:text-gray-200">{fmtINR(total)}</span>
+          {' · '}
+          {c.remaining_payment > 0 ? (
+            <span className="font-medium text-amber-600 dark:text-amber-400">{fmtINR(c.remaining_payment)} remaining</span>
+          ) : (
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">Fully paid</span>
+          )}
+        </>
+      ) : (
+        <> received · <span className="italic">total not set</span></>
+      )}
+    </p>
+  )
+}
+
 export default function InstallationsPage() {
   const [rows, setRows] = useState([])
   const [summary, setSummary] = useState(null)
@@ -53,7 +114,6 @@ export default function InstallationsPage() {
   const [pendingStep, setPendingStep] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
   const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState({})
   const [manageCustomer, setManageCustomer] = useState(null)
   // Bumped whenever an installation change is saved, so the inventory sidebar
   // refetches (a completed step moves a unit from "required" to "in stock used").
@@ -99,10 +159,6 @@ export default function InstallationsPage() {
       }),
     [rows],
   )
-
-  function toggleRow(id) {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
-  }
 
   function handlePrint() {
     if (sortedRows.length === 0) {
@@ -221,31 +277,14 @@ export default function InstallationsPage() {
             <ul className="divide-y divide-gray-100 dark:divide-white/10">
               {sortedRows.map((c) => {
                 const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
-                const open = !!expanded[c.id]
                 return (
                   <li key={c.id} className="px-4 sm:px-6 py-4">
                     <div className="flex items-center gap-4">
-                      <button
-                        onClick={() => toggleRow(c.id)}
-                        className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10 text-gray-400 flex-shrink-0"
-                        aria-label={open ? 'Collapse' : 'Expand'}
-                      >
-                        {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </button>
-
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 truncate">
                             {c.CONSUMER_NAME || 'Unnamed'}
                           </p>
-                          {c.received_payment > 0 && (
-                            <span
-                              title="Payment received"
-                              className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
-                            >
-                              +{fmtINR(c.received_payment)}
-                            </span>
-                          )}
                           <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_BADGE[c.overall_status]}`}>
                             {STATUS_LABEL[c.overall_status]}
                           </span>
@@ -255,12 +294,8 @@ export default function InstallationsPage() {
                             <p>Dealer: <span className="text-gray-600 dark:text-gray-300">{c.DEALER_NAME}</span></p>
                           )}
                           <p>{[c.CONSUMER_NO, c.INSTALLATION_CITY, c.CONSUMER_PHONE].filter(Boolean).join(' · ') || '—'}</p>
-                          {[c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).length > 0 && (
-                            <p>{[c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).join(' · ')}</p>
-                          )}
-                          {[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).length > 0 && (
-                            <p>{[c.PANEL_COMPANY, c.PANEL_WATT, c.NO_OF_PANEL].filter(Boolean).join(' · ')}</p>
-                          )}
+                          <EquipmentLine customer={c} />
+                          <PaymentLine customer={c} />
                         </div>
 
                         {/* At-a-glance status circles — red = pending, green = done */}
@@ -317,48 +352,6 @@ export default function InstallationsPage() {
                       <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{c.done_count}/{c.total}</span>
                     </div>
 
-                    {/* Expanded: payment summary + step chips */}
-                    {open && (
-                      <div className="mt-4 pl-9">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-3 text-xs">
-                          <span className="text-gray-500 dark:text-gray-400">
-                            Total: <span className="font-medium text-gray-700 dark:text-gray-200">{fmtINR(c.total_payment)}</span>
-                          </span>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            Received: <span className="font-medium text-emerald-700 dark:text-emerald-300">{fmtINR(c.received_payment)}</span>
-                          </span>
-                          {c.remaining_payment > 0 ? (
-                            <span className="font-medium text-amber-600 dark:text-amber-400">
-                              {fmtINR(c.remaining_payment)} remaining
-                            </span>
-                          ) : (
-                            <span className="font-medium text-emerald-600 dark:text-emerald-400">Fully paid</span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {c.steps.map((s) => {
-                          const done = s.status === 'done'
-                          return (
-                            <div
-                              key={s.key}
-                              title={done && (s.performed_by || s.completed_date)
-                                ? `${s.completed_date || ''}${s.performed_by ? ' · ' + s.performed_by : ''}${s.notes ? ' · ' + s.notes : ''}`
-                                : undefined}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs ${done ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'}`}
-                            >
-                              {done && <Check className="w-3 h-3" />}
-                              {s.label}
-                              {done && (s.completed_date || s.performed_by) && (
-                                <span className="text-emerald-600/70 dark:text-emerald-400/70">
-                                  · {[s.completed_date, s.performed_by].filter(Boolean).join(' · ')}
-                                </span>
-                              )}
-                            </div>
-                          )
-                        })}
-                        </div>
-                      </div>
-                    )}
                   </li>
                 )
               })}
