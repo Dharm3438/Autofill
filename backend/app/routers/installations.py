@@ -12,6 +12,8 @@ from ..models.installation import (
     compute_overall_status,
     compute_installation_date,
     payment_info,
+    compute_payment_status,
+    PAYMENT_STATUSES,
     compute_serials_update,
     InstallationStepUpdate,
     InstallationGroupUpdate,
@@ -49,6 +51,7 @@ _OVERVIEW_FIELDS = (
     "INSTALLATION_CITY", "INVERTER_MAKE", "INVERTER_CAPACITY",
     "PANEL_COMPANY", "PANEL_WATT", "NO_OF_PANEL",
     "installation_steps", "SYSTEM_COST", "received_payments", "received_payment",
+    "payment_status",
 )
 
 _STEP_KEY_LIST = [s["key"] for s in INSTALLATION_STEPS]
@@ -165,6 +168,8 @@ async def installations_overview(
     search: str = Query(default=""),
     status: str = Query(default=""),          # not_started | in_progress | completed
     pending_step: str = Query(default=""),    # a step key still pending
+    done_step: str = Query(default=""),       # a step key already done
+    payment: str = Query(default=""),         # paid | due | no_cost
     dealer: str = Query(default=""),          # exact dealer name to filter by
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=OVERVIEW_PAGE_SIZE_MAX),
@@ -177,8 +182,8 @@ async def installations_overview(
     then name. Filtering, sorting and paging happen in MongoDB, so only the
     requested page leaves the database.
 
-    `summary` counts ALL customers matching search/dealer (before the status
-    and pending-step filters) so the dashboard totals stay meaningful.
+    `summary` counts ALL customers matching search/dealer (before the status,
+    step and payment filters) so the dashboard totals stay meaningful.
     `total` is the number of rows after every filter, for the pager.
     """
     db = get_db()
@@ -195,14 +200,31 @@ async def installations_overview(
     base = _overview_base_pipeline(query)
 
     row_filter = {}
+    match_nothing = False
     if status:
         row_filter["_status"] = status
+    # Both step filters constrain _done_keys, so combine them with $and.
+    step_conds = []
     if pending_step:
         if pending_step in STEP_KEYS:
-            row_filter["_done_keys"] = {"$ne": pending_step}
+            step_conds.append({"_done_keys": {"$ne": pending_step}})
         else:
             # An unknown step can never be pending — match nothing, as before.
-            row_filter["_id"] = {"$exists": False}
+            match_nothing = True
+    if done_step:
+        if done_step in STEP_KEYS:
+            step_conds.append({"_done_keys": done_step})
+        else:
+            match_nothing = True
+    if step_conds:
+        row_filter["$and"] = step_conds
+    if payment:
+        if payment in PAYMENT_STATUSES:
+            row_filter["payment_status"] = payment
+        else:
+            match_nothing = True
+    if match_nothing:
+        row_filter = {"_id": {"$exists": False}}
     filtered = base + ([{"$match": row_filter}] if row_filter else [])
 
     rows_pipeline = filtered + [{"$sort": {"_done_count": -1, "_name_sort": 1, "_id": 1}}]
@@ -300,11 +322,14 @@ async def update_installation_payment(
     # Persist the full list of dated received-payment entries; the total is
     # derived from SYSTEM_COST and is never written here.
     entries = [p.model_dump() for p in body.received_payments]
+    merged = {**c, "received_payments": entries}
+    merged.pop("received_payment", None)
     await db.customers.update_one(
         {"_id": parse_object_id(customer_id)},
         {
             "$set": {
                 "received_payments": entries,
+                "payment_status": compute_payment_status(merged),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
             # Drop the obsolete single-value field if it lingers from old records.
@@ -312,8 +337,6 @@ async def update_installation_payment(
         },
     )
 
-    merged = {**c, "received_payments": entries}
-    merged.pop("received_payment", None)
     return {
         "success": True,
         "data": {"customer_id": customer_id, **payment_info(merged)},

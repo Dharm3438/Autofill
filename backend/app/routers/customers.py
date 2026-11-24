@@ -6,7 +6,7 @@ from ..core.database import get_db
 from ..core.permissions import P, require, customer_scope, user_permissions, parse_object_id
 from ..models.customer import CustomerCreate, CustomerUpdate, missing_required_fields
 from ..services.customer_sheet import build_customer_details_pdf, details_sheet_filename
-from ..models.installation import default_installation_steps
+from ..models.installation import default_installation_steps, compute_payment_status
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -15,7 +15,9 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 # (signing_token is a bearer credential for the customer's signing page).
 _INTERNAL_FIELDS = ("signing_token", "signing_token_expiry", "signing_manifest", "r2_prefix")
 # Only for users who work on installations / payments.
-_INSTALLATION_FIELDS = ("installation_steps", "received_payments", "received_payment", "total_payment")
+_INSTALLATION_FIELDS = (
+    "installation_steps", "received_payments", "received_payment", "total_payment", "payment_status",
+)
 # Only for users who work on documents.
 _DOCUMENT_FIELDS = ("doc_status", "signing_status", "uploads", "AGREEMENT_SYSTEM_COST")
 # Customer data fields that only document users may write. Silently dropped for
@@ -128,6 +130,7 @@ async def create_customer(body: CustomerCreate, user=Depends(require(P.CUSTOMERS
         "created_at": now,
         "updated_at": now,
     }
+    doc["payment_status"] = compute_payment_status(doc)
     result = await db.customers.insert_one(doc)
     doc["_id"] = result.inserted_id
     return {"success": True, "data": customer_to_out(doc, user)}
@@ -189,6 +192,11 @@ async def update_customer(customer_id: str, body: CustomerUpdate, user=Depends(r
         raise HTTPException(status_code=404, detail="Customer not found")
 
     c = await db.customers.find_one({"_id": oid})
+    # SYSTEM_COST may have changed: keep the derived payment status in step.
+    payment_status = compute_payment_status(c)
+    if c.get("payment_status") != payment_status:
+        await db.customers.update_one({"_id": oid}, {"$set": {"payment_status": payment_status}})
+        c["payment_status"] = payment_status
     return {"success": True, "data": customer_to_out(c, user)}
 
 

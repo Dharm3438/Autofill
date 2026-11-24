@@ -47,6 +47,13 @@ function paymentsCell(row) {
     .join('')
 }
 
+// Remaining balance, or "Fully paid" / "Cost not set" from the payment status.
+function remainingCell(row, remaining) {
+  if (row.payment_status === 'no_cost') return '<td class="amt muted">Cost not set</td>'
+  if (remaining > 0) return `<td class="amt due">${esc(fmtINR(remaining))}</td>`
+  return '<td class="amt paid">Fully paid</td>'
+}
+
 /**
  * Open a print window for the given installation rows.
  * @param {Array} rows   filtered + sorted customer rows (as shown in the UI)
@@ -76,9 +83,7 @@ export function printInstallations(rows, opts = {}) {
         <td class="amt">${esc(fmtINR(c.total_payment))}</td>
         <td class="payments">${paymentsCell(c)}</td>
         <td class="amt received">${esc(fmtINR(c.received_payment))}</td>
-        <td class="amt ${remaining > 0 ? 'due' : 'paid'}">${
-          remaining > 0 ? esc(fmtINR(remaining)) : 'Fully paid'
-        }</td>
+        ${remainingCell(c, remaining)}
         <td class="subsidy">${subsidyCell(c)}</td>
       </tr>`
     })

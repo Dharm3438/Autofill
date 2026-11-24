@@ -1,5 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from .config import settings
+from ..models.installation import compute_payment_status
 
 client: AsyncIOMotorClient = None
 db = None
@@ -43,6 +44,27 @@ async def _ensure_indexes():
     except Exception as e:
         print(f"Index creation warning: {e}")
     await _migrate_user_roles()
+    await _backfill_payment_status()
+
+
+async def _backfill_payment_status():
+    """
+    Idempotent: give customers saved before `payment_status` existed their
+    derived value (paid / due / no_cost), so the installations payment filter
+    sees them. After the first run nothing matches and this is a no-op.
+    """
+    try:
+        fields = {"SYSTEM_COST": 1, "received_payments": 1, "received_payment": 1}
+        n = 0
+        async for c in db.customers.find({"payment_status": {"$exists": False}}, fields):
+            await db.customers.update_one(
+                {"_id": c["_id"]}, {"$set": {"payment_status": compute_payment_status(c)}}
+            )
+            n += 1
+        if n:
+            print(f"Backfilled payment_status on {n} customers")
+    except Exception as e:
+        print(f"Payment status backfill warning: {e}")
 
 
 async def _migrate_user_roles():
