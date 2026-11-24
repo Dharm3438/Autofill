@@ -1,3 +1,4 @@
+import re
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
 from ..core.permissions import P, require, parse_object_id
@@ -49,9 +50,9 @@ async def installations_overview(
     query = {}
     if search:
         query["$or"] = [
-            {"CONSUMER_NAME": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_APP_NO": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_PHONE": {"$regex": search, "$options": "i"}},
+            {"CONSUMER_NAME": {"$regex": re.escape(search), "$options": "i"}},
+            {"CONSUMER_APP_NO": {"$regex": re.escape(search), "$options": "i"}},
+            {"CONSUMER_PHONE": {"$regex": re.escape(search), "$options": "i"}},
         ]
     if dealer:
         query["DEALER_NAME"] = dealer

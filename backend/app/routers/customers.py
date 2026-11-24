@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Response, status
 from ..core.database import get_db
@@ -65,9 +66,9 @@ async def list_customers(
     query = {}
     if search:
         query["$or"] = [
-            {"CONSUMER_NAME": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_APP_NO": {"$regex": search, "$options": "i"}},
-            {"CONSUMER_PHONE": {"$regex": search, "$options": "i"}},
+            {"CONSUMER_NAME": {"$regex": re.escape(search), "$options": "i"}},
+            {"CONSUMER_APP_NO": {"$regex": re.escape(search), "$options": "i"}},
+            {"CONSUMER_PHONE": {"$regex": re.escape(search), "$options": "i"}},
         ]
     query = scoped(user, query)
 

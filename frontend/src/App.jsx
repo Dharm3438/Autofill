@@ -28,7 +28,8 @@ export default function App() {
           <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/welcome" element={<Page><WelcomePage /></Page>} />
+            {/* No Layout: pending users get no navbar or tabs at all. */}
+            <Route path="/welcome" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
             <Route path="/dashboard" element={<Page perm={PERM.DASHBOARD_VIEW}><DashboardPage /></Page>} />
             <Route path="/customers" element={<Page perm={CUSTOMERS_VIEW}><CustomersPage /></Page>} />
             <Route path="/installations" element={<Page perm={PERM.INSTALLATIONS_READ}><InstallationsPage /></Page>} />

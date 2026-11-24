@@ -39,7 +39,15 @@ export default function LoginPage() {
       setUser(res.data.data)
       navigate(homePath(res.data.data))
     } catch (err) {
-      toast.error(err.response?.data?.detail || (mode === 'login' ? 'Invalid credentials' : 'Registration failed'))
+      // FastAPI validation errors (422) arrive as a list of objects, not a
+      // string — rendering that list directly crashes the page.
+      const detail = err.response?.data?.detail
+      const message = typeof detail === 'string'
+        ? detail
+        : Array.isArray(detail) && detail[0]?.msg
+          ? detail[0].msg.replace(/^Value error, /, '')
+          : (mode === 'login' ? 'Invalid credentials' : 'Registration failed')
+      toast.error(message)
     } finally {
       setLoading(false)
     }

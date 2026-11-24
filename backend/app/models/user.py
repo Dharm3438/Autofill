@@ -1,11 +1,12 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str
-    name: str
+    # Signup only; existing accounts with shorter passwords can still log in.
+    password: str = Field(min_length=8, max_length=72)  # bcrypt ignores bytes past 72
+    name: str = Field(min_length=1, max_length=100)
 
 
 class UserLogin(BaseModel):

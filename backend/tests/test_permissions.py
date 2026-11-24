@@ -369,5 +369,40 @@ class UserAdminTest(unittest.TestCase):
         self.assertIn("one active admin", ctx.exception.detail)
 
 
+# ── 5. Hardening: CSRF origin check, search escaping, password policy ─────────
+
+class HardeningTest(unittest.TestCase):
+    def test_signup_rejects_short_password(self):
+        from pydantic import ValidationError
+        from app.models.user import UserCreate
+        with self.assertRaises(ValidationError):
+            UserCreate(email="a@example.com", password="short", name="A")
+        UserCreate(email="a@example.com", password="long-enough", name="A")
+
+    def test_search_input_is_literal_not_regex(self):
+        database.db = FakeDB()
+        admin = make_user("admin")
+        run(customers.create_customer(_body("Plain Name", "N1"), user=admin))
+        res = run(customers.list_customers(search="(", page=1, limit=10, user=admin))
+        self.assertEqual(res["total"], 0)
+        res = run(customers.list_customers(search=".*", page=1, limit=10, user=admin))
+        self.assertEqual(res["total"], 0)  # ".*" must not match everything
+
+    def test_cross_site_writes_blocked(self):
+        try:
+            from fastapi.testclient import TestClient
+        except Exception:  # httpx not installed
+            self.skipTest("fastapi.testclient needs httpx")
+        client = TestClient(app)  # not used as a context manager: no DB lifespan
+        evil = client.post("/api/auth/logout", headers={"Origin": "https://evil.example"})
+        self.assertEqual(evil.status_code, 403)
+        ours = client.post("/api/auth/logout", headers={"Origin": "http://localhost:5173"})
+        self.assertEqual(ours.status_code, 200)
+        no_origin = client.post("/api/auth/logout")
+        self.assertEqual(no_origin.status_code, 200)
+        reads = client.get("/api/health", headers={"Origin": "https://evil.example"})
+        self.assertEqual(reads.status_code, 200)
+
+
 if __name__ == "__main__":
     unittest.main()
