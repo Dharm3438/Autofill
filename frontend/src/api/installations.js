@@ -1,6 +1,8 @@
 import api from './client'
 
-// params: { search, status, pending_step, dealer }
+// params: { search, status, pending_step, dealer, page, limit } — one page,
+// sorted by completion then name. Pass { all: true } instead of page/limit to
+// get every filtered row (used by Print).
 export const getInstallationOverview = (params) =>
   api.get('/installations/overview', { params })
 
