@@ -73,6 +73,7 @@ SAMPLE_CUSTOMER = {
     "INSTALLATION_DISTRICT":    "Ahmedabad",
     "DISCOM_REGISTERED_OFFICE": "Torrent Power Ltd, Ahmedabad",
     "SYSTEM_COST":              "2,75,000",
+    "AGREEMENT_SYSTEM_COST":    "2,40,000",
     "METER_TESTING_DATE":       "05-03-2026",
     "METER_RECIPT_NO":          "MTR-RCPT-2026-7781",
     "GENERATION_METER_MAKE":    "Secure Meters",

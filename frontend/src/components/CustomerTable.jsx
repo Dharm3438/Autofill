@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Pencil, Trash2, FileText, Send, Download, Printer, ClipboardList, ChevronDown, ChevronUp, Loader2, UploadCloud } from 'lucide-react'
-import { deleteCustomer, getCustomerDetailsSheet } from '../api/customers'
+import { deleteCustomer, getCustomerDetailsSheet, updateCustomer } from '../api/customers'
 import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
 import UploadsModal from './UploadsModal'
 import MissingFieldsModal from './MissingFieldsModal'
@@ -322,6 +322,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           ['Installation City', c.INSTALLATION_CITY],
           ['Installation Date', c.INSTALLATION_DATE],
           ['System Cost', c.SYSTEM_COST],
+          // Only returned by the API to document users.
+          ['Agreement System Cost', c.AGREEMENT_SYSTEM_COST],
           ['Meter Receipt No', c.METER_RECIPT_NO],
           ['Generation Meter', c.GENERATION_METER_NO],
         ].filter(([, val]) => val).map(([label, val]) => (
@@ -446,6 +448,19 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
             const c = missingFor.customer
             setMissingFor(null)
             onEdit(c)
+          }}
+          onSaveAndGenerate={async (data) => {
+            const c = missingFor.customer
+            try {
+              const res = await updateCustomer(c.id, data)
+              setMissingFor(null)
+              // Retry generation. If other fields are still missing this
+              // reopens the popup listing only what's left.
+              await handleGenerateDocs(res.data?.data || c)
+            } catch (err) {
+              const detail = err.response?.data?.detail
+              toast.error((typeof detail === 'string' && detail) || 'Failed to save')
+            }
           }}
         />
       )}

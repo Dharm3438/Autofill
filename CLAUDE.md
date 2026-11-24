@@ -79,6 +79,8 @@ NO_OF_PANEL, TOTAL_PANEL_CAPACITY, PANEL_SR_NO, CELL_MANUFACTURER,
 PANEL_GURANTEE, INSTALLATION_DATE, INSTALLATION_CITY, INSTALLATION_DISTRICT,
 DISCOM_REGISTERED_OFFICE, SYSTEM_COST, METER_TESTING_DATE, METER_RECIPT_NO,
 GENERATION_METER_MAKE, GENERATION_METER_NO,
+AGREEMENT_SYSTEM_COST (documents/admin only; the amount printed on documents —
+  SYSTEM_COST is the real price for payments and must never appear in a template),
 installation_steps[], received_payments[] (each {amount, date}),
 doc_status (none/generating/complete), signing_status (none/sent/signed),
 signing_token, signing_token_expiry, docs_folder_path, created_at, updated_at

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
-import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil } from 'lucide-react'
+import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil, FileText } from 'lucide-react'
 import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
+import { useAuth } from '../context/AuthContext'
+import { PERM } from '../utils/access'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import {
   INVERTER_OPTIONS,
@@ -100,9 +102,27 @@ const SECTIONS = [
       { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
     ],
   },
+  {
+    // Document users only (the backend also hides and ignores these fields for
+    // other roles). Shown on edit, not create — the agreement cost is normally
+    // asked for in the Missing Required Fields popup when generating documents.
+    title: 'Documents',
+    icon: FileText,
+    color: 'text-sky-600',
+    bg: 'bg-sky-50',
+    documentsOnly: true,
+    fields: [
+      {
+        key: 'AGREEMENT_SYSTEM_COST',
+        label: 'Agreement System Cost (₹)',
+        hint: 'Printed on the Net-Metering Agreement',
+      },
+    ],
+  },
 ]
 
 const EMPTY = SECTIONS.flatMap(s => s.fields).reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
+const DOCUMENT_KEYS = SECTIONS.filter(s => s.documentsOnly).flatMap(s => s.fields.map(f => f.key))
 
 function calcTotalCapacity(watt, qty) {
   const w = parseFloat(watt)
@@ -115,6 +135,9 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
   const [loading, setLoading] = useState(false)
   const [consumerNoError, setConsumerNoError] = useState('')
   const isEdit = Boolean(customer)
+  const { can } = useAuth()
+  const showDocuments = isEdit && can(PERM.DOCUMENTS_MANAGE)
+  const sections = SECTIONS.filter(s => !s.documentsOnly || showDocuments)
 
   useEffect(() => {
     if (customer) {
@@ -164,12 +187,16 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
     e.preventDefault()
     if (consumerNoError) return
     setLoading(true)
+    // Only send document fields when they're on screen, so other roles never
+    // submit them (an empty string would otherwise mean "clear it").
+    const payload = { ...form }
+    if (!showDocuments) DOCUMENT_KEYS.forEach(k => { delete payload[k] })
     try {
       if (isEdit) {
-        await updateCustomer(customer.id, form)
+        await updateCustomer(customer.id, payload)
         toast.success('Customer updated')
       } else {
-        await createCustomer(form)
+        await createCustomer(payload)
         toast.success('Customer added')
       }
       onSaved()
@@ -216,7 +243,7 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
         {/* Form Body */}
         <form onSubmit={handleSubmit}>
           <div className="px-6 py-5 space-y-5 max-h-[70vh] overflow-y-auto">
-            {SECTIONS.map(section => {
+            {sections.map(section => {
               const Icon = section.icon
               return (
                 <div key={section.title} className="rounded-xl border border-gray-200 dark:border-white/10 overflow-hidden">

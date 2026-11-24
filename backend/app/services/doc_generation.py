@@ -158,6 +158,7 @@ FIELD_LABELS = {
     "INSTALLATION_DISTRICT":    "Installation District",
     "DISCOM_REGISTERED_OFFICE": "DISCOM Registered Office",
     "SYSTEM_COST":              "System Cost",
+    "AGREEMENT_SYSTEM_COST":    "Agreement System Cost",
     "METER_TESTING_DATE":       "Meter Testing Date",
     "METER_RECIPT_NO":          "Meter Receipt No.",
     "GENERATION_METER_MAKE":    "Generation Meter Make",
