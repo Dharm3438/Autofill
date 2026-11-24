@@ -70,7 +70,7 @@ class OverviewTest(unittest.TestCase):
         )
 
     def overview(self, **kw):
-        params = dict(search="", status="", pending_step="", dealer="", page=1, limit=20, fetch_all=False)
+        params = dict(search="", status="", pending_step="", done_step="", payment="", dealer="", page=1, limit=20, fetch_all=False)
         params.update(kw)
         return run(installations.installations_overview(**params, _=None))
 
@@ -163,6 +163,38 @@ class OverviewTest(unittest.TestCase):
         self.assertEqual((row["total_payment"], row["received_payment"], row["remaining_payment"]),
                          (100000, 20000, 80000))
         self.assertEqual(len(row["steps"]), len(KEYS))
+        self.assertEqual(row["payment_status"], "due")
+
+    def test_done_step_filter(self):
+        self.add("has_first", done=KEYS[:1])
+        self.add("none")
+        self.add("legacy", installation_steps=None)
+        self.assertEqual(self.names(self.overview(done_step=KEYS[0])), ["has_first"])
+        self.assertEqual(self.overview(done_step="not_a_step")["data"], [])
+
+    def test_done_and_pending_step_combine(self):
+        self.add("both", done=KEYS[:2])
+        self.add("first_only", done=KEYS[:1])
+        res = self.overview(done_step=KEYS[0], pending_step=KEYS[1])
+        self.assertEqual(self.names(res), ["first_only"])
+
+    def test_payment_filter(self):
+        self.add("paid", payment_status="paid")
+        self.add("due", payment_status="due")
+        self.add("no_cost", payment_status="no_cost")
+        self.assertEqual(self.names(self.overview(payment="due")), ["due"])
+        self.assertEqual(self.names(self.overview(payment="paid")), ["paid"])
+        self.assertEqual(self.overview(payment="bogus")["data"], [])
+        # Summary ignores the payment filter, like the other row filters.
+        self.assertEqual(self.overview(payment="due")["summary"]["total_customers"], 3)
+
+    def test_subsidy_received_but_balance_due(self):
+        subsidy = "subsidy_received"
+        self.add("owes", done=[subsidy], payment_status="due")
+        self.add("settled", done=[subsidy], payment_status="paid")
+        self.add("waiting", payment_status="due")
+        res = self.overview(done_step=subsidy, payment="due")
+        self.assertEqual(self.names(res), ["owes"])
 
 
 if __name__ == "__main__":

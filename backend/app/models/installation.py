@@ -194,7 +194,31 @@ def payment_info(customer: dict) -> dict:
         "received_payment": received,
         "remaining_payment": max(total - received, 0),
         "received_payments": entries,
+        "payment_status": _payment_status(total, received),
     }
+
+
+# Values of the stored `payment_status` field:
+#   paid    — received covers the system cost
+#   due     — a system cost is set and part of it is still outstanding
+#   no_cost — SYSTEM_COST is blank/unparseable, so "paid" can't be judged
+PAYMENT_STATUSES = ("paid", "due", "no_cost")
+
+
+def _payment_status(total: float, received: float) -> str:
+    if total <= 0:
+        return "no_cost"
+    return "paid" if received >= total else "due"
+
+
+def compute_payment_status(customer: dict) -> str:
+    """Derived payment status, stored on the customer as `payment_status` so the
+    installations overview can filter on it inside MongoDB (SYSTEM_COST is free
+    text, which an aggregation pipeline can't reliably parse).
+
+    Every write that changes SYSTEM_COST or received_payments must refresh it;
+    customers saved before this field existed are backfilled at startup."""
+    return payment_info(customer)["payment_status"]
 
 
 class ReceivedPayment(BaseModel):

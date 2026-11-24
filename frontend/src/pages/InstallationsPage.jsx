@@ -26,6 +26,38 @@ const STATUS_LABEL = {
 const fmtINR = (n) =>
   `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
 
+// Payment filter options — values match the server's stored `payment_status`.
+const PAYMENT_LABEL = {
+  paid: 'Fully paid',
+  due: 'Balance due',
+  no_cost: 'Cost not set',
+}
+
+// The ₹ circle at the end of the status row: derived from the payment ledger
+// (received vs system cost), never ticked by hand. Gray when no cost is set.
+const PAYMENT_CIRCLE = {
+  paid: 'bg-emerald-100 text-emerald-700 border border-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30',
+  due: 'bg-red-100 text-red-600 border border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',
+  no_cost: 'bg-gray-100 text-gray-400 border border-gray-200 dark:bg-white/5 dark:text-gray-500 dark:border-white/10',
+}
+
+function PaymentCircle({ customer: c }) {
+  const status = c.payment_status || 'no_cost'
+  const tip = status === 'paid'
+    ? `Full payment received (${fmtINR(c.received_payment)})`
+    : status === 'due'
+      ? `Balance due — ${fmtINR(c.remaining_payment)} of ${fmtINR(c.total_payment)} remaining`
+      : 'Payment — system cost not set'
+  return (
+    <span
+      title={tip}
+      className={`inline-flex items-center justify-center min-w-[1.4rem] h-5 px-1 rounded-full text-[10px] font-bold leading-none cursor-default select-none ${PAYMENT_CIRCLE[status]}`}
+    >
+      ₹
+    </span>
+  )
+}
+
 // Order the status circles are shown in below each customer's name.
 // Independent of the checklist order — this is purely the at-a-glance row.
 const CIRCLE_ORDER = [
@@ -119,6 +151,8 @@ export default function InstallationsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [pendingStep, setPendingStep] = useState('')
+  const [doneStep, setDoneStep] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
@@ -142,8 +176,10 @@ export default function InstallationsPage() {
     search: debouncedSearch,
     status: statusFilter,
     pending_step: pendingStep,
+    done_step: doneStep,
+    payment: paymentFilter,
     dealer: dealerFilter,
-  }), [debouncedSearch, statusFilter, pendingStep, dealerFilter])
+  }), [debouncedSearch, statusFilter, pendingStep, doneStep, paymentFilter, dealerFilter])
 
   // Only the newest request may update the list (an older, slower response
   // must not overwrite it).
@@ -203,16 +239,16 @@ export default function InstallationsPage() {
     setPrinting(true)
     try {
       const res = await getInstallationOverview({ ...filterParams(), all: true })
-      const pendingLabel = pendingStep
-        ? stepDefs.find((s) => s.key === pendingStep)?.label || pendingStep
-        : ''
+      const stepLabel = (key) => (key ? stepDefs.find((s) => s.key === key)?.label || key : '')
       const ok = printInstallations(res.data.data, {
         win,
         filters: [
           { label: 'Search', value: debouncedSearch },
           { label: 'Dealer', value: dealerFilter },
           { label: 'Status', value: STATUS_LABEL[statusFilter] || '' },
-          { label: 'Pending step', value: pendingLabel },
+          { label: 'Pending step', value: stepLabel(pendingStep) },
+          { label: 'Done step', value: stepLabel(doneStep) },
+          { label: 'Payment', value: PAYMENT_LABEL[paymentFilter] || '' },
         ],
       })
       if (!ok) toast.error('The print window was closed')
@@ -251,8 +287,8 @@ export default function InstallationsPage() {
         <div className="flex-1 min-w-0">
 
         {/* Filter bar */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-5">
-          <div className="relative flex-1">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3 mb-5">
+          <div className="relative flex-1 sm:min-w-[14rem]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
             <input
               type="text"
@@ -290,6 +326,26 @@ export default function InstallationsPage() {
             <option value="">Any pending step</option>
             {stepDefs.map((s) => (
               <option key={s.key} value={s.key}>Pending: {s.label}</option>
+            ))}
+          </select>
+          <select
+            value={doneStep}
+            onChange={changeFilter(setDoneStep)}
+            className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
+          >
+            <option value="">Any done step</option>
+            {stepDefs.map((s) => (
+              <option key={s.key} value={s.key}>Done: {s.label}</option>
+            ))}
+          </select>
+          <select
+            value={paymentFilter}
+            onChange={changeFilter(setPaymentFilter)}
+            className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
+          >
+            <option value="">All payments</option>
+            {Object.entries(PAYMENT_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
             ))}
           </select>
           <button
@@ -367,6 +423,7 @@ export default function InstallationsPage() {
                               </span>
                             )
                           })}
+                          <PaymentCircle customer={c} />
                         </div>
                       </div>
 
