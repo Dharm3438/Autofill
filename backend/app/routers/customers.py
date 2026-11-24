@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, Query, status
+import asyncio
+
+from fastapi import APIRouter, HTTPException, Depends, Query, Response, status
 from ..core.database import get_db
 from ..core.deps import get_current_user
-from ..models.customer import CustomerCreate, CustomerUpdate, CustomerOut
+from ..models.customer import CustomerCreate, CustomerUpdate, CustomerOut, missing_required_fields
+from ..services.customer_sheet import build_customer_details_pdf, details_sheet_filename
 from ..models.installation import default_installation_steps
 from bson import ObjectId
 from datetime import datetime, timezone
@@ -12,6 +15,15 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 def customer_to_out(c: dict) -> dict:
     c["id"] = str(c.pop("_id"))
     return c
+
+
+def _require_fields(data: dict, partial: bool = False) -> None:
+    missing = missing_required_fields(data, partial=partial)
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Please fill the required fields: {', '.join(missing)}",
+        )
 
 
 @router.get("")
@@ -53,6 +65,7 @@ async def check_consumer_no(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_customer(body: CustomerCreate, _=Depends(get_current_user)):
+    _require_fields(body.model_dump())
     db = get_db()
     if body.CONSUMER_NO:
         existing = await db.customers.find_one({"CONSUMER_NO": body.CONSUMER_NO}, {"_id": 1})
@@ -85,8 +98,27 @@ async def get_customer(customer_id: str, _=Depends(get_current_user)):
     return {"success": True, "data": customer_to_out(c)}
 
 
+@router.get("/{customer_id}/details-sheet")
+async def customer_details_sheet(customer_id: str, _=Depends(get_current_user)):
+    """The filled one-page Customer Details PDF, opened inline for printing."""
+    if not ObjectId.is_valid(customer_id):
+        raise HTTPException(status_code=404, detail="Customer not found")
+    db = get_db()
+    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    pdf = await asyncio.to_thread(build_customer_details_pdf, c)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{details_sheet_filename(c)}"'},
+    )
+
+
 @router.put("/{customer_id}")
 async def update_customer(customer_id: str, body: CustomerUpdate, _=Depends(get_current_user)):
+    _require_fields(body.model_dump(), partial=True)
     db = get_db()
     if body.CONSUMER_NO:
         existing = await db.customers.find_one(

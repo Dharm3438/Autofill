@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { Pencil, Trash2, FileText, Send, Download, Printer, ChevronDown, ChevronUp, Loader2, UploadCloud } from 'lucide-react'
-import { deleteCustomer } from '../api/customers'
+import { Pencil, Trash2, FileText, Send, Download, Printer, ClipboardList, ChevronDown, ChevronUp, Loader2, UploadCloud } from 'lucide-react'
+import { deleteCustomer, getCustomerDetailsSheet } from '../api/customers'
 import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
 import UploadsModal from './UploadsModal'
 import MissingFieldsModal from './MissingFieldsModal'
@@ -166,6 +166,24 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
     }
   }
 
+  // Opens the filled one-page Customer Details sheet in a new tab, where the
+  // browser's PDF viewer prints it exactly as designed. Built from the
+  // customer's current data, so it works before documents are generated.
+  async function handlePrintDetails(customer) {
+    setLoadingId(`details-${customer.id}`)
+    try {
+      const res = await getCustomerDetailsSheet(customer.id)
+      const url = URL.createObjectURL(res.data)
+      const win = window.open(url, '_blank')
+      if (!win) toast.error('Allow pop-ups to open the customer details sheet')
+      setTimeout(() => URL.revokeObjectURL(url), 60000)
+    } catch {
+      toast.error('Failed to open customer details sheet')
+    } finally {
+      setLoadingId(null)
+    }
+  }
+
   function docBadge(c) {
     return (
       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${DOC_STATUS_STYLES[c.doc_status] || DOC_STATUS_STYLES.none}`}>
@@ -186,6 +204,15 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
   function actions(c) {
     return (
       <div className="flex items-center gap-0.5">
+        <button
+          title="Print Customer Details"
+          onClick={() => handlePrintDetails(c)}
+          disabled={loadingId === `details-${c.id}`}
+          className="p-2 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          {loadingId === `details-${c.id}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <ClipboardList className="w-4 h-4" />}
+        </button>
+
         <button
           title="Generate Documents"
           onClick={() => handleGenerateDocs(c)}
@@ -288,7 +315,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh }) {
           <thead>
             <tr className="bg-gray-50 dark:bg-white/5 border-b-2 border-gray-100 dark:border-white/10">
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">App No</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subsidy App No</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Docs</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Signing</th>
