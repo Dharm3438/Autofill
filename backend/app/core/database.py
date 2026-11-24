@@ -34,6 +34,7 @@ async def _ensure_indexes():
         await db.signing_submissions.create_index("token", unique=True)
         await db.signing_submissions.create_index("customer_id")
         await db.customers.create_index("created_at")
+        await db.customers.create_index("created_by")
         # One base-stock document per equipment combination.
         await db.inventory.create_index(
             [("category", 1), ("company", 1), ("spec", 1)], unique=True
@@ -41,6 +42,27 @@ async def _ensure_indexes():
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")
+    await _migrate_user_roles()
+
+
+async def _migrate_user_roles():
+    """
+    One-time, idempotent move from the old single `role` string to the
+    `roles` list. Before RBAC every account was created with role "admin", so
+    legacy users without a `roles` field keep admin access (otherwise the
+    existing admins would be locked out on deploy). New signups get roles=[].
+    """
+    try:
+        async for u in db.users.find({"roles": {"$exists": False}}, {"role": 1}):
+            legacy = u.get("role") or "admin"
+            roles = [legacy] if legacy in ("admin", "data_entry", "installation", "documents") else []
+            await db.users.update_one(
+                {"_id": u["_id"]},
+                {"$set": {"roles": roles}, "$unset": {"role": ""}},
+            )
+            print(f"Migrated user {u['_id']} to roles={roles}")
+    except Exception as e:
+        print(f"User role migration warning: {e}")
 
 
 async def close_db():

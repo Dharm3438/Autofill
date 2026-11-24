@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..core.config import settings
 from ..core.database import get_db
-from ..core.deps import get_current_user
+from ..core.permissions import P, require, parse_object_id
 from ..services import storage
 from ..services.doc_generation import (
     SIGNATURE_KEY,
@@ -25,9 +25,9 @@ router = APIRouter(prefix="/signing", tags=["signing"])
 # ── Admin: send signing link ──────────────────────────────────────────────────
 
 @router.post("/send-link/{customer_id}")
-async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
+async def send_signing_link(customer_id: str, _=Depends(require(P.SIGNING_SEND))):
     db = get_db()
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
     if not customer.get("CONSUMER_EMAIL"):
@@ -40,7 +40,7 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
     from ..services.doc_generation import uploaded_docs_present
     prefix = storage.customer_prefix(customer_id)
     present = await asyncio.to_thread(uploaded_docs_present, prefix)
-    await db.customers.update_one({"_id": ObjectId(customer_id)}, {"$set": {"uploads": present}})
+    await db.customers.update_one({"_id": parse_object_id(customer_id)}, {"$set": {"uploads": present}})
     if not present.get("np_stamp"):
         raise HTTPException(
             status_code=400,
@@ -60,7 +60,7 @@ async def send_signing_link(customer_id: str, _=Depends(get_current_user)):
     manifest = await build_signing_manifest(review_prefix, customer)
 
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {"$set": {"signing_status": "sent", "signing_token": token,
                   "signing_manifest": manifest}}
     )
@@ -248,7 +248,7 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
         raise HTTPException(status_code=409, detail="Already submitted")
 
     customer_id = submission["customer_id"]
-    customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -279,7 +279,7 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
         }}
     )
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {"$set": {"signing_status": "signed", "doc_status": "generating"}}
     )
 
@@ -332,19 +332,19 @@ async def _regen_after_signing(customer_id: str):
     from ..services.doc_generation import generate_for_customer
     db = get_db()
     try:
-        customer = await db.customers.find_one({"_id": ObjectId(customer_id)})
+        customer = await db.customers.find_one({"_id": parse_object_id(customer_id)})
         if not customer:
             return
         prefix = await generate_for_customer(customer)
         await db.customers.update_one(
-            {"_id": ObjectId(customer_id)},
+            {"_id": parse_object_id(customer_id)},
             {"$set": {"doc_status": "complete", "r2_prefix": prefix}}
         )
         print(f"Re-generated signed docs for {customer_id}")
     except Exception as e:
         print(f"Regen after signing failed for {customer_id}: {e}")
         await db.customers.update_one(
-            {"_id": ObjectId(customer_id)},
+            {"_id": parse_object_id(customer_id)},
             {"$set": {"doc_status": "failed"}}
         )
 

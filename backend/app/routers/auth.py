@@ -2,25 +2,26 @@ from fastapi import APIRouter, HTTPException, Response, Depends, status
 from ..core.database import get_db
 from ..core.security import hash_password, verify_password, create_access_token
 from ..core.deps import get_current_user
-from ..models.user import UserCreate, UserLogin, UserOut
-from bson import ObjectId
+from ..core.permissions import user_roles, user_permissions
+from ..models.user import UserCreate, UserLogin
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def user_to_out(u: dict) -> dict:
-    return {"id": str(u["_id"]), "email": u["email"], "name": u["name"], "role": u.get("role", "admin")}
+    return {
+        "id": str(u["_id"]),
+        "email": u["email"],
+        "name": u["name"],
+        "roles": user_roles(u),
+        "permissions": sorted(user_permissions(u)),
+        "is_active": u.get("is_active", True),
+    }
 
 
-@router.post("/login")
-async def login(body: UserLogin, response: Response):
-    db = get_db()
-    user = await db.users.find_one({"email": body.email})
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-
-    token = create_access_token({"sub": str(user["_id"])})
+def _set_auth_cookie(response: Response, user_id) -> None:
+    token = create_access_token({"sub": str(user_id)})
     response.set_cookie(
         key="access_token",
         value=token,
@@ -29,6 +30,18 @@ async def login(body: UserLogin, response: Response):
         secure=True,
         max_age=86400,
     )
+
+
+@router.post("/login")
+async def login(body: UserLogin, response: Response):
+    db = get_db()
+    user = await db.users.find_one({"email": body.email})
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if user.get("is_active") is False:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been disabled")
+
+    _set_auth_cookie(response, user["_id"])
     return {"success": True, "data": user_to_out(user)}
 
 
@@ -45,6 +58,10 @@ async def me(current_user=Depends(get_current_user)):
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: UserCreate, response: Response):
+    """
+    Public self-signup. New accounts get NO roles — they can log in but only see
+    the welcome page until an admin grants access from the Users page.
+    """
     db = get_db()
     if await db.users.find_one({"email": body.email}):
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -53,17 +70,10 @@ async def register(body: UserCreate, response: Response):
         "email": body.email,
         "password_hash": hash_password(body.password),
         "name": body.name,
-        "role": "admin",
+        "roles": [],
+        "is_active": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     user = await db.users.find_one({"_id": result.inserted_id})
-    token = create_access_token({"sub": str(result.inserted_id)})
-    response.set_cookie(
-        key="access_token",
-        value=token,
-        httponly=True,
-        samesite="none",
-        secure=True,
-        max_age=86400,
-    )
+    _set_auth_cookie(response, result.inserted_id)
     return {"success": True, "data": user_to_out(user)}

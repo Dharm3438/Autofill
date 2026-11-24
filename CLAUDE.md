@@ -57,8 +57,15 @@ A full-stack web application to manage solar installation customers, auto-genera
 
 ### User
 ```
-_id, email, password_hash, name, role (admin/staff), created_at
+_id, email, password_hash, name, roles[] (admin/data_entry/installation/documents), is_active, created_at
 ```
+
+### Roles & access (RBAC)
+- Defined in `backend/app/core/permissions.py`: roles map to permissions; a user's permissions are the union of their roles. No roles = pending (welcome page only).
+- **admin**: everything + Users page. **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments. **documents**: all customers, edit, generate/print/upload/send/download.
+- Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
+- Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
+- Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI.
 
 ### Customer (all 30 Excel columns + metadata)
 ```
@@ -88,7 +95,12 @@ submitted_at, ip_address
 ### Auth
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
-- `GET  /api/auth/me`
+- `GET  /api/auth/me`                — includes roles + permissions
+- `POST /api/auth/register`          — public signup, creates a pending user (no roles)
+
+### Users (admin only)
+- `GET /api/users`                   — list users + available roles
+- `PUT /api/users/{id}`              — set `roles[]` and/or `is_active`
 
 ### Customers
 - `GET    /api/customers`         — list with search + pagination

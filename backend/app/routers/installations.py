@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
-from ..core.deps import get_current_user
+from ..core.permissions import P, require, parse_object_id
 from ..models.installation import (
     INSTALLATION_STEPS,
     STEP_KEYS,
@@ -43,7 +43,7 @@ async def installations_overview(
     status: str = Query(default=""),          # not_started | in_progress | completed
     pending_step: str = Query(default=""),    # a step key still pending
     dealer: str = Query(default=""),          # exact dealer name to filter by
-    _=Depends(get_current_user),
+    _=Depends(require(P.INSTALLATIONS_READ)),
 ):
     db = get_db()
     query = {}
@@ -114,9 +114,9 @@ async def installations_overview(
 
 
 @router.get("/{customer_id}")
-async def get_installation(customer_id: str, _=Depends(get_current_user)):
+async def get_installation(customer_id: str, _=Depends(require(P.INSTALLATIONS_READ))):
     db = get_db()
-    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
     steps = merge_steps(c.get("installation_steps"))
@@ -138,7 +138,7 @@ async def get_installation(customer_id: str, _=Depends(get_current_user)):
 async def update_installation_serials(
     customer_id: str,
     body: SerialsUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require(P.INSTALLATIONS_WRITE)),
 ):
     """Save the inverter / panel serial numbers entered after installation.
 
@@ -146,13 +146,13 @@ async def update_installation_serials(
     longer derived here — it comes from the checklist's Inverter / Solar Panel
     Installation completion dates (see update_installation_step)."""
     db = get_db()
-    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
     fields = compute_serials_update(body)
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {
             "$set": {
                 **fields,
@@ -177,10 +177,10 @@ async def update_installation_serials(
 async def update_installation_payment(
     customer_id: str,
     body: PaymentUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require(P.INSTALLATIONS_WRITE)),
 ):
     db = get_db()
-    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -188,7 +188,7 @@ async def update_installation_payment(
     # derived from SYSTEM_COST and is never written here.
     entries = [p.model_dump() for p in body.received_payments]
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {
             "$set": {
                 "received_payments": entries,
@@ -212,13 +212,13 @@ async def update_installation_step(
     customer_id: str,
     step_key: str,
     body: InstallationStepUpdate,
-    _=Depends(get_current_user),
+    _=Depends(require(P.INSTALLATIONS_WRITE)),
 ):
     if step_key not in STEP_KEYS:
         raise HTTPException(status_code=400, detail="Unknown installation step")
 
     db = get_db()
-    c = await db.customers.find_one({"_id": ObjectId(customer_id)})
+    c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
@@ -249,7 +249,7 @@ async def update_installation_step(
     # the later of their two completion dates (or whichever is present).
     installation_date = compute_installation_date(steps)
     await db.customers.update_one(
-        {"_id": ObjectId(customer_id)},
+        {"_id": parse_object_id(customer_id)},
         {
             "$set": {
                 "installation_steps": _storable(steps),

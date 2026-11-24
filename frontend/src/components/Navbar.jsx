@@ -3,11 +3,12 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { logout } from '../api/auth'
-import { LogOut, LayoutDashboard, Users, Wrench, Sun, Moon, Menu, X } from 'lucide-react'
+import { LogOut, LayoutDashboard, Users, Wrench, ShieldCheck, Sun, Moon, Menu, X } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { PERM, CUSTOMERS_VIEW } from '../utils/access'
 
 export default function Navbar() {
-  const { user, setUser } = useAuth()
+  const { user, setUser, can } = useAuth()
   const { isDark, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -28,10 +29,11 @@ export default function Navbar() {
   }
 
   const links = [
-    { path: '/dashboard', Icon: LayoutDashboard, label: 'Dashboard' },
-    { path: '/customers', Icon: Users, label: 'Customers' },
-    { path: '/installations', Icon: Wrench, label: 'Installations' },
-  ]
+    { path: '/dashboard', Icon: LayoutDashboard, label: 'Dashboard', perm: PERM.DASHBOARD_VIEW },
+    { path: '/customers', Icon: Users, label: 'Customers', perm: CUSTOMERS_VIEW },
+    { path: '/installations', Icon: Wrench, label: 'Installations', perm: PERM.INSTALLATIONS_READ },
+    { path: '/users', Icon: ShieldCheck, label: 'Users', perm: PERM.USERS_MANAGE },
+  ].filter((l) => can(l.perm))
 
   function navBtn({ path, Icon, label }) {
     const active = location.pathname === path

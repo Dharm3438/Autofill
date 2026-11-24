@@ -1,20 +1,33 @@
+from bson import ObjectId
 from fastapi import Cookie, HTTPException, status
 from .security import decode_token
 from .database import get_db
 
 
 async def get_current_user(access_token: str = Cookie(default=None)):
+    """
+    Resolve the logged-in user from the JWT cookie. The user (and therefore
+    their roles) is re-read from the database on every request, so role changes
+    and deactivation take effect immediately — nothing is trusted from the token
+    beyond the user id.
+    """
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     payload = decode_token(access_token)
-    if not payload:
+    if not payload or not payload.get("sub"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
+
+    try:
+        user_id = ObjectId(payload["sub"])
+    except Exception:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
     db = get_db()
-    from bson import ObjectId
-    user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+    user = await db.users.find_one({"_id": user_id})
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    if user.get("is_active") is False:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
 
     return user

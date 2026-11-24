@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 
 
 class UserCreate(BaseModel):
@@ -13,8 +13,7 @@ class UserLogin(BaseModel):
     password: str
 
 
-class UserOut(BaseModel):
-    id: str
-    email: str
-    name: str
-    role: str
+class UserAccessUpdate(BaseModel):
+    """Admin-only: change a user's roles and/or active flag."""
+    roles: Optional[List[str]] = None
+    is_active: Optional[bool] = None
