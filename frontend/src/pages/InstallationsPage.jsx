@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
 import { DEALER_OPTIONS } from '../constants/dealers'
@@ -120,7 +120,8 @@ export default function InstallationsPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [pendingStep, setPendingStep] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
-  const [loading, setLoading] = useState(false)
+  // True from the start so the first paint shows the spinner, not the empty state.
+  const [loading, setLoading] = useState(true)
   const [manageCustomer, setManageCustomer] = useState(null)
   // Bumped whenever an installation change is saved, so the inventory sidebar
   // refetches (a completed step moves a unit from "required" to "in stock used").
@@ -144,10 +145,16 @@ export default function InstallationsPage() {
     dealer: dealerFilter,
   }), [debouncedSearch, statusFilter, pendingStep, dealerFilter])
 
+  // Only the newest request may update the list (an older, slower response
+  // must not overwrite it).
+  const requestIdRef = useRef(0)
+
   const fetchData = useCallback(async () => {
+    const id = ++requestIdRef.current
     setLoading(true)
     try {
       const res = await getInstallationOverview({ ...filterParams(), page, limit: PAGE_SIZE })
+      if (id !== requestIdRef.current) return
       const { data, total: count, summary: sum, steps } = res.data
       // The current page can empty out (e.g. after Manage moves a customer to
       // another status under an active filter) — step back to the last page.
@@ -161,9 +168,9 @@ export default function InstallationsPage() {
       setSummary(sum)
       setStepDefs(steps)
     } catch {
-      toast.error('Failed to load installation progress')
+      if (id === requestIdRef.current) toast.error('Failed to load installation progress')
     } finally {
-      setLoading(false)
+      if (id === requestIdRef.current) setLoading(false)
     }
   }, [filterParams, page])
 
@@ -298,7 +305,10 @@ export default function InstallationsPage() {
 
         {/* List */}
         <div className="bg-white dark:bg-[#16201b] rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm">
-          {loading ? (
+          {/* Full spinner only when there's nothing on screen yet; a background
+              refetch (e.g. after a Manage save) keeps the rows visible, dimmed,
+              so the scroll position survives it. */}
+          {loading && rows.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
               <RefreshCw className="w-6 h-6 text-[#1a3a2a] dark:text-emerald-400 animate-spin" />
               <p className="text-sm text-gray-400 dark:text-gray-500">Loading…</p>
@@ -312,7 +322,7 @@ export default function InstallationsPage() {
               <p className="text-sm text-gray-400 dark:text-gray-500">Try adjusting the filters</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-100 dark:divide-white/10">
+            <ul className={`divide-y divide-gray-100 dark:divide-white/10 transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
               {rows.map((c) => {
                 const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
                 return (

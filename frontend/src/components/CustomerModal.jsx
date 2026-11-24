@@ -192,14 +192,16 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
     const payload = { ...form }
     if (!showDocuments) DOCUMENT_KEYS.forEach(k => { delete payload[k] })
     try {
+      let res
       if (isEdit) {
-        await updateCustomer(customer.id, payload)
+        res = await updateCustomer(customer.id, payload)
         toast.success('Customer updated')
       } else {
-        await createCustomer(payload)
+        res = await createCustomer(payload)
         toast.success('Customer added')
       }
-      onSaved()
+      // The saved customer, so the list can update that row without refetching.
+      onSaved(res.data?.data)
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Something went wrong')
     } finally {

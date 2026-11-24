@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { UserPlus, Search, RefreshCw, Users } from 'lucide-react'
 import { getCustomers } from '../api/customers'
 import CustomerModal from '../components/CustomerModal'
@@ -19,26 +19,49 @@ export default function CustomersPage() {
   // but we only hit the backend (an unindexed regex scan) once typing settles.
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
+  // True from the start so the first paint shows the spinner, not the empty state.
+  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editCustomer, setEditCustomer] = useState(null)
   const LIMIT = 20
 
+  // Applying a search and resetting to page 1 happen together, so a search
+  // typed on page 3 fetches once (page 1), not twice (page 3, then page 1).
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    if (search === debouncedSearch) return
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 350)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, debouncedSearch])
 
+  // Only the newest request may update the list (an older, slower response
+  // must not overwrite it).
+  const requestIdRef = useRef(0)
+
+  // The full list fetch. Only for things that change which rows are on the
+  // page or the total: page/search changes, adding and deleting a customer.
+  // A change to one customer updates that row in place instead (see below).
   const fetchCustomers = useCallback(async () => {
+    const id = ++requestIdRef.current
     setLoading(true)
     try {
       const res = await getCustomers({ search: debouncedSearch, page, limit: LIMIT })
+      if (id !== requestIdRef.current) return
+      const count = res.data.total
+      // A delete can empty the last page — step back instead of showing nothing.
+      const lastPage = Math.max(1, Math.ceil(count / LIMIT))
+      if (page > lastPage) {
+        setPage(lastPage)
+        return
+      }
       setCustomers(res.data.data)
-      setTotal(res.data.total)
+      setTotal(count)
     } catch {
-      toast.error('Failed to load customers')
+      if (id === requestIdRef.current) toast.error('Failed to load customers')
     } finally {
-      setLoading(false)
+      if (id === requestIdRef.current) setLoading(false)
     }
   }, [debouncedSearch, page])
 
@@ -46,9 +69,15 @@ export default function CustomersPage() {
     fetchCustomers()
   }, [fetchCustomers])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch])
+  // Replace one row with the customer as the server returned it.
+  const replaceRow = useCallback((updated) => {
+    setCustomers(prev => prev.map(c => (c.id === updated.id ? updated : c)))
+  }, [])
+
+  // Merge a few known fields into one row (e.g. doc_status after generation).
+  const patchRow = useCallback((id, fields) => {
+    setCustomers(prev => prev.map(c => (c.id === id ? { ...c, ...fields } : c)))
+  }, [])
 
   function openAdd() {
     setEditCustomer(null)
@@ -60,9 +89,12 @@ export default function CustomersPage() {
     setShowModal(true)
   }
 
-  function onSaved() {
+  function onSaved(saved) {
     setShowModal(false)
-    fetchCustomers()
+    // An edit returns the updated customer — swap it in, no refetch. A new
+    // customer changes the total and page order, so that needs the list.
+    if (editCustomer && saved) replaceRow(saved)
+    else fetchCustomers()
   }
 
   const totalPages = Math.ceil(total / LIMIT)
@@ -109,7 +141,10 @@ export default function CustomersPage() {
 
         {/* Table Card */}
         <div className="bg-white dark:bg-[#16201b] rounded-2xl border border-gray-200 dark:border-white/10 overflow-hidden shadow-sm">
-          {loading ? (
+          {/* Full spinner only when there's nothing on screen yet; a background
+              refetch keeps the current rows visible (dimmed) so scroll position,
+              expanded rows and open popups survive it. */}
+          {loading && customers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 gap-3">
               <RefreshCw className="w-6 h-6 text-[#1a3a2a] dark:text-emerald-400 animate-spin" />
               <p className="text-sm text-gray-400 dark:text-gray-500">Loading customers…</p>
@@ -134,11 +169,15 @@ export default function CustomersPage() {
               )}
             </div>
           ) : (
-            <CustomerTable
-              customers={customers}
-              onEdit={openEdit}
-              onRefresh={fetchCustomers}
-            />
+            <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
+              <CustomerTable
+                customers={customers}
+                onEdit={openEdit}
+                onRefresh={fetchCustomers}
+                onRowReplace={replaceRow}
+                onRowPatch={patchRow}
+              />
+            </div>
           )}
         </div>
 
