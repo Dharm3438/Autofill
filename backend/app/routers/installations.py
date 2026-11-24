@@ -6,12 +6,15 @@ from ..core.permissions import P, require, parse_object_id
 from ..models.installation import (
     INSTALLATION_STEPS,
     STEP_KEYS,
+    GROUP_KEYS,
+    apply_group_update,
     merge_steps,
     compute_overall_status,
     compute_installation_date,
     payment_info,
     compute_serials_update,
     InstallationStepUpdate,
+    InstallationGroupUpdate,
     PaymentUpdate,
     SerialsUpdate,
 )
@@ -22,9 +25,9 @@ router = APIRouter(prefix="/installations", tags=["installations"])
 
 
 def _storable(steps: list) -> list:
-    """Drop the derived `label` field before persisting — labels live in code."""
+    """Drop derived fields (label, group, ...) before persisting — they live in code."""
     return [
-        {k: s[k] for k in ("key", "status", "completed_date", "performed_by", "notes")}
+        {k: s[k] for k in ("key", "status", "completed_date", "performed_by")}
         for s in steps
     ]
 
@@ -346,15 +349,46 @@ async def update_installation_step(
         )
         if body.performed_by is not None:
             target["performed_by"] = body.performed_by
-        if body.notes is not None:
-            target["notes"] = body.notes
+        # Grouped steps share one date and person: keep the group's other done
+        # members in sync with this one.
+        if target.get("group"):
+            for s in steps:
+                if s is not target and s.get("group") == target["group"] and s["status"] == "done":
+                    s["completed_date"] = target["completed_date"]
+                    s["performed_by"] = target["performed_by"]
     else:
         # Toggling back to pending clears the recorded details.
         target["status"] = "pending"
         target["completed_date"] = None
         target["performed_by"] = None
-        target["notes"] = body.notes if body.notes is not None else None
 
+    return await _save_steps(db, customer_id, steps)
+
+
+@router.put("/{customer_id}/groups/{group_key}")
+async def update_installation_group(
+    customer_id: str,
+    group_key: str,
+    body: InstallationGroupUpdate,
+    _=Depends(require(P.INSTALLATIONS_WRITE)),
+):
+    """Save a step group (e.g. wiring) in one go: per-member done/pending, with a
+    single completed date and "done by" shared by all done members."""
+    if group_key not in GROUP_KEYS:
+        raise HTTPException(status_code=400, detail="Unknown installation step group")
+
+    db = get_db()
+    c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    steps = merge_steps(c.get("installation_steps"))
+    apply_group_update(steps, group_key, body)
+    return await _save_steps(db, customer_id, steps)
+
+
+async def _save_steps(db, customer_id: str, steps: list) -> dict:
+    """Persist merged steps (and the derived INSTALLATION_DATE); return the response."""
     # INSTALLATION_DATE tracks the Inverter / Solar Panel Installation steps:
     # the later of their two completion dates (or whichever is present).
     installation_date = compute_installation_date(steps)
