@@ -17,7 +17,17 @@ _INTERNAL_FIELDS = ("signing_token", "signing_token_expiry", "signing_manifest",
 # Only for users who work on installations / payments.
 _INSTALLATION_FIELDS = ("installation_steps", "received_payments", "received_payment", "total_payment")
 # Only for users who work on documents.
-_DOCUMENT_FIELDS = ("doc_status", "signing_status", "uploads")
+_DOCUMENT_FIELDS = ("doc_status", "signing_status", "uploads", "AGREEMENT_SYSTEM_COST")
+# Customer data fields that only document users may write. Silently dropped for
+# everyone else so a form sending "" for them can't blank or set the value.
+_DOCUMENT_WRITE_FIELDS = ("AGREEMENT_SYSTEM_COST",)
+
+
+def _strip_document_fields(data: dict, user: dict) -> dict:
+    if P.DOCUMENTS_MANAGE not in user_permissions(user):
+        for f in _DOCUMENT_WRITE_FIELDS:
+            data.pop(f, None)
+    return data
 
 
 def customer_to_out(c: dict, user: dict) -> dict:
@@ -105,7 +115,7 @@ async def create_customer(body: CustomerCreate, user=Depends(require(P.CUSTOMERS
             raise HTTPException(status_code=409, detail="Consumer number already exists")
     now = datetime.now(timezone.utc).isoformat()
     doc = {
-        **body.model_dump(),
+        **_strip_document_fields(body.model_dump(), user),
         "doc_status": "none",
         "signing_status": "none",
         "uploads": {"installation": False, "np_stamp": False, "dcr": False},
@@ -170,7 +180,7 @@ async def update_customer(customer_id: str, body: CustomerUpdate, user=Depends(r
             raise HTTPException(status_code=409, detail="Consumer number already exists")
     # CustomerUpdate only contains the customer data fields, so status/ownership
     # fields (doc_status, created_by, payments, …) can't be written through here.
-    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
+    update_data = {k: v for k, v in _strip_document_fields(body.model_dump(), user).items() if v is not None}
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["updated_by"] = str(user["_id"])
 

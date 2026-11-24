@@ -1,9 +1,23 @@
-import { X, AlertTriangle, Pencil, FileWarning, Wrench } from 'lucide-react'
+import { useState } from 'react'
+import { X, AlertTriangle, Pencil, FileWarning, Wrench, Loader2 } from 'lucide-react'
 
 // Fields that are no longer edited on the customer form — they're filled on the
 // Installation page (Manage). The installation date is derived from the Inverter
 // and Solar Panel Installation checklist steps, so it can't be entered directly.
 const INSTALLATION_MANAGED_KEYS = new Set(['INVERTER_SR_NO', 'PANEL_SR_NO', 'INSTALLATION_DATE'])
+
+// Fields asked for right here in the popup rather than on the customer form.
+// Deliberately NOT pre-filled from SYSTEM_COST: that's the real price and must
+// not end up on the documents by clicking through.
+const INLINE_FIELDS = {
+  AGREEMENT_SYSTEM_COST: {
+    label: 'Agreement System Cost (₹)',
+    help: 'The amount printed on the Net-Metering Agreement. This is separate from the real System Cost used for payments.',
+    placeholder: 'e.g. 1,20,000',
+    // Digits with optional Indian/Western comma grouping and paise.
+    validate: (v) => (/^\d[\d,]*(\.\d{1,2})?$/.test(v) ? '' : 'Enter an amount using digits (commas allowed).'),
+  },
+}
 
 /**
  * Blocking popup shown when document generation is refused because the customer
@@ -15,11 +29,37 @@ const INSTALLATION_MANAGED_KEYS = new Set(['INVERTER_SR_NO', 'PANEL_SR_NO', 'INS
  *     documents:      [{ document, missing: [{ key, label }] }],
  *   }
  */
-export default function MissingFieldsModal({ customerName, report, onClose, onEdit }) {
+export default function MissingFieldsModal({ customerName, report, onClose, onEdit, onSaveAndGenerate }) {
+  const [values, setValues] = useState({})
+  const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+
   if (!report) return null
   const missingFields = report.missing_fields || []
   const documents = report.documents || []
   const hasInstallationManaged = missingFields.some((f) => INSTALLATION_MANAGED_KEYS.has(f.key))
+  const inlineFields = onSaveAndGenerate ? missingFields.filter((f) => INLINE_FIELDS[f.key]) : []
+  const otherFields = missingFields.filter((f) => !inlineFields.includes(f))
+
+  async function handleSave(e) {
+    e.preventDefault()
+    const data = {}
+    const errs = {}
+    for (const f of inlineFields) {
+      const v = (values[f.key] || '').trim()
+      const err = v ? INLINE_FIELDS[f.key].validate(v) : 'Required.'
+      if (err) errs[f.key] = err
+      else data[f.key] = v
+    }
+    setErrors(errs)
+    if (Object.keys(errs).length) return
+    setSaving(true)
+    try {
+      await onSaveAndGenerate(data)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -62,14 +102,55 @@ export default function MissingFieldsModal({ customerName, report, onClose, onEd
             </div>
           )}
 
+          {/* Fields that can be filled in right here */}
+          {inlineFields.length > 0 && (
+            <form id="missing-inline-form" onSubmit={handleSave} className="space-y-3">
+              {inlineFields.map((f) => {
+                const cfg = INLINE_FIELDS[f.key]
+                return (
+                  <div
+                    key={f.key}
+                    className="rounded-xl border border-[#1a3a2a]/20 bg-[#1a3a2a]/5 dark:border-emerald-500/20 dark:bg-emerald-500/10 px-3 py-3"
+                  >
+                    <label htmlFor={`inline-${f.key}`} className="block text-sm font-semibold text-gray-800 dark:text-gray-100">
+                      {cfg.label}
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 mb-2">{cfg.help}</p>
+                    <input
+                      id={`inline-${f.key}`}
+                      type="text"
+                      inputMode="decimal"
+                      autoFocus
+                      value={values[f.key] || ''}
+                      placeholder={cfg.placeholder}
+                      onChange={(e) => {
+                        setValues((v) => ({ ...v, [f.key]: e.target.value }))
+                        setErrors((er) => ({ ...er, [f.key]: '' }))
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50"
+                    />
+                    {errors[f.key] && (
+                      <p className="mt-1 text-xs text-red-500 dark:text-red-400">{errors[f.key]}</p>
+                    )}
+                    {f.documents?.length > 0 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                        Needed in: {f.documents.join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </form>
+          )}
+
           {/* Missing fields */}
-          {missingFields.length > 0 && (
+          {otherFields.length > 0 && (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
-                {missingFields.length} field{missingFields.length === 1 ? '' : 's'} missing
+                {otherFields.length} {inlineFields.length ? 'other ' : ''}field{otherFields.length === 1 ? '' : 's'} missing
               </p>
               <div className="space-y-2">
-                {missingFields.map((f) => (
+                {otherFields.map((f) => (
                   <div
                     key={f.key}
                     className="rounded-xl border border-amber-200 bg-amber-50/50 dark:border-amber-500/20 dark:bg-amber-500/10 px-3 py-2.5"
@@ -120,13 +201,28 @@ export default function MissingFieldsModal({ customerName, report, onClose, onEd
           >
             Close
           </button>
-          {onEdit && (
+          {onEdit && otherFields.length > 0 && (
             <button
               onClick={onEdit}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] transition-colors"
+              className={
+                inlineFields.length > 0
+                  ? 'inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg border border-gray-200 dark:border-white/10 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors'
+                  : 'inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] transition-colors'
+              }
             >
               <Pencil className="w-4 h-4" />
               Fill in Details
+            </button>
+          )}
+          {inlineFields.length > 0 && (
+            <button
+              type="submit"
+              form="missing-inline-form"
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] disabled:opacity-60 transition-colors"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {otherFields.length > 0 ? 'Save' : 'Save & Generate'}
             </button>
           )}
         </div>

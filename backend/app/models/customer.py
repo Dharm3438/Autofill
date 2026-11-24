@@ -69,6 +69,10 @@ class CustomerCreate(BaseModel):
     INSTALLATION_DISTRICT: Optional[str] = None
     DISCOM_REGISTERED_OFFICE: Optional[str] = None
     SYSTEM_COST: Optional[str] = None
+    # Amount printed on the documents (Net-Metering Agreement). Separate from
+    # SYSTEM_COST, which is the real price used for payments and is never put
+    # on a generated document. Documents role / admin only.
+    AGREEMENT_SYSTEM_COST: Optional[str] = None
     METER_TESTING_DATE: Optional[str] = None
     METER_RECIPT_NO: Optional[str] = None
     GENERATION_METER_MAKE: Optional[str] = None
