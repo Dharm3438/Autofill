@@ -65,7 +65,9 @@ _id, email, password_hash, name, roles[] (admin/data_entry/installation/document
 - **admin**: everything + Users page. **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments. **documents**: all customers, edit, generate/print/upload/send/download.
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
-- Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI.
+- Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.
+- CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
+- User search text is `re.escape`d before Mongo `$regex`.
 
 ### Customer (all 30 Excel columns + metadata)
 ```
