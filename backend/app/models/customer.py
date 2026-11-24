@@ -1,13 +1,52 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Literal, Union
 from datetime import date
+
+
+# Fields the customer form requires (they all appear on the printable Customer
+# Details sheet). Email is deliberately optional. Enforced by the customers
+# router on create, and on update so a required field can't be blanked out.
+REQUIRED_CUSTOMER_FIELDS = {
+    "CONSUMER_NAME":     "Consumer Name",
+    "CONSUMER_ADDRESS":  "Address",
+    "CONSUMER_PHONE":    "Phone",
+    "CONSUMER_AADHAR":   "Aadhar Number",
+    "CONSUMER_NO":       "Consumer No",
+    "DEALER_NAME":       "Dealer Name",
+    "CONSUMER_APP_NO":   "Subsidy Portal Application No",
+    "CONSUMER_APP_DATE": "Subsidy Portal Application Date",
+    "SOLAR_CAPACITY":    "Solar Capacity",
+    "INVERTER_MAKE":     "Inverter Make",
+    "INVERTER_CAPACITY": "Inverter Capacity",
+    "PANEL_COMPANY":     "Panel Company",
+    "PANEL_WATT":        "Panel Watt",
+    "NO_OF_PANEL":       "No of Panels",
+    "SYSTEM_COST":       "System Cost",
+}
+
+
+def missing_required_fields(data: dict, partial: bool = False) -> List[str]:
+    """
+    Labels of required fields that are blank in `data`.
+    partial=True (updates): only fields actually sent are checked, so an
+    omitted field is fine but one sent as an empty string is not.
+    """
+    missing = []
+    for key, label in REQUIRED_CUSTOMER_FIELDS.items():
+        value = data.get(key)
+        if partial and value is None:
+            continue
+        if value is None or not str(value).strip():
+            missing.append(label)
+    return missing
 
 
 class CustomerCreate(BaseModel):
     CONSUMER_NAME: str
     CONSUMER_ADDRESS: str
     CONSUMER_PHONE: str
-    CONSUMER_EMAIL: Optional[EmailStr] = None
+    # Email is optional; the form sends "" when it's left empty.
+    CONSUMER_EMAIL: Optional[Union[EmailStr, Literal[""]]] = None
     CONSUMER_AADHAR: Optional[str] = None
     CONSUMER_NO: Optional[str] = None
     DEALER_NAME: Optional[str] = None

@@ -19,3 +19,7 @@ export const checkConsumerNo = (consumer_no, exclude_id = null) =>
   api.get('/customers/check-consumer-no', {
     params: { consumer_no, ...(exclude_id && { exclude_id }) },
   })
+
+// Filled one-page Customer Details PDF, for printing.
+export const getCustomerDetailsSheet = (id) =>
+  api.get(`/customers/${id}/details-sheet`, { responseType: 'blob' })
