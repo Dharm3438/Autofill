@@ -1,3 +1,4 @@
+import asyncio
 import re
 from fastapi import APIRouter, HTTPException, Depends, Query, status
 from ..core.database import get_db
@@ -38,14 +39,145 @@ def _summarize(steps: list) -> dict:
     }
 
 
+# Fields the overview rows need. Projecting down to these before sorting keeps
+# the in-memory sort small even with thousands of customers.
+_OVERVIEW_FIELDS = (
+    "CONSUMER_NAME", "DEALER_NAME", "CONSUMER_NO", "CONSUMER_PHONE",
+    "INSTALLATION_CITY", "INVERTER_MAKE", "INVERTER_CAPACITY",
+    "PANEL_COMPANY", "PANEL_WATT", "NO_OF_PANEL",
+    "installation_steps", "SYSTEM_COST", "received_payments", "received_payment",
+)
+
+_STEP_KEY_LIST = [s["key"] for s in INSTALLATION_STEPS]
+_TOTAL_STEPS = len(_STEP_KEY_LIST)
+
+OVERVIEW_PAGE_SIZE_MAX = 100
+
+
+def _overview_base_pipeline(query: dict) -> list:
+    """Match customers and derive, inside MongoDB, the same progress fields
+    `merge_steps` + `_summarize` compute in Python, so the database can filter,
+    sort and page on them:
+
+      _done_keys   — distinct current step keys marked done (unknown keys and
+                     missing/non-list `installation_steps` are ignored, like merge_steps)
+      _done_count  — len(_done_keys)
+      _status      — not_started / in_progress / completed
+      _name_sort   — lower-cased name, for a case-insensitive A→Z tiebreak
+    """
+    stored_done_keys = {
+        "$map": {
+            "input": {
+                "$filter": {
+                    "input": {"$cond": [{"$isArray": "$installation_steps"}, "$installation_steps", []]},
+                    "as": "s",
+                    "cond": {"$eq": ["$$s.status", "done"]},
+                }
+            },
+            "as": "s",
+            "in": "$$s.key",
+        }
+    }
+    # Walk the canonical step list (not the stored one) so duplicates and
+    # removed/unknown keys can't inflate the count.
+    done_keys = {
+        "$filter": {
+            "input": {"$literal": _STEP_KEY_LIST},
+            "as": "k",
+            "cond": {"$in": ["$$k", stored_done_keys]},
+        }
+    }
+    return [
+        {"$match": query},
+        {"$project": {**{f: 1 for f in _OVERVIEW_FIELDS}, "_done_keys": done_keys}},
+        {"$addFields": {
+            "_done_count": {"$size": "$_done_keys"},
+            "_name_sort": {"$toLower": {"$ifNull": ["$CONSUMER_NAME", ""]}},
+        }},
+        {"$addFields": {
+            "_status": {
+                "$switch": {
+                    "branches": [
+                        {"case": {"$eq": ["$_done_count", 0]}, "then": "not_started"},
+                        {"case": {"$gte": ["$_done_count", _TOTAL_STEPS]}, "then": "completed"},
+                    ],
+                    "default": "in_progress",
+                }
+            }
+        }},
+    ]
+
+
+def _overview_summary_stage() -> dict:
+    """One $group producing the dashboard counts in a single small document."""
+    group = {
+        "_id": None,
+        "total_customers": {"$sum": 1},
+        **{
+            st: {"$sum": {"$cond": [{"$eq": ["$_status", st]}, 1, 0]}}
+            for st in ("completed", "in_progress", "not_started")
+        },
+    }
+    for i, key in enumerate(_STEP_KEY_LIST):
+        # Field names can't contain the raw key safely in every case; index them.
+        group[f"done_{i}"] = {"$sum": {"$cond": [{"$in": [key, "$_done_keys"]}, 1, 0]}}
+    return {"$group": group}
+
+
+def _summary_from_group(doc: dict | None) -> dict:
+    doc = doc or {}
+    total = doc.get("total_customers", 0)
+    return {
+        "total_customers": total,
+        "completed": doc.get("completed", 0),
+        "in_progress": doc.get("in_progress", 0),
+        "not_started": doc.get("not_started", 0),
+        "per_step_pending": {
+            key: total - doc.get(f"done_{i}", 0) for i, key in enumerate(_STEP_KEY_LIST)
+        },
+    }
+
+
+def _overview_row(c: dict) -> dict:
+    steps = merge_steps(c.get("installation_steps"))
+    return {
+        "id": str(c["_id"]),
+        "CONSUMER_NAME": c.get("CONSUMER_NAME"),
+        "DEALER_NAME": c.get("DEALER_NAME"),
+        "CONSUMER_NO": c.get("CONSUMER_NO"),
+        "CONSUMER_PHONE": c.get("CONSUMER_PHONE"),
+        "INSTALLATION_CITY": c.get("INSTALLATION_CITY"),
+        "INVERTER_MAKE": c.get("INVERTER_MAKE"),
+        "INVERTER_CAPACITY": c.get("INVERTER_CAPACITY"),
+        "PANEL_COMPANY": c.get("PANEL_COMPANY"),
+        "PANEL_WATT": c.get("PANEL_WATT"),
+        "NO_OF_PANEL": c.get("NO_OF_PANEL"),
+        **_summarize(steps),
+        **payment_info(c),
+    }
+
+
 @router.get("/overview")
 async def installations_overview(
     search: str = Query(default=""),
     status: str = Query(default=""),          # not_started | in_progress | completed
     pending_step: str = Query(default=""),    # a step key still pending
     dealer: str = Query(default=""),          # exact dealer name to filter by
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=OVERVIEW_PAGE_SIZE_MAX),
+    # Print needs every filtered row; it asks for them explicitly, on demand.
+    fetch_all: bool = Query(default=False, alias="all"),
     _=Depends(require(P.INSTALLATIONS_READ)),
 ):
+    """
+    One page of installation progress, sorted by completion (most done first)
+    then name. Filtering, sorting and paging happen in MongoDB, so only the
+    requested page leaves the database.
+
+    `summary` counts ALL customers matching search/dealer (before the status
+    and pending-step filters) so the dashboard totals stay meaningful.
+    `total` is the number of rows after every filter, for the pager.
+    """
     db = get_db()
     query = {}
     if search:
@@ -57,59 +189,36 @@ async def installations_overview(
     if dealer:
         query["DEALER_NAME"] = dealer
 
-    customers = []
-    summary = {
-        "total_customers": 0,
-        "completed": 0,
-        "in_progress": 0,
-        "not_started": 0,
-        "per_step_pending": {s["key"]: 0 for s in INSTALLATION_STEPS},
-    }
+    base = _overview_base_pipeline(query)
 
-    cursor = db.customers.find(query).sort("created_at", -1)
-    async for c in cursor:
-        steps = merge_steps(c.get("installation_steps"))
-        info = _summarize(steps)
+    row_filter = {}
+    if status:
+        row_filter["_status"] = status
+    if pending_step:
+        if pending_step in STEP_KEYS:
+            row_filter["_done_keys"] = {"$ne": pending_step}
+        else:
+            # An unknown step can never be pending — match nothing, as before.
+            row_filter["_id"] = {"$exists": False}
+    filtered = base + ([{"$match": row_filter}] if row_filter else [])
 
-        # Summary counts reflect ALL matching customers (before status/step filters)
-        # so the dashboard totals stay meaningful.
-        summary["total_customers"] += 1
-        summary[info["overall_status"]] += 1
-        for s in steps:
-            if s.get("status") != "done":
-                summary["per_step_pending"][s["key"]] += 1
+    rows_pipeline = filtered + [{"$sort": {"_done_count": -1, "_name_sort": 1, "_id": 1}}]
+    if not fetch_all:
+        rows_pipeline += [{"$skip": (page - 1) * limit}, {"$limit": limit}]
 
-        if status and info["overall_status"] != status:
-            continue
-        if pending_step:
-            still_pending = any(
-                s["key"] == pending_step and s.get("status") != "done" for s in steps
-            )
-            if not still_pending:
-                continue
-
-        customers.append(
-            {
-                "id": str(c["_id"]),
-                "CONSUMER_NAME": c.get("CONSUMER_NAME"),
-                "DEALER_NAME": c.get("DEALER_NAME"),
-                "CONSUMER_NO": c.get("CONSUMER_NO"),
-                "CONSUMER_PHONE": c.get("CONSUMER_PHONE"),
-                "INSTALLATION_CITY": c.get("INSTALLATION_CITY"),
-                "INVERTER_MAKE": c.get("INVERTER_MAKE"),
-                "INVERTER_CAPACITY": c.get("INVERTER_CAPACITY"),
-                "PANEL_COMPANY": c.get("PANEL_COMPANY"),
-                "PANEL_WATT": c.get("PANEL_WATT"),
-                "NO_OF_PANEL": c.get("NO_OF_PANEL"),
-                **info,
-                **payment_info(c),
-            }
-        )
+    summary_docs, count_docs, raw_rows = await asyncio.gather(
+        db.customers.aggregate(base + [_overview_summary_stage()]).to_list(length=1),
+        db.customers.aggregate(filtered + [{"$count": "n"}]).to_list(length=1),
+        db.customers.aggregate(rows_pipeline).to_list(length=None),
+    )
 
     return {
         "success": True,
-        "data": customers,
-        "summary": summary,
+        "data": [_overview_row(c) for c in raw_rows],
+        "total": count_docs[0]["n"] if count_docs else 0,
+        "page": 1 if fetch_all else page,
+        "limit": None if fetch_all else limit,
+        "summary": _summary_from_group(summary_docs[0] if summary_docs else None),
         "steps": INSTALLATION_STEPS,
     }
 

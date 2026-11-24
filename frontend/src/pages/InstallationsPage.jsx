@@ -1,12 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
 import { DEALER_OPTIONS } from '../constants/dealers'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
 import InventorySidebar from '../components/InventorySidebar'
-import { printInstallations } from '../utils/printInstallations'
+import { printInstallations, openPrintWindow } from '../utils/printInstallations'
 import toast from 'react-hot-toast'
+
+// Rows per page — same as the Customers page.
+const PAGE_SIZE = 20
 
 const STATUS_BADGE = {
   completed: 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20',
@@ -103,6 +106,10 @@ function PaymentLine({ customer: c }) {
 
 export default function InstallationsPage() {
   const [rows, setRows] = useState([])
+  // Rows matching every filter (all pages) — drives the pager.
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(1)
+  const [printing, setPrinting] = useState(false)
   const [summary, setSummary] = useState(null)
   const [stepDefs, setStepDefs] = useState([])
   const [search, setSearch] = useState('')
@@ -120,63 +127,94 @@ export default function InstallationsPage() {
   const [inventoryRefresh, setInventoryRefresh] = useState(0)
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    if (search === debouncedSearch) return
+    // A new search shows its first page.
+    const t = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 350)
     return () => clearTimeout(t)
-  }, [search])
+  }, [search, debouncedSearch])
+
+  // The filters as API params — shared by the page fetch and Print.
+  const filterParams = useCallback(() => ({
+    search: debouncedSearch,
+    status: statusFilter,
+    pending_step: pendingStep,
+    dealer: dealerFilter,
+  }), [debouncedSearch, statusFilter, pendingStep, dealerFilter])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await getInstallationOverview({
-        search: debouncedSearch,
-        status: statusFilter,
-        pending_step: pendingStep,
-        dealer: dealerFilter,
-      })
-      setRows(res.data.data)
-      setSummary(res.data.summary)
-      setStepDefs(res.data.steps)
+      const res = await getInstallationOverview({ ...filterParams(), page, limit: PAGE_SIZE })
+      const { data, total: count, summary: sum, steps } = res.data
+      // The current page can empty out (e.g. after Manage moves a customer to
+      // another status under an active filter) — step back to the last page.
+      const lastPage = Math.max(1, Math.ceil(count / PAGE_SIZE))
+      if (page > lastPage) {
+        setPage(lastPage)
+        return
+      }
+      setRows(data)
+      setTotal(count)
+      setSummary(sum)
+      setStepDefs(steps)
     } catch {
       toast.error('Failed to load installation progress')
     } finally {
       setLoading(false)
     }
-  }, [debouncedSearch, statusFilter, pendingStep, dealerFilter])
+  }, [filterParams, page])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  // The list exactly as rendered below — sorted by completion %, then name.
-  // Shared by the on-screen list and the print sheet so they stay in sync.
-  const sortedRows = useMemo(
-    () =>
-      [...rows].sort((a, b) => {
-        const pctA = a.total ? a.done_count / a.total : 0
-        const pctB = b.total ? b.done_count / b.total : 0
-        if (pctB !== pctA) return pctB - pctA
-        return (a.CONSUMER_NAME || '').localeCompare(b.CONSUMER_NAME || '', undefined, { sensitivity: 'base' })
-      }),
-    [rows],
-  )
+  const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  function handlePrint() {
-    if (sortedRows.length === 0) {
+  // A filter change shows its first page.
+  function changeFilter(setter) {
+    return (e) => {
+      setter(e.target.value)
+      setPage(1)
+    }
+  }
+
+  // Print covers every customer matching the filters, not just this page, so
+  // fetch them all (already sorted by the server) only when Print is clicked.
+  async function handlePrint() {
+    if (total === 0) {
       toast.error('Nothing to print — no customers match the current filters')
       return
     }
-    const pendingLabel = pendingStep
-      ? stepDefs.find((s) => s.key === pendingStep)?.label || pendingStep
-      : ''
-    const ok = printInstallations(sortedRows, {
-      filters: [
-        { label: 'Search', value: search },
-        { label: 'Dealer', value: dealerFilter },
-        { label: 'Status', value: STATUS_LABEL[statusFilter] || '' },
-        { label: 'Pending step', value: pendingLabel },
-      ],
-    })
-    if (!ok) toast.error('Allow pop-ups to print the report')
+    const win = openPrintWindow()
+    if (!win) {
+      toast.error('Allow pop-ups to print the report')
+      return
+    }
+    setPrinting(true)
+    try {
+      const res = await getInstallationOverview({ ...filterParams(), all: true })
+      const pendingLabel = pendingStep
+        ? stepDefs.find((s) => s.key === pendingStep)?.label || pendingStep
+        : ''
+      const ok = printInstallations(res.data.data, {
+        win,
+        filters: [
+          { label: 'Search', value: debouncedSearch },
+          { label: 'Dealer', value: dealerFilter },
+          { label: 'Status', value: STATUS_LABEL[statusFilter] || '' },
+          { label: 'Pending step', value: pendingLabel },
+        ],
+      })
+      if (!ok) toast.error('The print window was closed')
+    } catch {
+      win.close()
+      toast.error('Failed to load customers for printing')
+    } finally {
+      setPrinting(false)
+    }
   }
 
   return (
@@ -219,7 +257,7 @@ export default function InstallationsPage() {
           </div>
           <select
             value={dealerFilter}
-            onChange={(e) => setDealerFilter(e.target.value)}
+            onChange={changeFilter(setDealerFilter)}
             className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
           >
             <option value="">All dealers</option>
@@ -229,7 +267,7 @@ export default function InstallationsPage() {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+            onChange={changeFilter(setStatusFilter)}
             className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
           >
             <option value="">All statuses</option>
@@ -239,7 +277,7 @@ export default function InstallationsPage() {
           </select>
           <select
             value={pendingStep}
-            onChange={(e) => setPendingStep(e.target.value)}
+            onChange={changeFilter(setPendingStep)}
             className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
           >
             <option value="">Any pending step</option>
@@ -249,11 +287,11 @@ export default function InstallationsPage() {
           </select>
           <button
             onClick={handlePrint}
-            disabled={loading || rows.length === 0}
+            disabled={loading || printing || total === 0}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
             title="Print the list shown below (filters applied)"
           >
-            <Printer className="w-4 h-4" />
+            {printing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
             <span className="hidden sm:inline">Print</span>
           </button>
         </div>
@@ -275,7 +313,7 @@ export default function InstallationsPage() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100 dark:divide-white/10">
-              {sortedRows.map((c) => {
+              {rows.map((c) => {
                 const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
                 return (
                   <li key={c.id} className="px-4 sm:px-6 py-4">
@@ -358,6 +396,32 @@ export default function InstallationsPage() {
             </ul>
           )}
         </div>
+
+        {/* Pagination — same as the Customers page */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Page <span className="font-medium text-gray-700 dark:text-gray-200">{page}</span> of{' '}
+              <span className="font-medium text-gray-700 dark:text-gray-200">{totalPages}</span>
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={page === 1 || loading}
+                onClick={() => setPage(p => p - 1)}
+                className="px-4 py-2 text-sm font-medium border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-[#16201b] text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] dark:hover:border-emerald-500/50 dark:hover:text-emerald-400 transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                disabled={page === totalPages || loading}
+                onClick={() => setPage(p => p + 1)}
+                className="px-4 py-2 text-sm font-medium border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-[#16201b] text-gray-700 dark:text-gray-200 disabled:opacity-40 hover:border-[#1a3a2a] hover:text-[#1a3a2a] dark:hover:border-emerald-500/50 dark:hover:text-emerald-400 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
         </div>{/* /list column */}
 
