@@ -13,8 +13,8 @@ REQUIRED_CUSTOMER_FIELDS = {
     "CONSUMER_AADHAR":   "Aadhar Number",
     "CONSUMER_NO":       "Consumer No",
     "DEALER_NAME":       "Dealer Name",
-    "CONSUMER_APP_NO":   "Subsidy Portal Application No",
-    "CONSUMER_APP_DATE": "Subsidy Portal Application Date",
+    "CONSUMER_APP_NO":   "Application No",
+    "CONSUMER_APP_DATE": "Application Date",
     "SOLAR_CAPACITY":    "Solar Capacity",
     "INVERTER_MAKE":     "Inverter Make",
     "INVERTER_CAPACITY": "Inverter Capacity",
@@ -53,6 +53,10 @@ class CustomerCreate(BaseModel):
     SANCTIONED_CAPACITY: Optional[str] = None
     CONSUMER_APP_DATE: Optional[str] = None
     CONSUMER_APP_NO: Optional[str] = None
+    # PM Surya Ghar subsidy portal application. Optional; shown only on the
+    # Customer Details sheet. Documents keep using CONSUMER_APP_NO/DATE.
+    SUBSIDY_APP_NO: Optional[str] = None
+    SUBSIDY_APP_DATE: Optional[str] = None
     SOLAR_CAPACITY: Optional[str] = None
     INVERTER_MAKE: Optional[str] = None
     INVERTER_CAPACITY: Optional[str] = None

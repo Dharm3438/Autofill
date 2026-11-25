@@ -337,6 +337,9 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           ['Email', c.CONSUMER_EMAIL],
           ['Aadhar', c.CONSUMER_AADHAR],
           ['Consumer No', c.CONSUMER_NO],
+          ['Application Date', c.CONSUMER_APP_DATE],
+          ['Subsidy Portal App No', c.SUBSIDY_APP_NO],
+          ['Subsidy Portal App Date', c.SUBSIDY_APP_DATE],
           ['Solar Capacity', c.SOLAR_CAPACITY],
           ['Inverter Make', c.INVERTER_MAKE],
           ['Panel Company', c.PANEL_COMPANY],
@@ -366,7 +369,7 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           <thead>
             <tr className="bg-gray-50 dark:bg-white/5 border-b-2 border-gray-100 dark:border-white/10">
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Subsidy App No</th>
+              <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">App No</th>
               <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Phone</th>
               {showDocs && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Docs</th>}
               {showDocs && <th className="text-left px-5 py-3.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Signing</th>}

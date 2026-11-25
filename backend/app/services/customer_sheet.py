@@ -33,16 +33,17 @@ _RIGHT = (393.8, 561.0)   # right half
 
 # Row top/bottom per details-table row.
 _ROWS = {
-    "name":    (136.2, 158.7),
-    "address": (158.7, 187.2),
-    "mobile":  (187.2, 210.4),
-    "email":   (210.4, 232.9),
-    "aadhar":  (232.9, 255.4),
-    "consumer_no": (255.4, 278.7),
-    "load":    (278.7, 301.9),
-    "inverter": (301.9, 324.4),
-    "panel":   (324.4, 346.9),
-    "app_no":  (346.9, 370.2),
+    "name":    (132.2, 154.7),
+    "address": (154.7, 183.2),
+    "mobile":  (183.2, 206.4),
+    "email":   (206.4, 228.9),
+    "aadhar":  (228.9, 251.4),
+    "consumer_no": (251.4, 274.7),
+    "load":    (274.7, 297.9),
+    "inverter": (297.9, 320.4),
+    "panel":   (320.4, 342.9),
+    "subsidy_app_no": (342.9, 366.2),   # row 10: Subsidy Portal Application No / Date
+    "app_no":  (366.2, 388.7),          # row 11: Application No / Date
 }
 
 # Right-half cells that already carry a printed label ("Dealer:", "Date:");
@@ -51,7 +52,7 @@ _DEALER_LABEL_END_X = 431.2
 _DATE_LABEL_END_X = 422.9
 
 # Amount table: "Total System Cost" row, amount column.
-_TOTAL_COST_CELL = (70.5, 666.3, 306.8, 689.5)
+_TOTAL_COST_CELL = (70.5, 685.1, 306.8, 708.3)
 
 
 def _s(customer: dict, key: str) -> str:
@@ -172,9 +173,13 @@ def build_customer_details_pdf(customer: dict) -> bytes:
         _write(page, *_LEFT, R["load"], _required_load(customer))
         _write(page, *_LEFT, R["inverter"], _inverter(customer))
         _write(page, *_LEFT, R["panel"], _panel(customer))
-        _write(page, *_LEFT, R["app_no"], _s(customer, "CONSUMER_APP_NO"))
-        _write(page, _DATE_LABEL_END_X - PAD + 3, _RIGHT[1], R["app_no"],
-               _fmt_date(_s(customer, "CONSUMER_APP_DATE")))
+        for row, no_key, date_key in (
+            ("subsidy_app_no", "SUBSIDY_APP_NO", "SUBSIDY_APP_DATE"),
+            ("app_no", "CONSUMER_APP_NO", "CONSUMER_APP_DATE"),
+        ):
+            _write(page, *_LEFT, R[row], _s(customer, no_key))
+            _write(page, _DATE_LABEL_END_X - PAD + 3, _RIGHT[1], R[row],
+                   _fmt_date(_s(customer, date_key)))
 
         x0, y0, x1, y1 = _TOTAL_COST_CELL
         cost = _s(customer, "SYSTEM_COST")
