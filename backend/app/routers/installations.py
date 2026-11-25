@@ -192,6 +192,7 @@ async def installations_overview(
         query["$or"] = [
             {"CONSUMER_NAME": {"$regex": re.escape(search), "$options": "i"}},
             {"CONSUMER_APP_NO": {"$regex": re.escape(search), "$options": "i"}},
+            {"SUBSIDY_APP_NO": {"$regex": re.escape(search), "$options": "i"}},
             {"CONSUMER_PHONE": {"$regex": re.escape(search), "$options": "i"}},
         ]
     if dealer:
