@@ -193,6 +193,9 @@ def payment_info(customer: dict) -> dict:
         "total_payment": total,
         "received_payment": received,
         "remaining_payment": max(total - received, 0),
+        # Share of the cost received, 0–100 (overpayment capped at 100); 0 when
+        # no cost is set, since there's nothing to measure against.
+        "paid_percent": min(received / total * 100, 100.0) if total > 0 else 0.0,
         "received_payments": entries,
         "payment_status": _payment_status(total, received),
     }
@@ -212,13 +215,22 @@ def _payment_status(total: float, received: float) -> str:
 
 
 def compute_payment_status(customer: dict) -> str:
-    """Derived payment status, stored on the customer as `payment_status` so the
-    installations overview can filter on it inside MongoDB (SYSTEM_COST is free
-    text, which an aggregation pipeline can't reliably parse).
-
-    Every write that changes SYSTEM_COST or received_payments must refresh it;
-    customers saved before this field existed are backfilled at startup."""
+    """Derived payment status (paid / due / no_cost). See payment_derived_fields."""
     return payment_info(customer)["payment_status"]
+
+
+def payment_derived_fields(customer: dict) -> dict:
+    """The payment values stored on the customer so the installations overview
+    can filter and sort on them inside MongoDB (SYSTEM_COST is free text, which
+    an aggregation pipeline can't reliably parse):
+
+      payment_status — paid / due / no_cost (the payment filter)
+      paid_percent   — 0–100 (the "money ahead of work" sort)
+
+    Every write that changes SYSTEM_COST or received_payments must refresh
+    them; customers saved before a field existed are backfilled at startup."""
+    info = payment_info(customer)
+    return {"payment_status": info["payment_status"], "paid_percent": info["paid_percent"]}
 
 
 class ReceivedPayment(BaseModel):

@@ -70,7 +70,7 @@ class OverviewTest(unittest.TestCase):
         )
 
     def overview(self, **kw):
-        params = dict(search="", status="", pending_step="", done_step="", payment="", dealer="", page=1, limit=20, fetch_all=False)
+        params = dict(search="", status="", pending_step="", done_step="", payment="", dealer="", sort="progress", page=1, limit=20, fetch_all=False)
         params.update(kw)
         return run(installations.installations_overview(**params, _=None))
 
@@ -195,6 +195,41 @@ class OverviewTest(unittest.TestCase):
         self.add("waiting", payment_status="due")
         res = self.overview(done_step=subsidy, payment="due")
         self.assertEqual(self.names(res), ["owes"])
+
+    def test_money_ahead_sort(self):
+        half = len(KEYS) // 2
+        # 50% paid, nothing started → +50: the one to start first.
+        self.add("paid_not_started", paid_percent=50)
+        # 80% paid, half the work done → +30.
+        self.add("paid_half_done", done=KEYS[:half], paid_percent=80)
+        # Fully paid and fully done → 0, as is nothing paid and nothing done;
+        # the tie goes to the higher paid %.
+        self.add("all_done", done=KEYS, paid_percent=100)
+        self.add("fresh", paid_percent=0)
+        # Saved before paid_percent existed → treated as 0% paid.
+        self.add("legacy")
+        # Work well ahead of payment → negative, last.
+        self.add("work_ahead", done=KEYS[:-1], paid_percent=20)
+        res = self.overview(sort="money_ahead")
+        self.assertEqual(self.names(res),
+                         ["paid_not_started", "paid_half_done", "all_done", "fresh", "legacy", "work_ahead"])
+        # The default sort is unchanged: most steps done first.
+        self.assertEqual(self.names(self.overview())[:2], ["all_done", "work_ahead"])
+
+    def test_money_ahead_sort_pages_and_filters(self):
+        for i in range(5):
+            self.add(f"c{i}", paid_percent=i * 20)
+        first = self.names(self.overview(sort="money_ahead", limit=2))
+        second = self.names(self.overview(sort="money_ahead", limit=2, page=2))
+        self.assertEqual(first + second, ["c4", "c3", "c2", "c1"])
+        res = self.overview(sort="money_ahead", status="not_started", fetch_all=True)
+        self.assertEqual(self.names(res), ["c4", "c3", "c2", "c1", "c0"])
+
+    def test_unknown_sort_rejected(self):
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            self.overview(sort="bogus")
+        self.assertEqual(ctx.exception.status_code, 400)
 
 
 if __name__ == "__main__":

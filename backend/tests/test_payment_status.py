@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.installation import compute_payment_status  # noqa: E402
+from app.models.installation import compute_payment_status, payment_derived_fields  # noqa: E402
 
 
 class PaymentStatusTest(unittest.TestCase):
@@ -36,6 +36,23 @@ class PaymentStatusTest(unittest.TestCase):
             compute_payment_status({"SYSTEM_COST": "1000", "received_payment": "1000"}), "paid"
         )
         self.assertEqual(compute_payment_status({"SYSTEM_COST": "1000"}), "due")
+
+
+class PaidPercentTest(unittest.TestCase):
+    def pct(self, c):
+        return payment_derived_fields(c)["paid_percent"]
+
+    def test_share_of_cost_received(self):
+        self.assertEqual(self.pct({"SYSTEM_COST": "1,00,000", "received_payments": [{"amount": 50000}]}), 50)
+        self.assertEqual(self.pct({"SYSTEM_COST": "1000"}), 0)
+
+    def test_capped_at_100_and_zero_without_cost(self):
+        self.assertEqual(self.pct({"SYSTEM_COST": "1000", "received_payments": [{"amount": 1500}]}), 100)
+        self.assertEqual(self.pct({"received_payments": [{"amount": 5000}]}), 0)
+
+    def test_derived_fields_include_status(self):
+        f = payment_derived_fields({"SYSTEM_COST": "1000", "received_payment": "250"})
+        self.assertEqual(f, {"payment_status": "due", "paid_percent": 25})
 
 
 if __name__ == "__main__":

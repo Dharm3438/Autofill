@@ -33,6 +33,31 @@ const PAYMENT_LABEL = {
   no_cost: 'Cost not set',
 }
 
+// Sort options — values match the server's `sort` param.
+const SORT_LABEL = {
+  progress: 'Sort: Progress',
+  money_ahead: 'Sort: Money ahead of work',
+}
+const SORT_HINT = {
+  progress: 'Most steps done first',
+  money_ahead: 'Paid % minus work-done % — customers who have paid but whose work is behind come first',
+}
+
+// The chosen sort is remembered per browser (storage can be unavailable, e.g.
+// in a private window — fall back to the default).
+const SORT_STORAGE_KEY = 'installations.sort'
+function loadSort() {
+  try {
+    const v = localStorage.getItem(SORT_STORAGE_KEY)
+    return v && SORT_LABEL[v] ? v : 'progress'
+  } catch {
+    return 'progress'
+  }
+}
+function saveSort(v) {
+  try { localStorage.setItem(SORT_STORAGE_KEY, v) } catch { /* ignore */ }
+}
+
 // The ₹ circle at the end of the status row: derived from the payment ledger
 // (received vs system cost), never ticked by hand. Gray when no cost is set.
 const PAYMENT_CIRCLE = {
@@ -112,11 +137,17 @@ function EquipmentLine({ customer: c }) {
 // "Payment: ₹20,000 of ₹1,00,000 · ₹80,000 remaining" (or "Fully paid").
 // Without a system cost there's no total to compare against, so only the
 // received amount is shown with a hint that the total is missing.
-function PaymentLine({ customer: c }) {
+// With `showGap` (the "money ahead of work" sort) it also shows the numbers
+// that sort is based on, e.g. "50% paid · 0% done · +50".
+function PaymentLine({ customer: c, showGap }) {
   const received = c.received_payment || 0
   const total = c.total_payment || 0
+  const paidPct = Math.round(c.paid_percent || 0)
+  const workPct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
+  const gap = paidPct - workPct
   return (
-    <p>
+    <p className="flex flex-wrap items-center gap-x-1">
+      <span>
       Payment:{' '}
       <span className="font-medium text-gray-700 dark:text-gray-200">{fmtINR(received)}</span>
       {total > 0 ? (
@@ -131,6 +162,19 @@ function PaymentLine({ customer: c }) {
         </>
       ) : (
         <> received · <span className="italic">total not set</span></>
+      )}
+      </span>
+      {showGap && (
+        <span
+          title="Paid % minus work-done %"
+          className={`ml-1 px-1.5 py-px rounded-md text-[11px] font-medium ${
+            gap > 0
+              ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+              : 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'
+          }`}
+        >
+          {paidPct}% paid · {workPct}% done · {gap > 0 ? '+' : ''}{gap}
+        </span>
       )}
     </p>
   )
@@ -154,6 +198,7 @@ export default function InstallationsPage() {
   const [doneStep, setDoneStep] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
+  const [sortBy, setSortBy] = useState(loadSort)
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
   const [manageCustomer, setManageCustomer] = useState(null)
@@ -179,7 +224,8 @@ export default function InstallationsPage() {
     done_step: doneStep,
     payment: paymentFilter,
     dealer: dealerFilter,
-  }), [debouncedSearch, statusFilter, pendingStep, doneStep, paymentFilter, dealerFilter])
+    sort: sortBy,
+  }), [debouncedSearch, statusFilter, pendingStep, doneStep, paymentFilter, dealerFilter, sortBy])
 
   // Only the newest request may update the list (an older, slower response
   // must not overwrite it).
@@ -249,6 +295,7 @@ export default function InstallationsPage() {
           { label: 'Pending step', value: stepLabel(pendingStep) },
           { label: 'Done step', value: stepLabel(doneStep) },
           { label: 'Payment', value: PAYMENT_LABEL[paymentFilter] || '' },
+          { label: 'Sorted by', value: sortBy === 'progress' ? '' : SORT_LABEL[sortBy].replace('Sort: ', '') },
         ],
       })
       if (!ok) toast.error('The print window was closed')
@@ -348,6 +395,16 @@ export default function InstallationsPage() {
               <option key={value} value={value}>{label}</option>
             ))}
           </select>
+          <select
+            value={sortBy}
+            onChange={(e) => { setSortBy(e.target.value); saveSort(e.target.value); setPage(1) }}
+            title={SORT_HINT[sortBy]}
+            className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
+          >
+            {Object.entries(SORT_LABEL).map(([value, label]) => (
+              <option key={value} value={value} title={SORT_HINT[value]}>{label}</option>
+            ))}
+          </select>
           <button
             onClick={handlePrint}
             disabled={loading || printing || total === 0}
@@ -399,7 +456,7 @@ export default function InstallationsPage() {
                           )}
                           <p>{[c.CONSUMER_NO, c.INSTALLATION_CITY, c.CONSUMER_PHONE].filter(Boolean).join(' · ') || '—'}</p>
                           <EquipmentLine customer={c} />
-                          <PaymentLine customer={c} />
+                          <PaymentLine customer={c} showGap={sortBy === 'money_ahead'} />
                         </div>
 
                         {/* At-a-glance status circles — red = pending, green = done */}
