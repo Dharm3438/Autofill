@@ -12,6 +12,10 @@ class EmailNotConfigured(RuntimeError):
     pass
 
 
+class EmailSendError(RuntimeError):
+    pass
+
+
 def _is_local_dev() -> bool:
     return settings.FRONTEND_URL.startswith(("http://localhost", "http://127.0.0.1"))
 
@@ -47,7 +51,10 @@ def send_email(to: str, subject: str, html: str) -> None:
         },
         timeout=15,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        # Brevo explains the problem in the body (bad key, unverified sender,
+        # IP not authorised, quota used up…). Keep it, or the logs only say "401".
+        raise EmailSendError(f"Brevo refused the email ({resp.status_code}): {resp.text[:500]}")
 
 
 def layout(body_html: str) -> str:
