@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from ..core.database import get_db
 from ..core.permissions import P, require
 from ..models.installation import merge_steps
-from ..services.formatting import fmt_number
+from ..models.catalog import normalize_value as catalog_text
 from ..models.inventory import (
     CATEGORIES,
     CATEGORY_STEP,
@@ -16,6 +16,17 @@ from ..models.inventory import (
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
+
+
+def _spec(type_: str, number) -> str:
+    """A customer's stored number as the catalog's text ('3.3 kW', '540') —
+    the same text the stock form sends, so demand and stock lines match."""
+    if number is None:
+        return ""
+    try:
+        return catalog_text(type_, number)
+    except ValueError:
+        return ""
 
 
 def _demand_lines(customer: dict, step_done: dict) -> list:
@@ -30,14 +41,12 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
     lines = []
 
     # Panels — grouped by company + watt, quantity = number of panels.
-    # Specs are the stored numbers printed plainly (540, 3.3) — the same text
-    # the inventory form sends for a stock line.
     panel_qty = customer.get("NO_OF_PANEL") or 0
     if panel_qty and _clean(customer.get("PANEL_COMPANY")):
         lines.append((
             "panel",
             _clean(customer.get("PANEL_COMPANY")),
-            fmt_number(customer.get("PANEL_WATT")),
+            _spec("panel_watt", customer.get("PANEL_WATT")),
             panel_qty,
             step_done["panel"],
         ))
@@ -47,7 +56,7 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
         lines.append((
             "inverter",
             _clean(customer.get("INVERTER_MAKE")),
-            fmt_number(customer.get("INVERTER_CAPACITY")),
+            _spec("inverter_capacity", customer.get("INVERTER_CAPACITY")),
             1,
             step_done["inverter"],
         ))

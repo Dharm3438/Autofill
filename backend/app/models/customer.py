@@ -9,12 +9,15 @@ calculate on it directly:
   • counts     — int:                       PANEL_WATT (W per panel), NO_OF_PANEL
   • dates      — "YYYY-MM-DD" (validated):  CONSUMER_APP_DATE, SUBSIDY_APP_DATE, METER_TESTING_DATE
   • ids        — normalised text:           phone = 10 digits, Aadhaar = 12 digits, consumer no without spaces
-  • choices    — must be in core/catalog.py: dealer, inverter make/capacity, panel make/watt
+  • choices    — must be an active item of the admin-managed catalog (catalog_items):
+                 dealer, inverter make/capacity, panel company/watt, generation meter make
+                 (checked by services/catalog_rules.py, which needs the database)
   • serials    — comma-separated text ("A1, A2, A3")
   • blank      — stored as null, never ""
 
 Derived on the server at every save (never accepted from the client):
-  TOTAL_PANEL_CAPACITY (W), INVERTER_GUARANTEE / PANEL_GUARANTEE (years).
+  TOTAL_PANEL_CAPACITY (W), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from
+  the make's warranty in the catalog).
 
 How these values are printed (DD-MM-YYYY, 1,50,000, ...) is decided in one
 place: services/formatting.py.
@@ -25,13 +28,6 @@ from typing import Annotated, List, Optional
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, EmailStr, Field
 
-from ..core.catalog import (
-    DEALERS,
-    INVERTER_CAPACITIES,
-    INVERTER_MAKES,
-    PANEL_MAKES,
-    PANEL_WATTS,
-)
 
 
 # Admin-facing label for every customer field. Used in validation messages and
@@ -150,14 +146,6 @@ def normalize_serials(v: Optional[str]) -> Optional[str]:
     return ", ".join(p for p in parts if p) or None
 
 
-def _one_of(options, what: str):
-    def check(v):
-        if v is not None and v not in options:
-            raise ValueError(f"is not a known {what}")
-        return v
-    return check
-
-
 def _round_kw(v: Optional[float]) -> Optional[float]:
     return None if v is None else round(v, 3)
 
@@ -181,7 +169,7 @@ class CustomerCreate(BaseModel):
     CONSUMER_EMAIL: Annotated[Optional[EmailStr], Blank] = None
     CONSUMER_AADHAR: Annotated[Text, AfterValidator(_aadhaar)] = None
     CONSUMER_NO: Annotated[Text, AfterValidator(_no_spaces)] = None
-    DEALER_NAME: Annotated[Text, AfterValidator(_one_of(DEALERS, "dealer"))] = None
+    DEALER_NAME: Text = None
     SANCTIONED_CAPACITY: Kw = None
     CONSUMER_APP_NO: Text = None
     CONSUMER_APP_DATE: Day = None
@@ -190,11 +178,11 @@ class CustomerCreate(BaseModel):
     SUBSIDY_APP_NO: Text = None
     SUBSIDY_APP_DATE: Day = None
     SOLAR_CAPACITY: Kw = None
-    INVERTER_MAKE: Annotated[Text, AfterValidator(_one_of(INVERTER_MAKES, "inverter make"))] = None
-    INVERTER_CAPACITY: Annotated[Kw, AfterValidator(_one_of(INVERTER_CAPACITIES, "inverter capacity"))] = None
+    INVERTER_MAKE: Text = None
+    INVERTER_CAPACITY: Kw = None
     INVERTER_SR_NO: Serials = None
-    PANEL_COMPANY: Annotated[Text, AfterValidator(_one_of(PANEL_MAKES, "panel company"))] = None
-    PANEL_WATT: Annotated[Count, AfterValidator(_one_of(PANEL_WATTS, "panel wattage"))] = None
+    PANEL_COMPANY: Text = None
+    PANEL_WATT: Count = None
     NO_OF_PANEL: Count = None
     PANEL_SR_NO: Serials = None
     INSTALLATION_CITY: Text = None
@@ -220,12 +208,13 @@ class CustomerUpdate(CustomerCreate):
     pass
 
 
-def derived_fields(customer: dict) -> dict:
+def derived_fields(customer: dict, warranty_years=lambda list_type, make: None) -> dict:
     """Values calculated from other fields. Recomputed on every save from the
-    full (merged) customer, so they can never disagree with their inputs."""
+    full (merged) customer, so they can never disagree with their inputs.
+    `warranty_years(list_type, make)` looks a make's warranty up in the catalog."""
     watt, qty = customer.get("PANEL_WATT"), customer.get("NO_OF_PANEL")
     return {
         "TOTAL_PANEL_CAPACITY": watt * qty if watt and qty else None,
-        "INVERTER_GUARANTEE": INVERTER_MAKES.get(customer.get("INVERTER_MAKE")),
-        "PANEL_GUARANTEE": PANEL_MAKES.get(customer.get("PANEL_COMPANY")),
+        "INVERTER_GUARANTEE": warranty_years("inverter_make", customer.get("INVERTER_MAKE")),
+        "PANEL_GUARANTEE": warranty_years("panel_company", customer.get("PANEL_COMPANY")),
     }

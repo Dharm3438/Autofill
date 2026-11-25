@@ -30,6 +30,7 @@ class P:
     SIGNING_SEND = "signing:send"
     DASHBOARD_VIEW = "dashboard:view"
     USERS_MANAGE = "users:manage"
+    CATALOG_MANAGE = "catalog:manage"          # add dealers / equipment options
 
 
 ALL_PERMISSIONS = frozenset(v for k, v in vars(P).items() if not k.startswith("_"))

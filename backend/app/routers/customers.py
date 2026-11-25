@@ -7,6 +7,7 @@ from ..core.database import get_db
 from ..core.permissions import P, require, customer_scope, user_permissions, parse_object_id
 from ..models.customer import CustomerCreate, CustomerUpdate, missing_required_fields, derived_fields
 from ..services.customer_sheet import build_customer_details_pdf, details_sheet_filename
+from ..services.catalog_rules import Catalog, check_choices
 from ..models.installation import default_installation_steps
 from datetime import datetime, timezone
 
@@ -135,12 +136,14 @@ async def create_customer(body: CustomerCreate, user=Depends(require(P.CUSTOMERS
     data = _strip_document_fields(body.to_store(), user)
     _require_fields(data)
     db = get_db()
+    catalog = await Catalog.load(db)
+    check_choices(catalog, data)
     if await db.customers.find_one({"CONSUMER_NO": data["CONSUMER_NO"]}, {"_id": 1}):
         raise HTTPException(status_code=409, detail="Consumer number already exists")
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         **data,
-        **derived_fields(data),
+        **derived_fields(data, catalog.warranty_years),
         "doc_status": "none",
         "signing_status": "none",
         "uploads": {"installation": False, "np_stamp": False, "dcr": False},
@@ -205,6 +208,9 @@ async def update_customer(customer_id: str, body: CustomerUpdate, user=Depends(r
     if not current:
         raise HTTPException(status_code=404, detail="Customer not found")
 
+    catalog = await Catalog.load(db)
+    check_choices(catalog, update_data, current)
+
     if update_data.get("CONSUMER_NO"):
         existing = await db.customers.find_one(
             {"CONSUMER_NO": update_data["CONSUMER_NO"], "_id": {"$ne": oid}},
@@ -215,7 +221,7 @@ async def update_customer(customer_id: str, body: CustomerUpdate, user=Depends(r
     # CustomerUpdate only contains the customer data fields, so status/ownership
     # fields (doc_status, created_by, payments, …) can't be written through here.
     # Derived fields are recomputed from the merged record.
-    update_data.update(derived_fields({**current, **update_data}))
+    update_data.update(derived_fields({**current, **update_data}, catalog.warranty_years))
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["updated_by"] = str(user["_id"])
 

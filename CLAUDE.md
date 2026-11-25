@@ -62,12 +62,24 @@ _id, email, password_hash, name, roles[] (admin/data_entry/installation/document
 
 ### Roles & access (RBAC)
 - Defined in `backend/app/core/permissions.py`: roles map to permissions; a user's permissions are the union of their roles. No roles = pending (welcome page only).
-- **admin**: everything + Users page. **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments. **documents**: all customers, edit, generate/print/upload/send/download.
+- **admin**: everything + Users page + "Dealers & Equipment" lists (`catalog:manage`). **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments. **documents**: all customers, edit, generate/print/upload/send/download.
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
 - Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.
 - CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
 - User search text is `re.escape`d before Mongo `$regex`.
+
+### CatalogItem (`catalog_items` — admin-managed customer-form dropdowns)
+```
+_id, type (dealer/inverter_make/inverter_capacity/panel_company/panel_watt/
+  generation_meter_make), value, key (lower-cased value; unique per type),
+warranty (makes only, e.g. "10 YEAR"), active, created_by, created_at, updated_at
+```
+- Seeded on startup when a list is empty (`seed_catalog` in `core/database.py`; defaults in `models/catalog.py`). Meter makes seed from existing customers.
+- Customers store a make/dealer's *text* (and capacity/watt as numbers matched through the item's text), so items are never renamed/deleted — only hidden (`active: false`). The form always keeps a customer's current value as an option.
+- The server checks every customer choice field against active items (`services/catalog_rules.py`); a customer may keep a value that was later hidden.
+- Values are normalised (`"7 kW"`, `"550"`) because inventory groups stock by exact text.
+- Frontend reads them via `useCatalog()` (`context/CatalogContext.jsx`); there are no hard-coded option lists.
 
 ### Customer (typed fields + metadata)
 Defined in `backend/app/models/customer.py` — every value is stored with a real type so
@@ -75,18 +87,18 @@ MongoDB can sort, filter and calculate on it. Never store numbers or dates as fr
 ```
 _id, CONSUMER_NAME, CONSUMER_ADDRESS, CONSUMER_EMAIL,
 CONSUMER_PHONE (10 digits), CONSUMER_AADHAR (12 digits), CONSUMER_NO (no spaces, unique index),
-DEALER_NAME, INVERTER_MAKE, PANEL_COMPANY      — must be in core/catalog.py
+DEALER_NAME, INVERTER_MAKE, PANEL_COMPANY, GENERATION_METER_MAKE — active catalog item (exact text)
 SYSTEM_COST, AGREEMENT_SYSTEM_COST             — whole rupees (int)
-SOLAR_CAPACITY, SANCTIONED_CAPACITY, INVERTER_CAPACITY — kW (float); inverter capacity from catalog
-PANEL_WATT (int, from catalog), NO_OF_PANEL (int)
+SOLAR_CAPACITY, SANCTIONED_CAPACITY, INVERTER_CAPACITY — kW (float); inverter capacity must be in the catalog
+PANEL_WATT (int, must be in the catalog), NO_OF_PANEL (int)
 CONSUMER_APP_DATE, SUBSIDY_APP_DATE, METER_TESTING_DATE — "YYYY-MM-DD", validated
 CONSUMER_APP_NO, SUBSIDY_APP_NO (subsidy portal application; only on the Customer
   Details sheet — documents use CONSUMER_APP_NO/DATE), INSTALLATION_CITY,
 INSTALLATION_DISTRICT, DISCOM_REGISTERED_OFFICE, METER_RECEIPT_NO,
-GENERATION_METER_MAKE, GENERATION_METER_NO     — text
+GENERATION_METER_NO                            — text
 INVERTER_SR_NO, PANEL_SR_NO                    — comma-separated text ("A1, A2, A3")
 Derived by the server on every save (never sent by the client):
-  TOTAL_PANEL_CAPACITY (W = watt × panels), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from catalog),
+  TOTAL_PANEL_CAPACITY (W = watt × panels), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from the make's catalog warranty),
   INSTALLATION_DATE (from the Inverter / Solar Panel checklist steps)
 installation_steps[], received_payments[] (each {amount: int rupees, date: "YYYY-MM-DD"}),
 doc_status (none/generating/complete), signing_status (none/sent/signed),
@@ -98,8 +110,6 @@ signing_token, signing_token_expiry, r2_prefix, created_by, created_at, updated_
 - Payment status / paid % are **not stored**: `payment_info()` (Python) and
   `PAYMENT_EXPRESSIONS` (MongoDB pipeline) in `models/installation.py` compute them from
   SYSTEM_COST + received_payments; a test checks the two agree.
-- `core/catalog.py` is the only list of dealers, makes (+warranty), panel watts and inverter
-  capacities. The frontend reads it from `GET /api/catalog` (`useCatalog()` in `api/catalog.js`).
 - Validation errors come back as one readable sentence in `detail` (handler in `main.py`).
 
 ### SigningSubmission
@@ -122,8 +132,10 @@ submitted_at, ip_address
 - `GET /api/users`                   — list users + available roles
 - `PUT /api/users/{id}`              — set `roles[]` and/or `is_active`
 
-### Catalog
-- `GET /api/catalog`                 — dealers, makes, panel watts, inverter capacities
+### Catalog (dealer & equipment dropdowns)
+- `GET  /api/catalog`                — all lists (incl. hidden items, flagged); any customer-form/installations user
+- `POST /api/catalog`                — add `{type, value, warranty?}` (admin)
+- `PUT  /api/catalog/{id}`           — change `warranty` / `active` (admin)
 
 ### Customers
 - `GET    /api/customers`         — list with search + pagination + `sort`

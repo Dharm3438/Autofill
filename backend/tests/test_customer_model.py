@@ -70,14 +70,6 @@ class ValidationTest(unittest.TestCase):
         self.assertIn("CONSUMER_PHONE", errors(CONSUMER_PHONE="12345"))
         self.assertIn("CONSUMER_AADHAR", errors(CONSUMER_AADHAR="1234"))
 
-    def test_choices_must_be_in_catalog(self):
-        self.assertIn("DEALER_NAME", errors(DEALER_NAME="Someone New"))
-        self.assertIn("INVERTER_MAKE", errors(INVERTER_MAKE="utl"))
-        self.assertIn("PANEL_WATT", errors(PANEL_WATT=541))
-        self.assertIn("INVERTER_CAPACITY", errors(INVERTER_CAPACITY=7))
-        self.assertEqual(errors(DEALER_NAME="Office", INVERTER_MAKE="UTL", PANEL_COMPANY="TATA",
-                                PANEL_WATT=540, INVERTER_CAPACITY=3.3), {})
-
     def test_serials_comma_separated(self):
         c = CustomerCreate(PANEL_SR_NO="A1,A2 ,\n A3,, ").to_store()
         self.assertEqual(c["PANEL_SR_NO"], "A1, A2, A3")
@@ -89,10 +81,77 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(missing_required_fields(sent, partial=True), ["System Cost"])
 
     def test_derived_fields(self):
+        years = {"Polycab": 8, "UTL": 27}
         d = derived_fields({"PANEL_WATT": 540, "NO_OF_PANEL": 6, "INVERTER_MAKE": "Polycab",
-                            "PANEL_COMPANY": "UTL"})
+                            "PANEL_COMPANY": "UTL"}, lambda _list, make: years.get(make))
         self.assertEqual(d, {"TOTAL_PANEL_CAPACITY": 3240, "INVERTER_GUARANTEE": 8, "PANEL_GUARANTEE": 27})
         self.assertIsNone(derived_fields({"PANEL_WATT": 540})["TOTAL_PANEL_CAPACITY"])
+
+
+class CatalogRulesTest(unittest.TestCase):
+    """Choice fields are checked against the admin-managed catalog in MongoDB."""
+
+    def setUp(self):
+        from test_permissions import run, seeded_db
+        from app.services.catalog_rules import Catalog
+        self.run = run
+        self.db = seeded_db()
+        self.Catalog = Catalog
+
+    def catalog(self):
+        return self.run(self.Catalog.load(self.db))
+
+    def check(self, data, current=None):
+        from app.services.catalog_rules import check_choices
+        return check_choices(self.catalog(), dict(data), current)
+
+    def rejects(self, data, current=None):
+        from fastapi import HTTPException
+        with self.assertRaises(HTTPException) as ctx:
+            self.check(data, current)
+        self.assertEqual(ctx.exception.status_code, 422)
+        return ctx.exception.detail
+
+    def test_valid_choices_take_catalog_spelling(self):
+        out = self.check({"DEALER_NAME": "office", "INVERTER_MAKE": "polycab", "INVERTER_CAPACITY": 3.3,
+                          "PANEL_COMPANY": "WAAREE", "PANEL_WATT": 540})
+        self.assertEqual((out["DEALER_NAME"], out["INVERTER_MAKE"]), ("Office", "Polycab"))
+        self.assertEqual((out["INVERTER_CAPACITY"], out["PANEL_WATT"]), (3.3, 540))
+
+    def test_unknown_values_rejected_with_readable_message(self):
+        detail = self.rejects({"DEALER_NAME": "Someone New", "INVERTER_CAPACITY": 7.0})
+        self.assertIn("Dealer Name “Someone New” isn't in the Dealers list", detail)
+        self.assertIn("Inverter Capacity “7 kW” isn't in the Inverter Capacities list", detail)
+
+    def test_admin_added_option_is_accepted(self):
+        self.rejects({"INVERTER_CAPACITY": 7})
+        self.run(self.db.catalog_items.insert_one(
+            {"type": "inverter_capacity", "value": "7 kW", "key": "7 kw", "active": True}))
+        self.assertEqual(self.check({"INVERTER_CAPACITY": 7})["INVERTER_CAPACITY"], 7)
+
+    def test_hidden_option_kept_only_by_customers_who_have_it(self):
+        self.run(self.db.catalog_items.update_one({"type": "inverter_make", "key": "polycab"},
+                                                  {"$set": {"active": False}}))
+        self.rejects({"INVERTER_MAKE": "Polycab"})
+        self.check({"INVERTER_MAKE": "Polycab"}, current={"INVERTER_MAKE": "Polycab"})
+        self.rejects({"INVERTER_MAKE": "Polycab"}, current={"INVERTER_MAKE": "UTL"})
+
+    def test_warranty_from_catalog(self):
+        c = self.catalog()
+        self.assertEqual(c.warranty_years("inverter_make", "Polycab"), 8)
+        self.assertEqual(c.warranty_years("panel_company", "UTL"), 27)
+        self.assertIsNone(c.warranty_years("panel_company", None))
+
+    def test_create_customer_stores_catalog_warranty(self):
+        from app.core import database
+        from app.routers import customers
+        from test_permissions import _body, make_user
+        database.db = self.db
+        self.run(self.db.catalog_items.update_one({"type": "panel_company", "key": "waaree"},
+                                                  {"$set": {"warranty": "25 YEAR"}}))
+        out = self.run(customers.create_customer(_body("Ramesh", "C1"), user=make_user("admin")))["data"]
+        self.assertEqual((out["INVERTER_GUARANTEE"], out["PANEL_GUARANTEE"], out["TOTAL_PANEL_CAPACITY"]),
+                         (10, 25, 3240))
 
 
 class FormattingTest(unittest.TestCase):

@@ -131,6 +131,14 @@ class FakeDB:
     def __init__(self):
         self.customers = FakeCollection()
         self.users = FakeCollection()
+        self.catalog_items = FakeCollection()
+
+
+def seeded_db() -> "FakeDB":
+    """A FakeDB whose dealer / equipment lists hold the default options."""
+    db = FakeDB()
+    run(database.seed_catalog(db))
+    return db
 
 
 def run(coro):
@@ -267,7 +275,7 @@ def _body(name, no):
 
 class CustomerScopeTest(unittest.TestCase):
     def setUp(self):
-        self.db = FakeDB()
+        self.db = seeded_db()
         database.db = self.db
         self.alice = make_user("data_entry")
         self.bob = make_user("data_entry")
@@ -388,7 +396,7 @@ class HardeningTest(unittest.TestCase):
         UserCreate(email="a@example.com", password="long-enough", name="A")
 
     def test_search_input_is_literal_not_regex(self):
-        database.db = FakeDB()
+        database.db = seeded_db()
         admin = make_user("admin")
         run(customers.create_customer(_body("Plain Name", "N1"), user=admin))
         res = run(customers.list_customers(search="(", page=1, limit=10, sort="newest", user=admin))

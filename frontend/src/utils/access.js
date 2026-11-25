@@ -14,6 +14,7 @@ export const PERM = {
   SIGNING_SEND: 'signing:send',
   DASHBOARD_VIEW: 'dashboard:view',
   USERS_MANAGE: 'users:manage',
+  CATALOG_MANAGE: 'catalog:manage',
 }
 
 export const CUSTOMERS_VIEW = [PERM.CUSTOMERS_READ_ALL, PERM.CUSTOMERS_READ_OWN]

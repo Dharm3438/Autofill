@@ -23,7 +23,7 @@ from app.services.doc_generation import (  # noqa: E402
     validate_customer_for_generation,
 )
 
-from test_permissions import FakeDB, make_user, run, _body  # noqa: E402
+from test_permissions import FakeDB, seeded_db, make_user, run, _body  # noqa: E402
 
 
 class TemplateTest(unittest.TestCase):
@@ -47,7 +47,7 @@ class TemplateTest(unittest.TestCase):
 
 class AccessTest(unittest.TestCase):
     def setUp(self):
-        self.db = FakeDB()
+        self.db = seeded_db()
         database.db = self.db
         self.alice = make_user("data_entry")
         self.docs = make_user("documents")

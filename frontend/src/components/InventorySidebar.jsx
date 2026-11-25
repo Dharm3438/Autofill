@@ -3,28 +3,25 @@ import {
   Boxes, Pencil, Check, Plus, X, AlertTriangle, RefreshCw, PackageX,
 } from 'lucide-react'
 import { getInventoryOverview, setInventoryStock } from '../api/inventory'
-import { useCatalog } from '../api/catalog'
+import { useCatalog } from '../context/CatalogContext'
 import toast from 'react-hot-toast'
 
 const rowKey = (r) => `${r.category}|${r.company}|${r.spec}`
 
-// Which selectors the "add stock" form shows for each category. Specs are the
-// plain numbers as text ("540", "3.3") — the same text the server uses for a
-// customer's panel watt / inverter capacity, so stock lines match demand.
-function addFields(catalog) {
-  return {
-    panel: {
-      company: { label: 'Company', options: catalog.panel_makes.map((m) => m.name) },
-      spec: { label: 'Watt', options: catalog.panel_watts.map(String), suffix: ' W' },
-    },
-    inverter: {
-      company: { label: 'Make', options: catalog.inverter_makes.map((m) => m.name) },
-      spec: { label: 'Capacity', options: catalog.inverter_capacities.map(String), suffix: ' kW' },
-    },
-    generation_meter: {
-      company: { label: 'Make', options: null }, // free text
-    },
-  }
+// Which selectors the "add stock" form shows for each category; options come
+// from the admin-managed catalog list named in `catalog`.
+const ADD_FIELDS = {
+  panel: {
+    company: { label: 'Company', catalog: 'panel_company' },
+    spec: { label: 'Watt', catalog: 'panel_watt', suffix: ' W' },
+  },
+  inverter: {
+    company: { label: 'Make', catalog: 'inverter_make' },
+    spec: { label: 'Capacity', catalog: 'inverter_capacity' },
+  },
+  generation_meter: {
+    company: { label: 'Make', catalog: 'generation_meter_make' },
+  },
 }
 
 // Ensure the single generic Net Meter line always exists so it can be stocked
@@ -43,7 +40,6 @@ function withNetMeterPlaceholder(categories) {
 }
 
 export default function InventorySidebar({ refreshSignal }) {
-  const ADD_FIELDS = addFields(useCatalog())
   const [categories, setCategories] = useState([])
   const [totals, setTotals] = useState({})
   const [loading, setLoading] = useState(true)
@@ -308,30 +304,21 @@ export default function InventorySidebar({ refreshSignal }) {
 }
 
 function AddStockForm({ catKey, form, setForm, onSubmit, onCancel }) {
-  const fields = addFields(useCatalog())[catKey]
+  const fields = ADD_FIELDS[catKey]
+  const { values } = useCatalog()
   const selCls = 'flex-1 min-w-0 px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25'
   return (
     <div className="p-2.5 rounded-lg border border-dashed border-gray-300 dark:border-white/15 bg-gray-50 dark:bg-white/[0.03] space-y-2">
       <div className="flex gap-2">
         {fields.company && (
-          fields.company.options ? (
-            <select
-              value={form.company}
-              onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-              className={selCls}
-            >
-              <option value="">{fields.company.label}…</option>
-              {fields.company.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          ) : (
-            <input
-              type="text"
-              placeholder={fields.company.label}
-              value={form.company}
-              onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-              className={selCls}
-            />
-          )
+          <select
+            value={form.company}
+            onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+            className={selCls}
+          >
+            <option value="">{fields.company.label}…</option>
+            {values(fields.company.catalog).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
         )}
         {fields.spec && (
           <select
@@ -340,7 +327,7 @@ function AddStockForm({ catKey, form, setForm, onSubmit, onCancel }) {
             className={selCls}
           >
             <option value="">{fields.spec.label}…</option>
-            {fields.spec.options.map((o) => (
+            {values(fields.spec.catalog).map((o) => (
               <option key={o} value={o}>{o}{fields.spec.suffix || ''}</option>
             ))}
           </select>

@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil, FileText } from 'lucide-react'
 import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
-import { useCatalog } from '../api/catalog'
+import { useCatalog } from '../context/CatalogContext'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
 import toast from 'react-hot-toast'
@@ -12,109 +12,99 @@ import toast from 'react-hot-toast'
 //   kw      kilowatts               → number
 //   count   whole number            → integer
 //   date    <input type="date">     → "YYYY-MM-DD"
-// `derived` fields are calculated by the server on save; the form only shows a
-// preview and never sends them.
-function buildSections(catalog) {
-  const choices = (values, label = (v) => String(v)) => values.map((v) => ({ label: label(v), value: String(v) }))
-  return [
-    {
-      title: 'Consumer Information',
-      icon: User2,
-      color: 'text-blue-600',
-      bg: 'bg-blue-50',
-      fields: [
-        { key: 'CONSUMER_NAME',    label: 'Consumer Name',    required: true },
-        { key: 'CONSUMER_ADDRESS', label: 'Address',          required: true, span: 2 },
-        { key: 'CONSUMER_PHONE',   label: 'Phone',            required: true, type: 'tel', hint: '10-digit mobile number' },
-        { key: 'CONSUMER_EMAIL',   label: 'Email',            type: 'email' },
-        { key: 'CONSUMER_AADHAR',  label: 'Aadhaar Number',   required: true, hint: '12 digits' },
-        { key: 'CONSUMER_NO',      label: 'Consumer No',      required: true },
-        { key: 'DEALER_NAME',      label: 'Dealer Name',      required: true, type: 'select', options: choices(catalog.dealers) },
-        { key: 'CONSUMER_APP_NO',     label: 'Application No',   required: true },
-        { key: 'CONSUMER_APP_DATE',   label: 'Application Date', kind: 'date', required: true },
-        { key: 'SUBSIDY_APP_NO',      label: 'Subsidy Portal Application No' },
-        { key: 'SUBSIDY_APP_DATE',    label: 'Subsidy Portal Application Date', kind: 'date' },
-        { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity (kW)', kind: 'kw' },
-      ],
-    },
-    {
-      title: 'Solar System',
-      icon: Zap,
-      color: 'text-amber-600',
-      bg: 'bg-amber-50',
-      fields: [
-        { key: 'SOLAR_CAPACITY', label: 'Solar Capacity (kW)', kind: 'kw', required: true },
-        {
-          key: 'INVERTER_MAKE', label: 'Inverter Make', type: 'select', required: true,
-          options: choices(catalog.inverter_makes.map((m) => m.name)),
-        },
-        {
-          key: 'INVERTER_CAPACITY', label: 'Inverter Capacity', type: 'select', kind: 'kw', required: true,
-          options: choices(catalog.inverter_capacities, (v) => `${v} kW`),
-        },
-        { key: 'INVERTER_GUARANTEE', label: 'Inverter Guarantee', derived: true },
-        {
-          key: 'PANEL_COMPANY', label: 'Panel Company', type: 'select', required: true,
-          options: choices(catalog.panel_makes.map((m) => m.name)),
-        },
-        {
-          key: 'PANEL_WATT', label: 'Panel Watt', type: 'select', kind: 'count', required: true,
-          options: choices(catalog.panel_watts, (v) => `${v} W`),
-        },
-        { key: 'NO_OF_PANEL',          label: 'No of Panels', kind: 'count', required: true },
-        { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', derived: true },
-        { key: 'PANEL_GUARANTEE',      label: 'Panel Guarantee', derived: true },
-      ],
-    },
-    {
-      title: 'Installation',
-      icon: MapPin,
-      color: 'text-emerald-600',
-      bg: 'bg-emerald-50',
-      fields: [
-        { key: 'INSTALLATION_CITY',        label: 'City' },
-        { key: 'INSTALLATION_DISTRICT',    label: 'District' },
-        { key: 'DISCOM_REGISTERED_OFFICE', label: 'DISCOM Registered Office', span: 2 },
-        { key: 'SYSTEM_COST',              label: 'System Cost (₹)', kind: 'money', required: true },
-      ],
-    },
-    {
-      title: 'Meter Details',
-      icon: Gauge,
-      color: 'text-purple-600',
-      bg: 'bg-purple-50',
-      fields: [
-        { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', kind: 'date' },
-        { key: 'METER_RECEIPT_NO',      label: 'Meter Receipt No' },
-        { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make' },
-        { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
-      ],
-    },
-    {
-      // Document users only (the backend also hides and ignores these fields for
-      // other roles). Shown on edit, not create — the agreement cost is normally
-      // asked for in the Missing Required Fields popup when generating documents.
-      title: 'Documents',
-      icon: FileText,
-      color: 'text-sky-600',
-      bg: 'bg-sky-50',
-      documentsOnly: true,
-      fields: [
-        {
-          key: 'AGREEMENT_SYSTEM_COST',
-          label: 'Agreement System Cost (₹)',
-          kind: 'money',
-          hint: 'Printed on the Net-Metering Agreement',
-        },
-      ],
-    },
-  ]
-}
+// Select fields take their options from the admin-managed catalog
+// (`catalog: <list type>`); admins add new dealers / equipment from the
+// Customers page ("Dealers & Equipment"). `derived` fields are calculated by
+// the server on save; the form only shows a preview and never sends them.
+const SECTIONS = [
+  {
+    title: 'Consumer Information',
+    icon: User2,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    fields: [
+      { key: 'CONSUMER_NAME',    label: 'Consumer Name',    required: true },
+      { key: 'CONSUMER_ADDRESS', label: 'Address',          required: true, span: 2 },
+      { key: 'CONSUMER_PHONE',   label: 'Phone',            required: true, type: 'tel', hint: '10-digit mobile number' },
+      { key: 'CONSUMER_EMAIL',   label: 'Email',            type: 'email' },
+      { key: 'CONSUMER_AADHAR',  label: 'Aadhaar Number',   required: true, hint: '12 digits' },
+      { key: 'CONSUMER_NO',      label: 'Consumer No',      required: true },
+      { key: 'DEALER_NAME',      label: 'Dealer Name',      required: true, type: 'select', catalog: 'dealer' },
+      { key: 'CONSUMER_APP_NO',     label: 'Application No',   required: true },
+      { key: 'CONSUMER_APP_DATE',   label: 'Application Date', kind: 'date', required: true },
+      { key: 'SUBSIDY_APP_NO',      label: 'Subsidy Portal Application No' },
+      { key: 'SUBSIDY_APP_DATE',    label: 'Subsidy Portal Application Date', kind: 'date' },
+      { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity (kW)', kind: 'kw' },
+    ],
+  },
+  {
+    title: 'Solar System',
+    icon: Zap,
+    color: 'text-amber-600',
+    bg: 'bg-amber-50',
+    fields: [
+      { key: 'SOLAR_CAPACITY', label: 'Solar Capacity (kW)', kind: 'kw', required: true },
+      { key: 'INVERTER_MAKE', label: 'Inverter Make', type: 'select', required: true, catalog: 'inverter_make' },
+      {
+        key: 'INVERTER_CAPACITY', label: 'Inverter Capacity', type: 'select', kind: 'kw', required: true,
+        catalog: 'inverter_capacity',
+      },
+      { key: 'INVERTER_GUARANTEE', label: 'Inverter Guarantee', derived: true },
+      { key: 'PANEL_COMPANY', label: 'Panel Company', type: 'select', required: true, catalog: 'panel_company' },
+      {
+        key: 'PANEL_WATT', label: 'Panel Watt', type: 'select', kind: 'count', required: true,
+        catalog: 'panel_watt', unit: ' W',
+      },
+      { key: 'NO_OF_PANEL',          label: 'No of Panels', kind: 'count', required: true },
+      { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', derived: true },
+      { key: 'PANEL_GUARANTEE',      label: 'Panel Guarantee', derived: true },
+    ],
+  },
+  {
+    title: 'Installation',
+    icon: MapPin,
+    color: 'text-emerald-600',
+    bg: 'bg-emerald-50',
+    fields: [
+      { key: 'INSTALLATION_CITY',        label: 'City' },
+      { key: 'INSTALLATION_DISTRICT',    label: 'District' },
+      { key: 'DISCOM_REGISTERED_OFFICE', label: 'DISCOM Registered Office', span: 2 },
+      { key: 'SYSTEM_COST',              label: 'System Cost (₹)', kind: 'money', required: true },
+    ],
+  },
+  {
+    title: 'Meter Details',
+    icon: Gauge,
+    color: 'text-purple-600',
+    bg: 'bg-purple-50',
+    fields: [
+      { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', kind: 'date' },
+      { key: 'METER_RECEIPT_NO',      label: 'Meter Receipt No' },
+      { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make', type: 'select', catalog: 'generation_meter_make' },
+      { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
+    ],
+  },
+  {
+    // Document users only (the backend also hides and ignores these fields for
+    // other roles). Shown on edit, not create — the agreement cost is normally
+    // asked for in the Missing Required Fields popup when generating documents.
+    title: 'Documents',
+    icon: FileText,
+    color: 'text-sky-600',
+    bg: 'bg-sky-50',
+    documentsOnly: true,
+    fields: [
+      {
+        key: 'AGREEMENT_SYSTEM_COST',
+        label: 'Agreement System Cost (₹)',
+        kind: 'money',
+        hint: 'Printed on the Net-Metering Agreement',
+      },
+    ],
+  },
+]
 
-// Field keys never depend on the catalog, so they can be listed up front.
-const ALL_FIELDS = buildSections({
-  dealers: [], inverter_makes: [], panel_makes: [], panel_watts: [], inverter_capacities: [],
-}).flatMap((s) => s.fields.map((f) => ({ ...f, documentsOnly: s.documentsOnly })))
+const ALL_FIELDS = SECTIONS.flatMap((s) => s.fields.map((f) => ({ ...f, documentsOnly: s.documentsOnly })))
 const EMPTY = ALL_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
 const NUMERIC = { money: true, kw: true, count: true }
 
@@ -142,12 +132,9 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
   const [consumerNoError, setConsumerNoError] = useState('')
   const isEdit = Boolean(customer)
   const { can } = useAuth()
+  const { values: catalogValues, warrantyFor } = useCatalog()
   const showDocuments = isEdit && can(PERM.DOCUMENTS_MANAGE)
-  const catalog = useCatalog()
-  const sections = useMemo(
-    () => buildSections(catalog).filter(s => !s.documentsOnly || showDocuments),
-    [catalog, showDocuments],
-  )
+  const sections = SECTIONS.filter(s => !s.documentsOnly || showDocuments)
 
   useEffect(() => {
     if (customer) {
@@ -161,17 +148,29 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
     setForm(f => ({ ...f, [key]: val }))
   }
 
+  // Dropdown options from the catalog. Capacity / watt items are text
+  // ("3.3 kW", "540") but the customer stores the number, so the option value
+  // is the number and the label the catalog text. Hidden items aren't offered,
+  // but the customer's current value always is.
+  function selectOptions(field) {
+    const current = form[field.key]
+    if (!NUMERIC[field.kind]) {
+      return catalogValues(field.catalog, { keep: current }).map(v => ({ value: v, label: v }))
+    }
+    const opts = catalogValues(field.catalog).map(v => ({
+      value: String(parseFloat(v)),
+      label: `${v}${field.unit || ''}`,
+    }))
+    if (current !== '' && !opts.some(o => o.value === String(parseFloat(current)))) {
+      opts.push({ value: current, label: `${current}${field.kind === 'kw' ? ' kW' : field.unit || ''}` })
+    }
+    return opts
+  }
+
   // Preview of what the server will calculate on save.
   function derivedPreview(key) {
-    const warranty = (makes, name) => makes.find(m => m.name === name)?.warranty_years
-    if (key === 'INVERTER_GUARANTEE') {
-      const y = warranty(catalog.inverter_makes, form.INVERTER_MAKE)
-      return y ? `${y} YEAR` : ''
-    }
-    if (key === 'PANEL_GUARANTEE') {
-      const y = warranty(catalog.panel_makes, form.PANEL_COMPANY)
-      return y ? `${y} YEAR` : ''
-    }
+    if (key === 'INVERTER_GUARANTEE') return warrantyFor('inverter_make', form.INVERTER_MAKE)
+    if (key === 'PANEL_GUARANTEE') return warrantyFor('panel_company', form.PANEL_COMPANY)
     if (key === 'TOTAL_PANEL_CAPACITY') {
       const w = parseInt(form.PANEL_WATT, 10)
       const q = parseInt(form.NO_OF_PANEL, 10)
@@ -282,8 +281,10 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                             className={selectCls}
                           >
                             <option value="">Select…</option>
-                            {field.options.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            {/* Hidden (deactivated) options aren't offered, but the
+                                value this customer already has always is. */}
+                            {selectOptions(field).map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
                             ))}
                           </select>
                         ) : (
