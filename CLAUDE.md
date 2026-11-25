@@ -69,24 +69,38 @@ _id, email, password_hash, name, roles[] (admin/data_entry/installation/document
 - CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
 - User search text is `re.escape`d before Mongo `$regex`.
 
-### Customer (all 30 Excel columns + metadata)
+### Customer (typed fields + metadata)
+Defined in `backend/app/models/customer.py` — every value is stored with a real type so
+MongoDB can sort, filter and calculate on it. Never store numbers or dates as free text.
 ```
-_id, CONSUMER_NAME, CONSUMER_ADDRESS, CONSUMER_PHONE, CONSUMER_EMAIL,
-CONSUMER_AADHAR, CONSUMER_NO, DEALER_NAME, SANCTIONED_CAPACITY, CONSUMER_APP_DATE,
-CONSUMER_APP_NO, SUBSIDY_APP_NO, SUBSIDY_APP_DATE (subsidy portal application;
-  only on the Customer Details sheet — documents use CONSUMER_APP_NO/DATE),
-SOLAR_CAPACITY, INVERTER_MAKE, INVERTER_CAPACITY,
-INVERTER_GURANTEE, INVERTER_SR_NO, PANEL_COMPANY, PANEL_WATT,
-NO_OF_PANEL, TOTAL_PANEL_CAPACITY, PANEL_SR_NO, CELL_MANUFACTURER,
-PANEL_GURANTEE, INSTALLATION_DATE, INSTALLATION_CITY, INSTALLATION_DISTRICT,
-DISCOM_REGISTERED_OFFICE, SYSTEM_COST, METER_TESTING_DATE, METER_RECIPT_NO,
-GENERATION_METER_MAKE, GENERATION_METER_NO,
-AGREEMENT_SYSTEM_COST (documents/admin only; the amount printed on documents —
-  SYSTEM_COST is the real price for payments and must never appear in a template),
-installation_steps[], received_payments[] (each {amount, date}),
+_id, CONSUMER_NAME, CONSUMER_ADDRESS, CONSUMER_EMAIL,
+CONSUMER_PHONE (10 digits), CONSUMER_AADHAR (12 digits), CONSUMER_NO (no spaces, unique index),
+DEALER_NAME, INVERTER_MAKE, PANEL_COMPANY      — must be in core/catalog.py
+SYSTEM_COST, AGREEMENT_SYSTEM_COST             — whole rupees (int)
+SOLAR_CAPACITY, SANCTIONED_CAPACITY, INVERTER_CAPACITY — kW (float); inverter capacity from catalog
+PANEL_WATT (int, from catalog), NO_OF_PANEL (int)
+CONSUMER_APP_DATE, SUBSIDY_APP_DATE, METER_TESTING_DATE — "YYYY-MM-DD", validated
+CONSUMER_APP_NO, SUBSIDY_APP_NO (subsidy portal application; only on the Customer
+  Details sheet — documents use CONSUMER_APP_NO/DATE), INSTALLATION_CITY,
+INSTALLATION_DISTRICT, DISCOM_REGISTERED_OFFICE, METER_RECEIPT_NO,
+GENERATION_METER_MAKE, GENERATION_METER_NO     — text
+INVERTER_SR_NO, PANEL_SR_NO                    — comma-separated text ("A1, A2, A3")
+Derived by the server on every save (never sent by the client):
+  TOTAL_PANEL_CAPACITY (W = watt × panels), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from catalog),
+  INSTALLATION_DATE (from the Inverter / Solar Panel checklist steps)
+installation_steps[], received_payments[] (each {amount: int rupees, date: "YYYY-MM-DD"}),
 doc_status (none/generating/complete), signing_status (none/sent/signed),
-signing_token, signing_token_expiry, docs_folder_path, created_at, updated_at
+signing_token, signing_token_expiry, r2_prefix, created_by, created_at, updated_at
 ```
+- Blank values are stored as `null`, never `""`.
+- AGREEMENT_SYSTEM_COST is documents/admin only and is the amount printed on documents;
+  SYSTEM_COST is the real price for payments and must never appear in a template.
+- Payment status / paid % are **not stored**: `payment_info()` (Python) and
+  `PAYMENT_EXPRESSIONS` (MongoDB pipeline) in `models/installation.py` compute them from
+  SYSTEM_COST + received_payments; a test checks the two agree.
+- `core/catalog.py` is the only list of dealers, makes (+warranty), panel watts and inverter
+  capacities. The frontend reads it from `GET /api/catalog` (`useCatalog()` in `api/catalog.js`).
+- Validation errors come back as one readable sentence in `detail` (handler in `main.py`).
 
 ### SigningSubmission
 ```
@@ -108,8 +122,12 @@ submitted_at, ip_address
 - `GET /api/users`                   — list users + available roles
 - `PUT /api/users/{id}`              — set `roles[]` and/or `is_active`
 
+### Catalog
+- `GET /api/catalog`                 — dealers, makes, panel watts, inverter capacities
+
 ### Customers
-- `GET    /api/customers`         — list with search + pagination
+- `GET    /api/customers`         — list with search + pagination + `sort`
+  (newest/oldest/name/app_date_desc/app_date_asc/cost_desc/cost_asc/capacity_desc)
 - `POST   /api/customers`         — create new customer
 - `GET    /api/customers/{id}`    — get one
 - `PUT    /api/customers/{id}`    — update
@@ -146,7 +164,9 @@ Location: `backend/DOCS/`
 
 Placeholder format in templates: `${FIELD_NAME}$`
 
-Date fields (formatted as DD-MM-YYYY): `CONSUMER_APP_DATE`, `INSTALLATION_DATE`, `METER_TESTING_DATE`
+How values print is decided only in `backend/app/services/formatting.py` (used by document
+generation and the Customer Details sheet): dates DD-MM-YYYY, money `1,50,000`, kW/watts as
+plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR`.
 
 ---
 

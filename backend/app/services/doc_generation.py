@@ -23,6 +23,8 @@ from docx import Document
 from docx.shared import Inches
 
 from . import storage
+from .formatting import document_value
+from ..models.customer import field_label
 
 TEMPLATE_DIR = Path(__file__).parent.parent.parent / "DOCS"
 
@@ -88,12 +90,13 @@ def sanitize(name: str) -> str:
 
 
 def build_replacements(customer: dict) -> dict:
-    replacements = {}
-    for key, value in customer.items():
-        if key.startswith("_") or value is None:
-            continue
-        replacements[f"${{{key}}}$"] = str(value) if value else ""
-    return replacements
+    """${FIELD}$ -> printed text. Formatting (DD-MM-YYYY dates, 1,50,000
+    amounts, plain kW numbers) lives in services/formatting.py."""
+    return {
+        f"${{{key}}}$": document_value(key, value)
+        for key, value in customer.items()
+        if not key.startswith("_") and value is not None and not isinstance(value, (dict, list))
+    }
 
 
 # ── Placeholder discovery & pre-generation validation ─────────────────────────
@@ -129,47 +132,6 @@ DOCUMENT_LABELS = {
     "NP_Agreement_First_Page": "Net-Metering Agreement (First Page)",
     "Meter_testing_letter":    "Meter Testing Letter",
 }
-
-# Friendly, admin-facing labels for each customer data field.
-FIELD_LABELS = {
-    "CONSUMER_NAME":            "Consumer Name",
-    "CONSUMER_ADDRESS":         "Consumer Address",
-    "CONSUMER_PHONE":           "Consumer Phone",
-    "CONSUMER_EMAIL":           "Consumer Email",
-    "CONSUMER_AADHAR":          "Consumer Aadhaar No.",
-    "CONSUMER_NO":              "Consumer No.",
-    "CONSUMER_APP_DATE":        "Application Date",
-    "CONSUMER_APP_NO":          "Application No.",
-    "DEALER_NAME":              "Dealer Name",
-    "SANCTIONED_CAPACITY":      "Sanctioned Capacity",
-    "SOLAR_CAPACITY":           "Solar Capacity",
-    "INVERTER_MAKE":            "Inverter Make",
-    "INVERTER_CAPACITY":        "Inverter Capacity",
-    "INVERTER_GURANTEE":        "Inverter Guarantee",
-    "INVERTER_SR_NO":           "Inverter Serial No.",
-    "PANEL_COMPANY":            "Panel Company",
-    "PANEL_WATT":               "Panel Wattage",
-    "NO_OF_PANEL":              "Number of Panels",
-    "TOTAL_PANEL_CAPACITY":     "Total Panel Capacity",
-    "PANEL_SR_NO":              "Panel Serial No.",
-    "PANEL_GURANTEE":           "Panel Guarantee",
-    "INSTALLATION_DATE":        "Installation Date",
-    "INSTALLATION_CITY":        "Installation City",
-    "INSTALLATION_DISTRICT":    "Installation District",
-    "DISCOM_REGISTERED_OFFICE": "DISCOM Registered Office",
-    "SYSTEM_COST":              "System Cost",
-    "AGREEMENT_SYSTEM_COST":    "Agreement System Cost",
-    "METER_TESTING_DATE":       "Meter Testing Date",
-    "METER_RECIPT_NO":          "Meter Receipt No.",
-    "GENERATION_METER_MAKE":    "Generation Meter Make",
-    "GENERATION_METER_NO":      "Generation Meter No.",
-}
-
-
-def field_label(key: str) -> str:
-    """Human-readable label for a field key (falls back to a title-cased key)."""
-    return FIELD_LABELS.get(key) or key.replace("_", " ").title()
-
 
 def document_label(doc_type: str) -> str:
     """Human-readable label for a generated document type."""

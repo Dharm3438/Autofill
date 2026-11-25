@@ -3,26 +3,28 @@ import {
   Boxes, Pencil, Check, Plus, X, AlertTriangle, RefreshCw, PackageX,
 } from 'lucide-react'
 import { getInventoryOverview, setInventoryStock } from '../api/inventory'
-import {
-  PANEL_OPTIONS, INVERTER_OPTIONS, PANEL_WATT_OPTIONS, INVERTER_CAPACITY_OPTIONS,
-} from '../constants/equipment'
+import { useCatalog } from '../api/catalog'
 import toast from 'react-hot-toast'
 
 const rowKey = (r) => `${r.category}|${r.company}|${r.spec}`
 
-// Which selectors the "add stock" form shows for each category.
-const ADD_FIELDS = {
-  panel: {
-    company: { label: 'Company', options: PANEL_OPTIONS.map((o) => o.value) },
-    spec: { label: 'Watt', options: PANEL_WATT_OPTIONS, suffix: ' W' },
-  },
-  inverter: {
-    company: { label: 'Make', options: INVERTER_OPTIONS.map((o) => o.value) },
-    spec: { label: 'Capacity', options: INVERTER_CAPACITY_OPTIONS },
-  },
-  generation_meter: {
-    company: { label: 'Make', options: null }, // free text
-  },
+// Which selectors the "add stock" form shows for each category. Specs are the
+// plain numbers as text ("540", "3.3") — the same text the server uses for a
+// customer's panel watt / inverter capacity, so stock lines match demand.
+function addFields(catalog) {
+  return {
+    panel: {
+      company: { label: 'Company', options: catalog.panel_makes.map((m) => m.name) },
+      spec: { label: 'Watt', options: catalog.panel_watts.map(String), suffix: ' W' },
+    },
+    inverter: {
+      company: { label: 'Make', options: catalog.inverter_makes.map((m) => m.name) },
+      spec: { label: 'Capacity', options: catalog.inverter_capacities.map(String), suffix: ' kW' },
+    },
+    generation_meter: {
+      company: { label: 'Make', options: null }, // free text
+    },
+  }
 }
 
 // Ensure the single generic Net Meter line always exists so it can be stocked
@@ -41,6 +43,7 @@ function withNetMeterPlaceholder(categories) {
 }
 
 export default function InventorySidebar({ refreshSignal }) {
+  const ADD_FIELDS = addFields(useCatalog())
   const [categories, setCategories] = useState([])
   const [totals, setTotals] = useState({})
   const [loading, setLoading] = useState(true)
@@ -305,7 +308,7 @@ export default function InventorySidebar({ refreshSignal }) {
 }
 
 function AddStockForm({ catKey, form, setForm, onSubmit, onCancel }) {
-  const fields = ADD_FIELDS[catKey]
+  const fields = addFields(useCatalog())[catKey]
   const selCls = 'flex-1 min-w-0 px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25'
   return (
     <div className="p-2.5 rounded-lg border border-dashed border-gray-300 dark:border-white/15 bg-gray-50 dark:bg-white/[0.03] space-y-2">

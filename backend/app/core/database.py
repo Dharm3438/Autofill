@@ -1,6 +1,5 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from .config import settings
-from ..models.installation import payment_derived_fields
 
 client: AsyncIOMotorClient = None
 db = None
@@ -27,6 +26,9 @@ async def _ensure_indexes():
                                            tokens are unique by construction.
       • signing_submissions.customer_id — used to find a customer's submission.
       • customers.created_at            — default sort for the admin list.
+      • customers.CONSUMER_NO           — unique: no two customers share a
+                                           consumer number, even when saved at
+                                           the same moment.
 
     Index creation is best-effort: a failure here (e.g. a pre-existing duplicate
     blocking the unique index) must not stop the API from booting.
@@ -43,28 +45,12 @@ async def _ensure_indexes():
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")
-    await _migrate_user_roles()
-    await _backfill_payment_status()
-
-
-async def _backfill_payment_status():
-    """
-    Idempotent: give customers saved before `payment_status` / `paid_percent`
-    existed their derived values, so the installations payment filter and
-    "money ahead of work" sort see them. After the first run nothing matches
-    and this is a no-op.
-    """
     try:
-        fields = {"SYSTEM_COST": 1, "received_payments": 1, "received_payment": 1}
-        missing = {"$or": [{"payment_status": {"$exists": False}}, {"paid_percent": {"$exists": False}}]}
-        n = 0
-        async for c in db.customers.find(missing, fields):
-            await db.customers.update_one({"_id": c["_id"]}, {"$set": payment_derived_fields(c)})
-            n += 1
-        if n:
-            print(f"Backfilled payment fields on {n} customers")
+        # Separate so existing duplicates (old data) only skip this one index.
+        await db.customers.create_index("CONSUMER_NO", unique=True)
     except Exception as e:
-        print(f"Payment fields backfill warning: {e}")
+        print(f"Unique CONSUMER_NO index not created (duplicate consumer numbers exist?): {e}")
+    await _migrate_user_roles()
 
 
 async def _migrate_user_roles():

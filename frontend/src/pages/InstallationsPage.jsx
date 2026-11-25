@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
-import { DEALER_OPTIONS } from '../constants/dealers'
+import { useCatalog } from '../api/catalog'
+import { fmtINR as fmtINRBlank, fmtKw } from '../utils/format'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
 import InventorySidebar from '../components/InventorySidebar'
@@ -22,9 +23,8 @@ const STATUS_LABEL = {
   not_started: 'Not Started',
 }
 
-// ₹ with Indian thousands grouping, no decimals (e.g. ₹50,000).
-const fmtINR = (n) =>
-  `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+// ₹ with Indian thousands grouping (e.g. ₹50,000); blank shows ₹0.
+const fmtINR = (n) => fmtINRBlank(n || 0)
 
 // Payment filter options — values match the server's stored `payment_status`.
 const PAYMENT_LABEL = {
@@ -118,7 +118,7 @@ function panelCount(n) {
 // One line: "Inverter: Growatt · 5 kW | Panels: Waaree · 540 W · 10 panels".
 // A side with no data is left out; the whole line is hidden if both are empty.
 function EquipmentLine({ customer: c }) {
-  const inverter = [c.INVERTER_MAKE, c.INVERTER_CAPACITY].filter(Boolean).join(' · ')
+  const inverter = [c.INVERTER_MAKE, fmtKw(c.INVERTER_CAPACITY)].filter(Boolean).join(' · ')
   const panels = [c.PANEL_COMPANY, panelWatt(c.PANEL_WATT), panelCount(c.NO_OF_PANEL)].filter(Boolean).join(' · ')
   if (!inverter && !panels) return null
   return (
@@ -198,6 +198,7 @@ export default function InstallationsPage() {
   const [doneStep, setDoneStep] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
+  const catalog = useCatalog()
   const [sortBy, setSortBy] = useState(loadSort)
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
@@ -351,7 +352,7 @@ export default function InstallationsPage() {
             className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
           >
             <option value="">All dealers</option>
-            {DEALER_OPTIONS.map((d) => (
+            {catalog.dealers.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

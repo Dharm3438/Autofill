@@ -37,7 +37,7 @@ class TemplateTest(unittest.TestCase):
     def test_generation_blocked_until_agreement_cost_set(self):
         fields = set().union(*required_fields_by_document().values())
         customer = {k: "x" for k in fields}
-        customer["SYSTEM_COST"] = "150000"
+        customer["SYSTEM_COST"] = 150000
         customer.pop("AGREEMENT_SYSTEM_COST")
         report = validate_customer_for_generation(customer)
         self.assertIsNotNone(report)
@@ -62,17 +62,17 @@ class AccessTest(unittest.TestCase):
 
     def test_documents_user_can_set_and_see(self):
         res = run(customers.update_customer(
-            self.a1["id"], CustomerUpdate(AGREEMENT_SYSTEM_COST="1,20,000"), user=self.docs))
-        self.assertEqual(res["data"]["AGREEMENT_SYSTEM_COST"], "1,20,000")
-        self.assertEqual(self._stored()["SYSTEM_COST"], "1")  # real cost untouched
+            self.a1["id"], CustomerUpdate(AGREEMENT_SYSTEM_COST=120000), user=self.docs))
+        self.assertEqual(res["data"]["AGREEMENT_SYSTEM_COST"], 120000)
+        self.assertEqual(self._stored()["SYSTEM_COST"], 1)  # real cost untouched
 
     def test_data_entry_cannot_set_blank_or_see(self):
         run(customers.update_customer(
-            self.a1["id"], CustomerUpdate(AGREEMENT_SYSTEM_COST="1,20,000"), user=self.docs))
+            self.a1["id"], CustomerUpdate(AGREEMENT_SYSTEM_COST=120000), user=self.docs))
         res = run(customers.update_customer(
             self.a1["id"], CustomerUpdate(AGREEMENT_SYSTEM_COST=""), user=self.alice))
         self.assertNotIn("AGREEMENT_SYSTEM_COST", res["data"])
-        self.assertEqual(self._stored()["AGREEMENT_SYSTEM_COST"], "1,20,000")
+        self.assertEqual(self._stored()["AGREEMENT_SYSTEM_COST"], 120000)
 
 
 if __name__ == "__main__":

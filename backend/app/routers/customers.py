@@ -2,11 +2,12 @@ import asyncio
 import re
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Response, status
+from pymongo.errors import DuplicateKeyError
 from ..core.database import get_db
 from ..core.permissions import P, require, customer_scope, user_permissions, parse_object_id
-from ..models.customer import CustomerCreate, CustomerUpdate, missing_required_fields
+from ..models.customer import CustomerCreate, CustomerUpdate, missing_required_fields, derived_fields
 from ..services.customer_sheet import build_customer_details_pdf, details_sheet_filename
-from ..models.installation import default_installation_steps, payment_derived_fields
+from ..models.installation import default_installation_steps
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/customers", tags=["customers"])
@@ -15,10 +16,7 @@ router = APIRouter(prefix="/customers", tags=["customers"])
 # (signing_token is a bearer credential for the customer's signing page).
 _INTERNAL_FIELDS = ("signing_token", "signing_token_expiry", "signing_manifest", "r2_prefix")
 # Only for users who work on installations / payments.
-_INSTALLATION_FIELDS = (
-    "installation_steps", "received_payments", "received_payment", "total_payment", "payment_status",
-    "paid_percent",
-)
+_INSTALLATION_FIELDS = ("installation_steps", "received_payments")
 # Only for users who work on documents.
 _DOCUMENT_FIELDS = ("doc_status", "signing_status", "uploads", "AGREEMENT_SYSTEM_COST")
 # Customer data fields that only document users may write. Silently dropped for
@@ -59,6 +57,23 @@ def scoped(user: dict, query: dict) -> dict:
     return {"$and": [query, scope]}
 
 
+# Customer list sort orders. Each ends in _id so paging is stable. Missing
+# values (null) sort last when descending and first when ascending.
+LIST_SORTS = {
+    "newest":        [("created_at", -1), ("_id", -1)],
+    "oldest":        [("created_at", 1), ("_id", 1)],
+    "name":          [("CONSUMER_NAME", 1), ("_id", 1)],
+    "app_date_desc": [("CONSUMER_APP_DATE", -1), ("_id", -1)],
+    "app_date_asc":  [("CONSUMER_APP_DATE", 1), ("_id", 1)],
+    "cost_desc":     [("SYSTEM_COST", -1), ("_id", -1)],
+    "cost_asc":      [("SYSTEM_COST", 1), ("_id", 1)],
+    "capacity_desc": [("SOLAR_CAPACITY", -1), ("_id", -1)],
+}
+
+# Names sort case-insensitively (English, case-insensitive collation).
+_NAME_COLLATION = {"locale": "en", "strength": 2}
+
+
 def _require_fields(data: dict, partial: bool = False) -> None:
     missing = missing_required_fields(data, partial=partial)
     if missing:
@@ -73,8 +88,12 @@ async def list_customers(
     search: str = Query(default=""),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=100),
+    sort: str = Query(default="newest"),
     user=Depends(require(P.CUSTOMERS_READ_ALL, P.CUSTOMERS_READ_OWN, any_of=True)),
 ):
+    sort_spec = LIST_SORTS.get(sort)
+    if sort_spec is None:
+        raise HTTPException(status_code=400, detail=f"Unknown sort: {sort}")
     db = get_db()
     query = {}
     if search:
@@ -87,7 +106,9 @@ async def list_customers(
     query = scoped(user, query)
 
     total = await db.customers.count_documents(query)
-    cursor = db.customers.find(query).skip((page - 1) * limit).limit(limit).sort("created_at", -1)
+    cursor = db.customers.find(query).sort(sort_spec).skip((page - 1) * limit).limit(limit)
+    if sort == "name":
+        cursor = cursor.collation(_NAME_COLLATION)
     customers = [customer_to_out(c, user) async for c in cursor]
 
     return {"success": True, "data": customers, "total": total, "page": page, "limit": limit}
@@ -102,7 +123,7 @@ async def check_consumer_no(
     # Deliberately global (not scoped): duplicates must be caught across all
     # customers. Only a yes/no is returned, never whose record it is.
     db = get_db()
-    query = {"CONSUMER_NO": consumer_no}
+    query = {"CONSUMER_NO": re.sub(r"\s+", "", consumer_no)}
     if exclude_id:
         query["_id"] = {"$ne": parse_object_id(exclude_id)}
     existing = await db.customers.find_one(query, {"_id": 1})
@@ -111,19 +132,21 @@ async def check_consumer_no(
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_customer(body: CustomerCreate, user=Depends(require(P.CUSTOMERS_CREATE))):
-    _require_fields(body.model_dump())
+    data = _strip_document_fields(body.to_store(), user)
+    _require_fields(data)
     db = get_db()
-    if body.CONSUMER_NO:
-        existing = await db.customers.find_one({"CONSUMER_NO": body.CONSUMER_NO}, {"_id": 1})
-        if existing:
-            raise HTTPException(status_code=409, detail="Consumer number already exists")
+    if await db.customers.find_one({"CONSUMER_NO": data["CONSUMER_NO"]}, {"_id": 1}):
+        raise HTTPException(status_code=409, detail="Consumer number already exists")
     now = datetime.now(timezone.utc).isoformat()
     doc = {
-        **_strip_document_fields(body.model_dump(), user),
+        **data,
+        **derived_fields(data),
         "doc_status": "none",
         "signing_status": "none",
         "uploads": {"installation": False, "np_stamp": False, "dcr": False},
         "installation_steps": default_installation_steps(),
+        "received_payments": [],
+        "INSTALLATION_DATE": None,
         "signing_token": None,
         "r2_prefix": None,
         "created_by": str(user["_id"]),
@@ -132,8 +155,11 @@ async def create_customer(body: CustomerCreate, user=Depends(require(P.CUSTOMERS
         "created_at": now,
         "updated_at": now,
     }
-    doc.update(payment_derived_fields(doc))
-    result = await db.customers.insert_one(doc)
+    try:
+        result = await db.customers.insert_one(doc)
+    except DuplicateKeyError:
+        # Two saves of the same consumer no at once: the unique index wins.
+        raise HTTPException(status_code=409, detail="Consumer number already exists")
     doc["_id"] = result.inserted_id
     return {"success": True, "data": customer_to_out(doc, user)}
 
@@ -168,38 +194,39 @@ async def customer_details_sheet(customer_id: str, _=Depends(require(P.DOCUMENTS
 
 @router.put("/{customer_id}")
 async def update_customer(customer_id: str, body: CustomerUpdate, user=Depends(require(P.CUSTOMERS_UPDATE))):
-    _require_fields(body.model_dump(), partial=True)
+    # Only the fields the request sent; one sent blank (null) clears it.
+    update_data = _strip_document_fields(body.to_store(only_sent=True), user)
+    _require_fields(update_data, partial=True)
     db = get_db()
     oid = parse_object_id(customer_id)
     # Scope check first: a customer outside this user's scope is a 404, and the
     # duplicate check below must not run (or leak) for records they can't see.
-    if not await db.customers.find_one(scoped(user, {"_id": oid}), {"_id": 1}):
+    current = await db.customers.find_one(scoped(user, {"_id": oid}))
+    if not current:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    if body.CONSUMER_NO:
+    if update_data.get("CONSUMER_NO"):
         existing = await db.customers.find_one(
-            {"CONSUMER_NO": body.CONSUMER_NO, "_id": {"$ne": oid}},
+            {"CONSUMER_NO": update_data["CONSUMER_NO"], "_id": {"$ne": oid}},
             {"_id": 1},
         )
         if existing:
             raise HTTPException(status_code=409, detail="Consumer number already exists")
     # CustomerUpdate only contains the customer data fields, so status/ownership
     # fields (doc_status, created_by, payments, …) can't be written through here.
-    update_data = {k: v for k, v in _strip_document_fields(body.model_dump(), user).items() if v is not None}
+    # Derived fields are recomputed from the merged record.
+    update_data.update(derived_fields({**current, **update_data}))
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     update_data["updated_by"] = str(user["_id"])
 
-    result = await db.customers.update_one(scoped(user, {"_id": oid}), {"$set": update_data})
+    try:
+        result = await db.customers.update_one(scoped(user, {"_id": oid}), {"$set": update_data})
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="Consumer number already exists")
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
 
     c = await db.customers.find_one({"_id": oid})
-    # SYSTEM_COST may have changed: keep the derived payment fields in step.
-    derived = payment_derived_fields(c)
-    changed = {k: v for k, v in derived.items() if c.get(k) != v}
-    if changed:
-        await db.customers.update_one({"_id": oid}, {"$set": changed})
-        c.update(changed)
     return {"success": True, "data": customer_to_out(c, user)}
 
 

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from ..core.database import get_db
 from ..core.permissions import P, require
 from ..models.installation import merge_steps
+from ..services.formatting import fmt_number
 from ..models.inventory import (
     CATEGORIES,
     CATEGORY_STEP,
@@ -15,15 +16,6 @@ from ..models.inventory import (
 )
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
-
-
-def _int(value) -> int:
-    """Best-effort parse of a quantity (e.g. NO_OF_PANEL) into a non-negative int."""
-    try:
-        n = int(float(str(value).strip()))
-    except (ValueError, TypeError):
-        return 0
-    return n if n > 0 else 0
 
 
 def _demand_lines(customer: dict, step_done: dict) -> list:
@@ -38,12 +30,14 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
     lines = []
 
     # Panels — grouped by company + watt, quantity = number of panels.
-    panel_qty = _int(customer.get("NO_OF_PANEL"))
+    # Specs are the stored numbers printed plainly (540, 3.3) — the same text
+    # the inventory form sends for a stock line.
+    panel_qty = customer.get("NO_OF_PANEL") or 0
     if panel_qty and _clean(customer.get("PANEL_COMPANY")):
         lines.append((
             "panel",
             _clean(customer.get("PANEL_COMPANY")),
-            _clean(customer.get("PANEL_WATT")),
+            fmt_number(customer.get("PANEL_WATT")),
             panel_qty,
             step_done["panel"],
         ))
@@ -53,7 +47,7 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
         lines.append((
             "inverter",
             _clean(customer.get("INVERTER_MAKE")),
-            _clean(customer.get("INVERTER_CAPACITY")),
+            fmt_number(customer.get("INVERTER_CAPACITY")),
             1,
             step_done["inverter"],
         ))

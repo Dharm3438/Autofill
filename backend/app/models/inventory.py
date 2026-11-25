@@ -40,7 +40,7 @@ def _clean(v) -> str:
 
 
 def line_label(category: str, company: str, spec: str) -> str:
-    """Human-readable name for an inventory line (e.g. 'UTL · 550 W')."""
+    """Human-readable name for an inventory line (e.g. 'UTL · 550 W', 'UTL · 5 kW')."""
     if category == "panel":
         parts = [company or "Unspecified"]
         if spec:
@@ -49,7 +49,7 @@ def line_label(category: str, company: str, spec: str) -> str:
     if category == "inverter":
         parts = [company or "Unspecified"]
         if spec:
-            parts.append(spec)
+            parts.append(f"{spec} kW")
         return " · ".join(parts)
     if category == "generation_meter":
         return company or "Unspecified make"

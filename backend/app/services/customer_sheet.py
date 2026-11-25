@@ -15,6 +15,8 @@ from pathlib import Path
 
 import fitz  # PyMuPDF
 
+from .formatting import document_value, fmt_number
+
 TEMPLATE_PATH = (
     Path(__file__).parent.parent.parent / "DOCS" / "customer_details_template.pdf"
 )
@@ -56,48 +58,20 @@ _TOTAL_COST_CELL = (70.5, 685.1, 306.8, 708.3)
 
 
 def _s(customer: dict, key: str) -> str:
-    v = customer.get(key)
-    return "" if v is None else str(v).strip()
-
-
-def _fmt_date(value: str) -> str:
-    """ISO 'YYYY-MM-DD...' -> 'DD-MM-YYYY'; anything else is returned as-is."""
-    m = re.match(r"^(\d{4})-(\d{2})-(\d{2})", value)
-    return f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else value
-
-
-def _is_number(value: str) -> bool:
-    return bool(re.fullmatch(r"\d+(\.\d+)?", value))
-
-
-def _fmt_number(n: float) -> str:
-    """3.0 -> '3', 3.24 -> '3.24'."""
-    return f"{n:.3f}".rstrip("0").rstrip(".")
-
-
-def _fmt_inr(value: str) -> str:
-    """'185000' -> 'Rs. 1,85,000' (Indian grouping). Non-numeric values are kept."""
-    raw = value.replace(",", "").replace("₹", "").replace("Rs.", "").strip()
-    if not _is_number(raw):
-        return value
-    whole, _, frac = raw.partition(".")
-    if len(whole) > 3:
-        head, tail = whole[:-3], whole[-3:]
-        head = re.sub(r"(\d)(?=(\d{2})+$)", r"\1,", head)
-        whole = f"{head},{tail}"
-    frac = frac.rstrip("0")
-    return f"Rs. {whole}.{frac[:2].ljust(2, '0')}" if frac else f"Rs. {whole}"
+    """A field as printed (dates DD-MM-YYYY, money 1,50,000, kW 3.3)."""
+    return document_value(key, customer.get(key))
 
 
 def _required_load(customer: dict) -> str:
-    """Solar Capacity; a bare number like '3' gets the ' kW' unit appended."""
+    """Solar Capacity with its unit: '3.3 kW'."""
     v = _s(customer, "SOLAR_CAPACITY")
-    return f"{v} kW" if _is_number(v) else v
+    return f"{v} kW" if v else ""
 
 
 def _inverter(customer: dict) -> str:
     """'GROWATT 3 kW'."""
-    parts = [_s(customer, "INVERTER_MAKE"), _s(customer, "INVERTER_CAPACITY")]
+    cap = _s(customer, "INVERTER_CAPACITY")
+    parts = [_s(customer, "INVERTER_MAKE"), f"{cap} kW" if cap else ""]
     return " ".join(p for p in parts if p)
 
 
@@ -113,11 +87,9 @@ def _panel(customer: dict) -> str:
         if qty:
             spec += f" * {qty}"
 
-    total_w = _s(customer, "TOTAL_PANEL_CAPACITY")
-    if not _is_number(total_w) and _is_number(watt) and _is_number(qty):
-        total_w = str(float(watt) * float(qty))
-    if _is_number(total_w) and float(total_w) > 0:
-        total = f"{_fmt_number(float(total_w) / 1000)} kW"
+    total_w = customer.get("TOTAL_PANEL_CAPACITY")
+    if total_w:
+        total = f"{fmt_number(total_w / 1000)} kW"
         spec = f"{spec} = {total}" if spec else total
 
     return " ".join(p for p in (company, spec) if p)
@@ -179,11 +151,11 @@ def build_customer_details_pdf(customer: dict) -> bytes:
         ):
             _write(page, *_LEFT, R[row], _s(customer, no_key))
             _write(page, _DATE_LABEL_END_X - PAD + 3, _RIGHT[1], R[row],
-                   _fmt_date(_s(customer, date_key)))
+                   _s(customer, date_key))
 
         x0, y0, x1, y1 = _TOTAL_COST_CELL
         cost = _s(customer, "SYSTEM_COST")
-        _write(page, x0, x1, (y0, y1), _fmt_inr(cost) if cost else "")
+        _write(page, x0, x1, (y0, y1), f"Rs. {cost}" if cost else "")
 
         return doc.tobytes(garbage=3, deflate=True)
     finally:

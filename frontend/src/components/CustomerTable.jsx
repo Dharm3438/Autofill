@@ -7,6 +7,7 @@ import MissingFieldsModal from './MissingFieldsModal'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
+import { fmtINR, fmtKw, fmtDate } from '../utils/format'
 
 // The stamped NP first page is the only upload required before the signing
 // link can be sent; the installation photo and DCR are optional.
@@ -337,19 +338,19 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           ['Email', c.CONSUMER_EMAIL],
           ['Aadhar', c.CONSUMER_AADHAR],
           ['Consumer No', c.CONSUMER_NO],
-          ['Application Date', c.CONSUMER_APP_DATE],
+          ['Application Date', fmtDate(c.CONSUMER_APP_DATE)],
           ['Subsidy Portal App No', c.SUBSIDY_APP_NO],
-          ['Subsidy Portal App Date', c.SUBSIDY_APP_DATE],
-          ['Solar Capacity', c.SOLAR_CAPACITY],
+          ['Subsidy Portal App Date', fmtDate(c.SUBSIDY_APP_DATE)],
+          ['Solar Capacity', fmtKw(c.SOLAR_CAPACITY)],
           ['Inverter Make', c.INVERTER_MAKE],
           ['Panel Company', c.PANEL_COMPANY],
           ['No of Panels', c.NO_OF_PANEL],
           ['Installation City', c.INSTALLATION_CITY],
-          ['Installation Date', c.INSTALLATION_DATE],
-          ['System Cost', c.SYSTEM_COST],
+          ['Installation Date', fmtDate(c.INSTALLATION_DATE)],
+          ['System Cost', fmtINR(c.SYSTEM_COST)],
           // Only returned by the API to document users.
-          ['Agreement System Cost', c.AGREEMENT_SYSTEM_COST],
-          ['Meter Receipt No', c.METER_RECIPT_NO],
+          ['Agreement System Cost', fmtINR(c.AGREEMENT_SYSTEM_COST)],
+          ['Meter Receipt No', c.METER_RECEIPT_NO],
           ['Generation Meter', c.GENERATION_METER_NO],
         ].filter(([, val]) => val).map(([label, val]) => (
           <div key={label} className="bg-white dark:bg-white/5 rounded-lg px-3 py-2 border border-[#1a3a2a]/10 dark:border-white/10">

@@ -54,6 +54,15 @@ class _AsyncDB:
         self.customers = _AsyncCollection(db.customers)
 
 
+def paid(percent, cost=1000):
+    """Customer fields for a job `percent` paid (two dated instalments)."""
+    received = cost * percent // 100
+    return {"SYSTEM_COST": cost, "received_payments": [
+        {"amount": received // 2, "date": "2026-01-01"},
+        {"amount": received - received // 2, "date": "2026-02-01"},
+    ]}
+
+
 def _steps(done_keys):
     return [{"key": k, "status": "done" if k in done_keys else "pending"} for k in KEYS]
 
@@ -158,17 +167,18 @@ class OverviewTest(unittest.TestCase):
         self.assertEqual(res["total"], 1)
 
     def test_rows_keep_payment_fields(self):
-        self.add("payer", SYSTEM_COST="100000", received_payments=[{"amount": 20000, "date": "2026-01-01"}])
+        self.add("payer", SYSTEM_COST=100000, received_payments=[{"amount": 20000, "date": "2026-01-01"}])
         row = self.overview()["data"][0]
         self.assertEqual((row["total_payment"], row["received_payment"], row["remaining_payment"]),
                          (100000, 20000, 80000))
         self.assertEqual(len(row["steps"]), len(KEYS))
         self.assertEqual(row["payment_status"], "due")
+        self.assertEqual(row["paid_percent"], 20)
 
     def test_done_step_filter(self):
         self.add("has_first", done=KEYS[:1])
         self.add("none")
-        self.add("legacy", installation_steps=None)
+        self.add("no_steps", installation_steps=None)
         self.assertEqual(self.names(self.overview(done_step=KEYS[0])), ["has_first"])
         self.assertEqual(self.overview(done_step="not_a_step")["data"], [])
 
@@ -178,47 +188,64 @@ class OverviewTest(unittest.TestCase):
         res = self.overview(done_step=KEYS[0], pending_step=KEYS[1])
         self.assertEqual(self.names(res), ["first_only"])
 
-    def test_payment_filter(self):
-        self.add("paid", payment_status="paid")
-        self.add("due", payment_status="due")
-        self.add("no_cost", payment_status="no_cost")
-        self.assertEqual(self.names(self.overview(payment="due")), ["due"])
-        self.assertEqual(self.names(self.overview(payment="paid")), ["paid"])
+    def test_payment_filter_is_calculated_from_amounts(self):
+        self.add("paid", **paid(100))
+        self.add("overpaid", **paid(120))
+        self.add("due", **paid(40))
+        self.add("nothing_yet", **paid(0))
+        self.add("no_cost", SYSTEM_COST=None)
+        self.assertEqual(self.names(self.overview(payment="due")), ["due", "nothing_yet"])
+        self.assertEqual(self.names(self.overview(payment="paid")), ["overpaid", "paid"])
+        self.assertEqual(self.names(self.overview(payment="no_cost")), ["no_cost"])
         self.assertEqual(self.overview(payment="bogus")["data"], [])
         # Summary ignores the payment filter, like the other row filters.
-        self.assertEqual(self.overview(payment="due")["summary"]["total_customers"], 3)
+        self.assertEqual(self.overview(payment="due")["summary"]["total_customers"], 5)
+
+    def test_database_and_python_payment_maths_agree(self):
+        cases = [paid(0), paid(33), paid(100), paid(150), {"SYSTEM_COST": None},
+                 {"SYSTEM_COST": 999, "received_payments": []}]
+        for i, extra in enumerate(cases):
+            self.add(f"c{i}", **extra)
+        for row in self.overview(fetch_all=True)["data"]:
+            raw = self.raw.customers.find_one({"CONSUMER_NAME": row["CONSUMER_NAME"]})
+            # The row's values come from payment_info; the pipeline computed its
+            # own for filtering/sorting. Both must match.
+            doc = list(self.raw.customers.aggregate(
+                installations._overview_base_pipeline({"_id": raw["_id"]})))[0]
+            self.assertAlmostEqual(doc["paid_percent"], row["paid_percent"], places=6)
+            self.assertEqual(doc["payment_status"], row["payment_status"])
 
     def test_subsidy_received_but_balance_due(self):
         subsidy = "subsidy_received"
-        self.add("owes", done=[subsidy], payment_status="due")
-        self.add("settled", done=[subsidy], payment_status="paid")
-        self.add("waiting", payment_status="due")
+        self.add("owes", done=[subsidy], **paid(50))
+        self.add("settled", done=[subsidy], **paid(100))
+        self.add("waiting", **paid(50))
         res = self.overview(done_step=subsidy, payment="due")
         self.assertEqual(self.names(res), ["owes"])
 
     def test_money_ahead_sort(self):
         half = len(KEYS) // 2
         # 50% paid, nothing started → +50: the one to start first.
-        self.add("paid_not_started", paid_percent=50)
+        self.add("paid_not_started", **paid(50))
         # 80% paid, half the work done → +30.
-        self.add("paid_half_done", done=KEYS[:half], paid_percent=80)
+        self.add("paid_half_done", done=KEYS[:half], **paid(80))
         # Fully paid and fully done → 0, as is nothing paid and nothing done;
         # the tie goes to the higher paid %.
-        self.add("all_done", done=KEYS, paid_percent=100)
-        self.add("fresh", paid_percent=0)
-        # Saved before paid_percent existed → treated as 0% paid.
-        self.add("legacy")
+        self.add("all_done", done=KEYS, **paid(100))
+        self.add("fresh", **paid(0))
+        # No cost set → treated as 0% paid.
+        self.add("no_cost", SYSTEM_COST=None)
         # Work well ahead of payment → negative, last.
-        self.add("work_ahead", done=KEYS[:-1], paid_percent=20)
+        self.add("work_ahead", done=KEYS[:-1], **paid(20))
         res = self.overview(sort="money_ahead")
         self.assertEqual(self.names(res),
-                         ["paid_not_started", "paid_half_done", "all_done", "fresh", "legacy", "work_ahead"])
+                         ["paid_not_started", "paid_half_done", "all_done", "fresh", "no_cost", "work_ahead"])
         # The default sort is unchanged: most steps done first.
         self.assertEqual(self.names(self.overview())[:2], ["all_done", "work_ahead"])
 
     def test_money_ahead_sort_pages_and_filters(self):
         for i in range(5):
-            self.add(f"c{i}", paid_percent=i * 20)
+            self.add(f"c{i}", **paid(i * 20))
         first = self.names(self.overview(sort="money_ahead", limit=2))
         second = self.names(self.overview(sort="money_ahead", limit=2, page=2))
         self.assertEqual(first + second, ["c4", "c3", "c2", "c1"])

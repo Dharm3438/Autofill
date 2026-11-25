@@ -1,4 +1,4 @@
-"""Derived payment status (paid / due / no_cost). Run from backend/:
+"""Payment maths (paid / due / no_cost, paid %). Run from backend/:
 
     python -m unittest discover -s tests
 """
@@ -8,51 +8,40 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.installation import compute_payment_status, payment_derived_fields  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
+
+from app.models.installation import ReceivedPayment, payment_info  # noqa: E402
 
 
-class PaymentStatusTest(unittest.TestCase):
-    def test_no_cost_when_system_cost_missing_or_unparseable(self):
-        self.assertEqual(compute_payment_status({}), "no_cost")
-        self.assertEqual(compute_payment_status({"SYSTEM_COST": ""}), "no_cost")
-        self.assertEqual(compute_payment_status({"SYSTEM_COST": "TBD"}), "no_cost")
-        # Received money without a cost still can't be judged "paid".
-        self.assertEqual(
-            compute_payment_status({"received_payments": [{"amount": 5000}]}), "no_cost"
-        )
+def info(cost, *amounts):
+    return payment_info({"SYSTEM_COST": cost, "received_payments": [{"amount": a} for a in amounts]})
+
+
+class PaymentInfoTest(unittest.TestCase):
+    def test_no_cost(self):
+        self.assertEqual(info(None)["payment_status"], "no_cost")
+        self.assertEqual(info(0, 5000)["payment_status"], "no_cost")
+        self.assertEqual(info(None, 5000)["paid_percent"], 0)
 
     def test_due_until_received_covers_cost(self):
-        c = {"SYSTEM_COST": "₹1,50,000", "received_payments": [{"amount": 100000, "date": None}]}
-        self.assertEqual(compute_payment_status(c), "due")
-        c["received_payments"].append({"amount": 50000, "date": "2026-01-01"})
-        self.assertEqual(compute_payment_status(c), "paid")
+        self.assertEqual(info(150000, 100000)["payment_status"], "due")
+        self.assertEqual(info(150000, 100000, 50000)["payment_status"], "paid")
+        self.assertEqual(info(150000, 100000)["remaining_payment"], 50000)
 
-    def test_overpaid_counts_as_paid(self):
-        c = {"SYSTEM_COST": "1000", "received_payments": [{"amount": 1200}]}
-        self.assertEqual(compute_payment_status(c), "paid")
-
-    def test_legacy_single_received_value(self):
-        self.assertEqual(
-            compute_payment_status({"SYSTEM_COST": "1000", "received_payment": "1000"}), "paid"
-        )
-        self.assertEqual(compute_payment_status({"SYSTEM_COST": "1000"}), "due")
+    def test_paid_percent_capped(self):
+        self.assertEqual(info(100000, 50000)["paid_percent"], 50)
+        self.assertEqual(info(1000, 1500)["paid_percent"], 100)
+        self.assertEqual(info(1000, 1500)["remaining_payment"], 0)
 
 
-class PaidPercentTest(unittest.TestCase):
-    def pct(self, c):
-        return payment_derived_fields(c)["paid_percent"]
-
-    def test_share_of_cost_received(self):
-        self.assertEqual(self.pct({"SYSTEM_COST": "1,00,000", "received_payments": [{"amount": 50000}]}), 50)
-        self.assertEqual(self.pct({"SYSTEM_COST": "1000"}), 0)
-
-    def test_capped_at_100_and_zero_without_cost(self):
-        self.assertEqual(self.pct({"SYSTEM_COST": "1000", "received_payments": [{"amount": 1500}]}), 100)
-        self.assertEqual(self.pct({"received_payments": [{"amount": 5000}]}), 0)
-
-    def test_derived_fields_include_status(self):
-        f = payment_derived_fields({"SYSTEM_COST": "1000", "received_payment": "250"})
-        self.assertEqual(f, {"payment_status": "due", "paid_percent": 25})
+class ReceivedPaymentTest(unittest.TestCase):
+    def test_whole_rupees_and_real_dates(self):
+        p = ReceivedPayment(amount="50000", date="2026-03-15")
+        self.assertEqual((p.amount, p.date), (50000, "2026-03-15"))
+        self.assertIsNone(ReceivedPayment(amount=1, date="").date)
+        for bad in ({"amount": 10.5}, {"amount": -1}, {"amount": 1, "date": "15-03-2026"}):
+            with self.assertRaises(ValidationError):
+                ReceivedPayment(**bad)
 
 
 if __name__ == "__main__":

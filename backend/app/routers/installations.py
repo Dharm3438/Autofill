@@ -12,7 +12,7 @@ from ..models.installation import (
     compute_overall_status,
     compute_installation_date,
     payment_info,
-    payment_derived_fields,
+    PAYMENT_EXPRESSIONS,
     PAYMENT_STATUSES,
     compute_serials_update,
     InstallationStepUpdate,
@@ -45,13 +45,12 @@ def _summarize(steps: list) -> dict:
 
 
 # Fields the overview rows need. Projecting down to these before sorting keeps
-# the in-memory sort small even with thousands of customers.
+# the sort small even with thousands of customers.
 _OVERVIEW_FIELDS = (
     "CONSUMER_NAME", "DEALER_NAME", "CONSUMER_NO", "CONSUMER_PHONE",
     "INSTALLATION_CITY", "INVERTER_MAKE", "INVERTER_CAPACITY",
     "PANEL_COMPANY", "PANEL_WATT", "NO_OF_PANEL",
-    "installation_steps", "SYSTEM_COST", "received_payments", "received_payment",
-    "payment_status", "paid_percent",
+    "installation_steps", "SYSTEM_COST", "received_payments",
 )
 
 _STEP_KEY_LIST = [s["key"] for s in INSTALLATION_STEPS]
@@ -76,6 +75,8 @@ def _overview_base_pipeline(query: dict) -> list:
       _done_count  — len(_done_keys)
       _status      — not_started / in_progress / completed
       _name_sort   — lower-cased name, for a case-insensitive A→Z tiebreak
+      paid_percent, payment_status — from SYSTEM_COST and received_payments
+                     (see PAYMENT_EXPRESSIONS; nothing payment-related is stored)
       _money_ahead — paid % minus work-done %, for the "money ahead of work"
                      sort (e.g. 50% paid, nothing started → +50)
     """
@@ -108,9 +109,10 @@ def _overview_base_pipeline(query: dict) -> list:
             "_done_count": {"$size": "$_done_keys"},
             "_name_sort": {"$toLower": {"$ifNull": ["$CONSUMER_NAME", ""]}},
         }},
+        *({"$addFields": stage} for stage in PAYMENT_EXPRESSIONS),
         {"$addFields": {
             "_money_ahead": {"$subtract": [
-                {"$ifNull": ["$paid_percent", 0]},
+                "$paid_percent",
                 {"$divide": [{"$multiply": ["$_done_count", 100]}, _TOTAL_STEPS]},
             ]},
         }},
@@ -300,7 +302,8 @@ async def update_installation_serials(
     body: SerialsUpdate,
     _=Depends(require(P.INSTALLATIONS_WRITE)),
 ):
-    """Save the inverter / panel serial numbers entered after installation.
+    """Save the inverter / panel serial numbers entered after installation
+    (comma-separated, one box per kind).
 
     These are recorded as equipment data only. The installation date is no
     longer derived here — it comes from the checklist's Inverter / Solar Panel
@@ -318,8 +321,6 @@ async def update_installation_serials(
                 **fields,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
-            # Drop the obsolete set-date fields from the old serial-driven logic.
-            "$unset": {"inverter_sr_set_date": "", "panel_sr_set_date": ""},
         },
     )
 
@@ -344,21 +345,17 @@ async def update_installation_payment(
     if not c:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    # Persist the full list of dated received-payment entries; the total is
-    # derived from SYSTEM_COST and is never written here.
+    # Persist the full list of dated received-payment entries. The total is
+    # SYSTEM_COST and is never written here; status / paid % are calculated.
     entries = [p.model_dump() for p in body.received_payments]
     merged = {**c, "received_payments": entries}
-    merged.pop("received_payment", None)
     await db.customers.update_one(
         {"_id": parse_object_id(customer_id)},
         {
             "$set": {
                 "received_payments": entries,
-                **payment_derived_fields(merged),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             },
-            # Drop the obsolete single-value field if it lingers from old records.
-            "$unset": {"received_payment": "", "total_payment": ""},
         },
     )
 
