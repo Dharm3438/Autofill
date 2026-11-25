@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_EXPIRE_HOURS: int = 24
 
+    # Look up the email domain's mail servers at sign-up / email change, so a
+    # typo like "gmail.con" is caught before a code is sent. Tests turn it off.
+    EMAIL_DNS_CHECK: bool = True
+
     BREVO_API_KEY: str = ""
     FROM_EMAIL: str = ""
     FROM_NAME: str = "Solar Docs Platform"
@@ -38,3 +42,9 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if len(settings.JWT_SECRET) < 32:
+    print(
+        "WARNING: JWT_SECRET is shorter than 32 characters. Anyone who guesses it "
+        "can forge logins. Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+    )

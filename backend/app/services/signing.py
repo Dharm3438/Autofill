@@ -1,28 +1,7 @@
 import secrets
-import requests
 from datetime import datetime, timedelta, timezone
 from ..core.config import settings
-
-BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
-
-
-def _send_email(to: str, subject: str, html: str):
-    resp = requests.post(
-        BREVO_API_URL,
-        headers={
-            "api-key": settings.BREVO_API_KEY,
-            "accept": "application/json",
-            "content-type": "application/json",
-        },
-        json={
-            "sender": {"name": settings.FROM_NAME, "email": settings.FROM_EMAIL},
-            "to": [{"email": to}],
-            "subject": subject,
-            "htmlContent": html,
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
+from .mailer import send_email as _send_email
 
 
 async def create_signing_token(db, customer_id: str) -> str:

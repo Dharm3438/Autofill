@@ -1,6 +1,7 @@
-"""Admin-only user management: list accounts, assign roles, enable/disable."""
+"""Admin-only user management: list accounts, assign roles, enable/disable, fix email/username."""
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
+from pymongo.errors import DuplicateKeyError
 
 from ..core.database import get_db
 from ..core.permissions import (
@@ -52,6 +53,15 @@ async def update_user_access(
         update["roles"] = [r for r in ROLE_LABELS if r in set(body.roles)]
     if body.is_active is not None:
         update["is_active"] = body.is_active
+    if body.email is not None and body.email != target["email"]:
+        if await db.users.find_one({"email": body.email, "_id": {"$ne": oid}}):
+            raise HTTPException(status_code=400, detail="This email is already used by another account")
+        # An admin can fix a typo but can't prove the user owns the new address.
+        update.update({"email": body.email, "email_verified": False})
+    if body.username is not None and body.username != target.get("username"):
+        if await db.users.find_one({"username": body.username, "_id": {"$ne": oid}}):
+            raise HTTPException(status_code=400, detail="That username is taken")
+        update["username"] = body.username
 
     if not update:
         return {"success": True, "data": _user_row(target)}
@@ -75,6 +85,9 @@ async def update_user_access(
             raise HTTPException(status_code=400, detail="At least one active admin is required")
 
     update["updated_at"] = datetime.now(timezone.utc).isoformat()
-    await db.users.update_one({"_id": oid}, {"$set": update})
+    try:
+        await db.users.update_one({"_id": oid}, {"$set": update})
+    except DuplicateKeyError:
+        raise HTTPException(status_code=400, detail="That email or username is already used by another account")
     target = await db.users.find_one({"_id": oid})
     return {"success": True, "data": _user_row(target)}

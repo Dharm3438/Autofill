@@ -5,17 +5,21 @@ const api = axios.create({
   withCredentials: true,
 })
 
+// Pages that work signed-out, where a 401 must not bounce to /login.
+const PUBLIC_PATHS = ['/login', '/forgot-password', '/sign']
+
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     const path = window.location.pathname
-    if (err.response?.status === 401 && !path.includes('/login') && !path.includes('/sign')) {
+    const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p))
+    if (err.response?.status === 401 && !isPublic) {
       window.location.href = '/login'
     }
     // 403 means the page is out of date with the user's access (e.g. an admin
     // just changed their roles). Reload from "/" so the app re-reads /auth/me
     // and routes them to the right landing page.
-    if (err.response?.status === 403 && !path.includes('/login') && !path.includes('/sign') && !path.includes('/welcome')) {
+    if (err.response?.status === 403 && !isPublic && !path.startsWith('/welcome') && !path.startsWith('/account')) {
       window.location.href = '/'
     }
     return Promise.reject(err)

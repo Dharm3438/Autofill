@@ -11,6 +11,8 @@ import CustomersPage from './pages/CustomersPage'
 import InstallationsPage from './pages/InstallationsPage'
 import UsersPage from './pages/UsersPage'
 import WelcomePage from './pages/WelcomePage'
+import ForgotPasswordPage from './pages/ForgotPasswordPage'
+import AccountPage from './pages/AccountPage'
 import { PERM, CUSTOMERS_VIEW } from './utils/access'
 
 function Page({ perm, children }) {
@@ -30,8 +32,11 @@ export default function App() {
             <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               {/* No Layout: pending users get no navbar or tabs at all. */}
               <Route path="/welcome" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
+              {/* Standalone too, so pending users can manage their account without app chrome. */}
+              <Route path="/account" element={<ProtectedRoute><AccountPage /></ProtectedRoute>} />
               <Route path="/dashboard" element={<Page perm={PERM.DASHBOARD_VIEW}><DashboardPage /></Page>} />
               <Route path="/customers" element={<Page perm={CUSTOMERS_VIEW}><CustomersPage /></Page>} />
               <Route path="/installations" element={<Page perm={PERM.INSTALLATIONS_READ}><InstallationsPage /></Page>} />

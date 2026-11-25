@@ -11,7 +11,7 @@ services:
         sync: false
       - key: JWT_EXPIRE_HOURS
         value: 24
-      - key: RESEND_API_KEY
+      - key: BREVO_API_KEY
         sync: false
       - key: FROM_EMAIL
         sync: false
