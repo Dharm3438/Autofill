@@ -529,6 +529,41 @@ class ProfileTest(AuthTestBase):
             run(users.update_user_access(str(target["_id"]), M.UserAccessUpdate(username="boss"), current_user=admin))
 
 
+# ── Diagnostics ───────────────────────────────────────────────────────────────
+
+class DiagnosticsTest(AuthTestBase):
+    def test_brevo_error_text_is_kept(self):
+        from unittest import mock
+        from app.services import mailer
+        fake = mock.Mock(ok=False, status_code=400, text='{"message":"sender you@x.com is not valid"}')
+        with mock.patch.object(mailer.settings, "BREVO_API_KEY", "k"), \
+                mock.patch.object(mailer.requests, "post", return_value=fake):
+            with self.assertRaises(mailer.EmailSendError) as e:
+                mailer.send_email("a@b.com", "s", "<p>x</p>")
+        self.assertIn("sender you@x.com is not valid", str(e.exception))
+
+    def test_rejected_auth_requests_log_their_reason(self):
+        import io
+        from contextlib import redirect_stdout
+        try:
+            from fastapi.testclient import TestClient
+        except Exception:
+            self.skipTest("fastapi.testclient needs httpx")
+        from app.main import app
+        u = self.add_user()
+        client = TestClient(app)
+        client.cookies.set("access_token", create_access_token(u))
+        out = io.StringIO()
+        with redirect_stdout(out):
+            r = client.post("/api/auth/me/email", json={"email": "new@example.com", "password": "nope"},
+                            headers={"Origin": "http://localhost:5173"})
+            client.get("/api/auth/me", cookies={"access_token": "bad"})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["detail"], "Your password is incorrect")
+        self.assertIn("auth POST /api/auth/me/email -> 400: Your password is incorrect", out.getvalue())
+        self.assertNotIn("/api/auth/me ->", out.getvalue())
+
+
 # ── Migration ─────────────────────────────────────────────────────────────────
 
 class MigrationTest(AuthTestBase):

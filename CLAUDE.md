@@ -83,6 +83,9 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Emergency reset on the server: `python scripts/reset_password.py <email-or-username> [--make-admin]`.
 - Without `BREVO_API_KEY` and with a localhost `FRONTEND_URL`, emails (with codes) are printed
   to the console instead of sent. `EMAIL_DNS_CHECK=false` disables the domain check.
+- Every rejected `/api/auth/*` request logs its reason (`auth POST … -> 400: <message>`), and a
+  failed email logs Brevo's own error text. Check email setup with
+  `python scripts/send_test_email.py you@example.com` (prints Brevo's error if it fails).
 - Auth tests: `backend/tests/test_auth.py`.
 
 ### Roles & access (RBAC)

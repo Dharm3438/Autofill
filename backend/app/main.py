@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core.config import settings
 from .core.database import connect_db, close_db
@@ -83,6 +85,21 @@ async def readable_validation_error(request: Request, exc: RequestValidationErro
                 wording = "is not a valid email address"
         parts.append(f"{field_label(field) if field.isupper() else field.replace('_', ' ').capitalize()} {wording}")
     return JSONResponse(status_code=422, content={"detail": "; ".join(dict.fromkeys(parts)) or "Invalid input"})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def log_auth_rejections(request: Request, exc: StarletteHTTPException):
+    """
+    Uvicorn's access log shows only "400 Bad Request". For sign-in / sign-up /
+    account requests also log WHY (the same sentence the user sees), so a
+    report like "I never got the code" can be traced from the server logs.
+    The messages never contain passwords or codes.
+    """
+    path = request.url.path
+    # /auth/me answers 401 on every page load while signed out: not worth logging.
+    if path.startswith("/api/auth/") and 400 <= exc.status_code < 500 and path != "/api/auth/me":
+        print(f"auth {request.method} {path} -> {exc.status_code}: {exc.detail}")
+    return await http_exception_handler(request, exc)
 
 
 app.include_router(auth.router, prefix="/api")
