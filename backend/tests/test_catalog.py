@@ -70,20 +70,14 @@ class SeedTest(unittest.TestCase):
         self.db = CatalogDB()
         database.db = self.db
 
-    def test_seeds_defaults_and_meter_makes_from_customers(self):
-        self.db.customers.docs.extend([
-            {"_id": ObjectId(), "GENERATION_METER_MAKE": "Secure"},
-            {"_id": ObjectId(), "GENERATION_METER_MAKE": " secure "},
-            {"_id": ObjectId(), "GENERATION_METER_MAKE": "HPL"},
-            {"_id": ObjectId(), "GENERATION_METER_MAKE": ""},
-            {"_id": ObjectId()},
-        ])
+    def test_seeds_defaults(self):
         run(database.seed_catalog(self.db))
         res = run(catalog.list_catalog(_=None))
         self.assertEqual(len(_items(res, "dealer")), len(DEFAULTS["dealer"]))
         polycab = next(i for i in _items(res, "inverter_make") if i["value"] == "Polycab")
         self.assertEqual(polycab["warranty"], "8 YEAR")
-        self.assertEqual([i["value"] for i in _items(res, "generation_meter_make")], ["HPL", "Secure"])
+        # Retired lists (e.g. generation meter makes) are not offered.
+        self.assertNotIn("generation_meter_make", res["data"]["items"])
         # Numeric lists sort by number, not text.
         watts = [i["value"] for i in _items(res, "panel_watt")]
         self.assertEqual(watts, sorted(watts, key=float))
@@ -138,7 +132,7 @@ class CatalogRouterTest(unittest.TestCase):
             self._add("inverter_capacity", "6")  # "6 kW" already seeded
 
     def test_same_value_allowed_in_different_lists(self):
-        self._add("generation_meter_make", "UTL")  # UTL is also an inverter make
+        self._add("panel_company", "Polycab", "25")  # Polycab is also an inverter make
 
     def test_hidden_duplicate_points_to_reactivation(self):
         office = next(d for d in self.db.catalog_items.docs if d["value"] == "Office")

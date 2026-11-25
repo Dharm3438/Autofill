@@ -30,7 +30,6 @@ CatalogType = Literal[
     "inverter_capacity",
     "panel_company",
     "panel_watt",
-    "generation_meter_make",
 ]
 
 # Order here is the tab order in the admin screen.
@@ -40,12 +39,10 @@ CATALOG_TYPES: dict[str, dict] = {
     "inverter_capacity":     {"label": "Inverter Capacities",    "format": "kw",   "warranty": False},
     "panel_company":         {"label": "Panel Companies",        "format": "text", "warranty": True},
     "panel_watt":            {"label": "Panel Watts",            "format": "watt", "warranty": False},
-    "generation_meter_make": {"label": "Generation Meter Makes", "format": "text", "warranty": False},
 }
 
 # Seeded the first time a list is empty (these were the hard-coded frontend
-# lists). Generation meter makes had no list — that one is seeded from the
-# makes already typed on customers instead (see database._seed_catalog).
+# lists).
 DEFAULTS: dict[str, list] = {
     "dealer": [
         "Devicharan Katkar", "Sadguru electronic", "Pravin Ranalkar",
@@ -71,7 +68,6 @@ DEFAULTS: dict[str, list] = {
         "500", "525", "530", "540", "545", "550", "570", "575", "580",
         "585", "590", "600", "610", "615", "620",
     ],
-    "generation_meter_make": [],
 }
 
 _NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([a-zA-Z]*)\s*$")

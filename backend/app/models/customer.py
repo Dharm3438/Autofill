@@ -7,10 +7,10 @@ calculate on it directly:
   • money      — whole rupees (int):        SYSTEM_COST, AGREEMENT_SYSTEM_COST
   • capacity   — kW (float):                SOLAR_CAPACITY, SANCTIONED_CAPACITY, INVERTER_CAPACITY
   • counts     — int:                       PANEL_WATT (W per panel), NO_OF_PANEL
-  • dates      — "YYYY-MM-DD" (validated):  CONSUMER_APP_DATE, SUBSIDY_APP_DATE, METER_TESTING_DATE
+  • dates      — "YYYY-MM-DD" (validated):  CONSUMER_APP_DATE, SUBSIDY_APP_DATE
   • ids        — normalised text:           phone = 10 digits, Aadhaar = 12 digits, consumer no without spaces
   • choices    — must be an active item of the admin-managed catalog (catalog_items):
-                 dealer, inverter make/capacity, panel company/watt, generation meter make
+                 dealer, inverter make/capacity, panel company/watt
                  (checked by services/catalog_rules.py, which needs the database)
   • serials    — comma-separated text ("A1, A2, A3")
   • blank      — stored as null, never ""
@@ -63,10 +63,6 @@ FIELD_LABELS = {
     "DISCOM_REGISTERED_OFFICE": "DISCOM Registered Office",
     "SYSTEM_COST":              "System Cost",
     "AGREEMENT_SYSTEM_COST":    "Agreement System Cost",
-    "METER_TESTING_DATE":       "Meter Testing Date",
-    "METER_RECEIPT_NO":         "Meter Receipt No",
-    "GENERATION_METER_MAKE":    "Generation Meter Make",
-    "GENERATION_METER_NO":      "Generation Meter No",
 }
 
 
@@ -193,10 +189,6 @@ class CustomerCreate(BaseModel):
     # Amount printed on the documents (Net-Metering Agreement). Documents role /
     # admin only (see customers router).
     AGREEMENT_SYSTEM_COST: Rupees = None
-    METER_TESTING_DATE: Day = None
-    METER_RECEIPT_NO: Text = None
-    GENERATION_METER_MAKE: Text = None
-    GENERATION_METER_NO: Text = None
 
     def to_store(self, only_sent: bool = False) -> dict:
         """Values as stored in MongoDB (dates as "YYYY-MM-DD").

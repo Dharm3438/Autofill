@@ -19,24 +19,6 @@ const ADD_FIELDS = {
     company: { label: 'Make', catalog: 'inverter_make' },
     spec: { label: 'Capacity', catalog: 'inverter_capacity' },
   },
-  generation_meter: {
-    company: { label: 'Make', catalog: 'generation_meter_make' },
-  },
-}
-
-// Ensure the single generic Net Meter line always exists so it can be stocked
-// even before any customer demand has been entered.
-function withNetMeterPlaceholder(categories) {
-  return categories.map((cat) => {
-    if (cat.key !== 'net_meter' || cat.items.length > 0) return cat
-    return {
-      ...cat,
-      items: [{
-        category: 'net_meter', company: '', spec: '', label: 'Net Meter',
-        required: 0, consumed: 0, base_stock: 0, in_stock: 0, shortfall: 0,
-      }],
-    }
-  })
 }
 
 export default function InventorySidebar({ refreshSignal }) {
@@ -52,7 +34,7 @@ export default function InventorySidebar({ refreshSignal }) {
   const fetchData = useCallback(async () => {
     try {
       const res = await getInventoryOverview()
-      setCategories(withNetMeterPlaceholder(res.data.data.categories))
+      setCategories(res.data.data.categories)
       setTotals(res.data.data.totals)
     } catch {
       toast.error('Failed to load inventory')

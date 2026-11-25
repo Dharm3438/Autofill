@@ -60,7 +60,6 @@ DOCUMENT_FORMATS = {
     "CONSUMER_APP_DATE":     fmt_date,
     "SUBSIDY_APP_DATE":      fmt_date,
     "INSTALLATION_DATE":     fmt_date,
-    "METER_TESTING_DATE":    fmt_date,
 }
 
 

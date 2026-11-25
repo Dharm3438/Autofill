@@ -76,10 +76,6 @@ SAMPLE_CUSTOMER = {
     "DISCOM_REGISTERED_OFFICE": "Torrent Power Ltd, Ahmedabad",
     "SYSTEM_COST":              275000,
     "AGREEMENT_SYSTEM_COST":    240000,
-    "METER_TESTING_DATE":       "2026-03-05",
-    "METER_RECEIPT_NO":         "MTR-RCPT-2026-7781",
-    "GENERATION_METER_MAKE":    "Secure Meters",
-    "GENERATION_METER_NO":      "GM-9988776655",
 }
 
 OUTPUT_DIR = Path(__file__).resolve().parent / "test_output"

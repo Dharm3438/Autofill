@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil, FileText } from 'lucide-react'
+import { X, User2, Zap, MapPin, UserPlus, Pencil, FileText } from 'lucide-react'
 import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
 import { useCatalog } from '../context/CatalogContext'
 import { useAuth } from '../context/AuthContext'
@@ -70,18 +70,6 @@ const SECTIONS = [
       { key: 'INSTALLATION_DISTRICT',    label: 'District' },
       { key: 'DISCOM_REGISTERED_OFFICE', label: 'DISCOM Registered Office', span: 2 },
       { key: 'SYSTEM_COST',              label: 'System Cost (₹)', kind: 'money', required: true },
-    ],
-  },
-  {
-    title: 'Meter Details',
-    icon: Gauge,
-    color: 'text-purple-600',
-    bg: 'bg-purple-50',
-    fields: [
-      { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', kind: 'date' },
-      { key: 'METER_RECEIPT_NO',      label: 'Meter Receipt No' },
-      { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make', type: 'select', catalog: 'generation_meter_make' },
-      { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
     ],
   },
   {
