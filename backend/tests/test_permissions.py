@@ -131,6 +131,14 @@ class FakeDB:
     def __init__(self):
         self.customers = FakeCollection()
         self.users = FakeCollection()
+        self.catalog_items = FakeCollection()
+
+
+def seeded_db() -> "FakeDB":
+    """A FakeDB whose dealer / equipment lists hold the default options."""
+    db = FakeDB()
+    run(database.seed_catalog(db))
+    return db
 
 
 def run(coro):
@@ -250,16 +258,24 @@ class RoleMatrixTest(unittest.TestCase):
 
 # ── 3. Customer router behaviour per role ─────────────────────────────────────
 
-def _body(name, no=None):
-    # Fill every string field so create's required-field validation passes.
-    data = {f: "1" for f, info in CustomerCreate.model_fields.items() if f != "CONSUMER_EMAIL"}
-    data.update(CONSUMER_NAME=name, CONSUMER_NO=no, CONSUMER_APP_DATE="2026-01-01")
-    return CustomerCreate(**data)
+# A complete, valid customer as the form would send it.
+VALID_CUSTOMER = {
+    "CONSUMER_ADDRESS": "1 Main Road", "CONSUMER_PHONE": "9876543210",
+    "CONSUMER_AADHAR": "123456789012", "DEALER_NAME": "Office",
+    "CONSUMER_APP_NO": "APP-1", "CONSUMER_APP_DATE": "2026-01-01",
+    "SOLAR_CAPACITY": 3, "INVERTER_MAKE": "UTL", "INVERTER_CAPACITY": 3,
+    "PANEL_COMPANY": "WAAREE", "PANEL_WATT": 540, "NO_OF_PANEL": 6,
+    "SYSTEM_COST": 1, "AGREEMENT_SYSTEM_COST": 99000,
+}
+
+
+def _body(name, no):
+    return CustomerCreate(**VALID_CUSTOMER, CONSUMER_NAME=name, CONSUMER_NO=no)
 
 
 class CustomerScopeTest(unittest.TestCase):
     def setUp(self):
-        self.db = FakeDB()
+        self.db = seeded_db()
         database.db = self.db
         self.alice = make_user("data_entry")
         self.bob = make_user("data_entry")
@@ -271,7 +287,7 @@ class CustomerScopeTest(unittest.TestCase):
         self.db.customers.docs.append({"_id": ObjectId(), "CONSUMER_NAME": "Legacy", "signing_token": "secret"})
 
     def _list(self, user, search=""):
-        return run(customers.list_customers(search=search, page=1, limit=100, user=user))
+        return run(customers.list_customers(search=search, page=1, limit=100, sort="newest", user=user))
 
     def test_data_entry_lists_only_own(self):
         res = self._list(self.alice)
@@ -300,7 +316,7 @@ class CustomerScopeTest(unittest.TestCase):
 
     def test_data_entry_can_update_own(self):
         res = run(customers.update_customer(self.a1["id"], CustomerUpdate(SYSTEM_COST="150000"), user=self.alice))
-        self.assertEqual(res["data"]["SYSTEM_COST"], "150000")
+        self.assertEqual(res["data"]["SYSTEM_COST"], 150000)
 
     def test_update_cannot_change_owner_or_status(self):
         body = CustomerUpdate.model_validate({"created_by": str(self.bob["_id"]), "doc_status": "complete"})
@@ -380,12 +396,12 @@ class HardeningTest(unittest.TestCase):
         UserCreate(email="a@example.com", password="long-enough", name="A")
 
     def test_search_input_is_literal_not_regex(self):
-        database.db = FakeDB()
+        database.db = seeded_db()
         admin = make_user("admin")
         run(customers.create_customer(_body("Plain Name", "N1"), user=admin))
-        res = run(customers.list_customers(search="(", page=1, limit=10, user=admin))
+        res = run(customers.list_customers(search="(", page=1, limit=10, sort="newest", user=admin))
         self.assertEqual(res["total"], 0)
-        res = run(customers.list_customers(search=".*", page=1, limit=10, user=admin))
+        res = run(customers.list_customers(search=".*", page=1, limit=10, sort="newest", user=admin))
         self.assertEqual(res["total"], 0)  # ".*" must not match everything
 
     def test_cross_site_writes_blocked(self):

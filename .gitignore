@@ -6,6 +6,8 @@ backend/**/*.pyc
 backend/.env
 backend/generated_docs/
 backend/test_output/
+# Customer data backups (scripts/customer_data.py export)
+backend/backups/
 
 # Node
 frontend/node_modules/

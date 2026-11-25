@@ -8,6 +8,32 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
 
+// Sort options — values match the server's `sort` param (customers router).
+const SORTS = {
+  newest: 'Sort: Newest added',
+  oldest: 'Sort: Oldest added',
+  name: 'Sort: Name A–Z',
+  app_date_desc: 'Sort: Application date (latest)',
+  app_date_asc: 'Sort: Application date (earliest)',
+  cost_desc: 'Sort: System cost (highest)',
+  cost_asc: 'Sort: System cost (lowest)',
+  capacity_desc: 'Sort: Solar capacity (largest)',
+}
+
+// Remembered per browser; storage can be unavailable (private window).
+const SORT_STORAGE_KEY = 'customers.sort'
+function loadSort() {
+  try {
+    const v = localStorage.getItem(SORT_STORAGE_KEY)
+    return v && SORTS[v] ? v : 'newest'
+  } catch {
+    return 'newest'
+  }
+}
+function saveSort(v) {
+  try { localStorage.setItem(SORT_STORAGE_KEY, v) } catch { /* ignore */ }
+}
+
 export default function CustomersPage() {
   const { can } = useAuth()
   const canCreate = can(PERM.CUSTOMERS_CREATE)
@@ -22,6 +48,7 @@ export default function CustomersPage() {
   // but we only hit the backend (an unindexed regex scan) once typing settles.
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [sort, setSort] = useState(loadSort)
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -50,7 +77,7 @@ export default function CustomersPage() {
     const id = ++requestIdRef.current
     setLoading(true)
     try {
-      const res = await getCustomers({ search: debouncedSearch, page, limit: LIMIT })
+      const res = await getCustomers({ search: debouncedSearch, page, limit: LIMIT, sort })
       if (id !== requestIdRef.current) return
       const count = res.data.total
       // A delete can empty the last page — step back instead of showing nothing.
@@ -66,7 +93,7 @@ export default function CustomersPage() {
     } finally {
       if (id === requestIdRef.current) setLoading(false)
     }
-  }, [debouncedSearch, page])
+  }, [debouncedSearch, page, sort])
 
   useEffect(() => {
     fetchCustomers()
@@ -143,16 +170,28 @@ export default function CustomersPage() {
           )}
         </div>
 
-        {/* Search */}
-        <div className="relative mb-5">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search by name, app no, or phone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50 transition-all shadow-sm"
-          />
+        {/* Search + sort */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-5">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by name, app no, or phone…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-800 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 dark:focus:ring-emerald-500/30 focus:border-[#1a3a2a] dark:focus:border-emerald-500/50 transition-all shadow-sm"
+            />
+          </div>
+          <select
+            value={sort}
+            onChange={(e) => { setSort(e.target.value); saveSort(e.target.value); setPage(1) }}
+            aria-label="Sort customers"
+            className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
+          >
+            {Object.entries(SORTS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Table Card */}

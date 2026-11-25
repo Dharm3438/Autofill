@@ -3,15 +3,12 @@ import { X, Check, Loader2, Calendar, User, Save, IndianRupee, Plus, Trash2, Has
 import { getInstallation, updateInstallationStep, updateInstallationGroup, updateInstallationPayment, updateInstallationSerials } from '../api/installations'
 import toast from 'react-hot-toast'
 
-// Display a stored ISO date (YYYY-MM-DD) as DD-MM-YYYY for the admin.
-const fmtDate = (iso) => {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
-  return y && m && d ? `${d}-${m}-${y}` : iso
-}
+import { fmtDate, fmtINR as fmtINRBlank } from '../utils/format'
 
-const fmtINR = (n) =>
-  `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+const fmtINR = (n) => fmtINRBlank(n || 0)
+
+// Amounts are whole rupees: "1500.6" → 1501.
+const toRupees = (v) => Math.round(parseFloat(v)) || 0
 
 // Map server received_payments → editable form rows.
 const toRows = (entries) =>
@@ -25,7 +22,7 @@ const serializeRows = (rows) =>
   JSON.stringify(
     rows
       .filter((r) => r.amount !== '' && !Number.isNaN(parseFloat(r.amount)))
-      .map((r) => ({ amount: parseFloat(r.amount) || 0, date: r.date || null }))
+      .map((r) => ({ amount: toRupees(r.amount), date: r.date || null }))
   )
 
 const TEAM = [
@@ -296,7 +293,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   async function savePayment() {
     const entries = payRows
       .filter((r) => r.amount !== '' && !Number.isNaN(parseFloat(r.amount)))
-      .map((r) => ({ amount: parseFloat(r.amount) || 0, date: r.date || null }))
+      .map((r) => ({ amount: toRupees(r.amount), date: r.date || null }))
     setSavingPay(true)
     try {
       const res = await updateInstallationPayment(customer.id, { received_payments: entries })
@@ -348,7 +345,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   const doneCount = steps.filter((s) => s.status === 'done').length
   const serialsDirty = JSON.stringify(serials) !== savedSerialsRef.current
   const payDirty = serializeRows(payRows) !== savedRowsRef.current
-  const liveReceived = payRows.reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0)
+  const liveReceived = payRows.reduce((sum, r) => sum + toRupees(r.amount), 0)
   const remaining = Math.max(pay.total_payment - liveReceived, 0)
 
   function renderStep(step) {
@@ -512,6 +509,8 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                         <input
                           type="number"
                           min="0"
+                          step="1"
+                          inputMode="numeric"
                           placeholder="Amount"
                           value={row.amount}
                           onChange={(ev) => updatePayRow(i, 'amount', ev.target.value)}

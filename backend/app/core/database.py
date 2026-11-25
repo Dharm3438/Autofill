@@ -2,7 +2,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from .config import settings
 from datetime import datetime, timezone
 
-from ..models.installation import compute_payment_status
 from ..models.catalog import (
     DEFAULTS as CATALOG_DEFAULTS,
     normalize_value as normalize_catalog_value,
@@ -34,6 +33,9 @@ async def _ensure_indexes():
                                            tokens are unique by construction.
       • signing_submissions.customer_id — used to find a customer's submission.
       • customers.created_at            — default sort for the admin list.
+      • customers.CONSUMER_NO           — unique: no two customers share a
+                                           consumer number, even when saved at
+                                           the same moment.
 
     Index creation is best-effort: a failure here (e.g. a pre-existing duplicate
     blocking the unique index) must not stop the API from booting.
@@ -52,8 +54,12 @@ async def _ensure_indexes():
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")
+    try:
+        # Separate so existing duplicates (old data) only skip this one index.
+        await db.customers.create_index("CONSUMER_NO", unique=True)
+    except Exception as e:
+        print(f"Unique CONSUMER_NO index not created (duplicate consumer numbers exist?): {e}")
     await _migrate_user_roles()
-    await _backfill_payment_status()
     await seed_catalog(db)
 
 
@@ -101,26 +107,6 @@ async def seed_catalog(database):
                 print(f"Seeded {n} {type_} catalog items")
     except Exception as e:
         print(f"Catalog seed warning: {e}")
-
-
-async def _backfill_payment_status():
-    """
-    Idempotent: give customers saved before `payment_status` existed their
-    derived value (paid / due / no_cost), so the installations payment filter
-    sees them. After the first run nothing matches and this is a no-op.
-    """
-    try:
-        fields = {"SYSTEM_COST": 1, "received_payments": 1, "received_payment": 1}
-        n = 0
-        async for c in db.customers.find({"payment_status": {"$exists": False}}, fields):
-            await db.customers.update_one(
-                {"_id": c["_id"]}, {"$set": {"payment_status": compute_payment_status(c)}}
-            )
-            n += 1
-        if n:
-            print(f"Backfilled payment_status on {n} customers")
-    except Exception as e:
-        print(f"Payment status backfill warning: {e}")
 
 
 async def _migrate_user_roles():

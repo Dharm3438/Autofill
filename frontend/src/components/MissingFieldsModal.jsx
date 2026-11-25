@@ -14,8 +14,9 @@ const INLINE_FIELDS = {
     label: 'Agreement System Cost (₹)',
     help: 'The amount printed on the Net-Metering Agreement. This is separate from the real System Cost used for payments.',
     placeholder: 'e.g. 1,20,000',
-    // Digits with optional Indian/Western comma grouping and paise.
-    validate: (v) => (/^\d[\d,]*(\.\d{1,2})?$/.test(v) ? '' : 'Enter an amount using digits (commas allowed).'),
+    // Whole rupees; commas are allowed while typing and removed before saving.
+    validate: (v) => (/^\d+$/.test(v.replace(/[,\s]/g, '')) ? '' : 'Enter a whole rupee amount using digits (commas allowed).'),
+    toValue: (v) => Number(v.replace(/[,\s]/g, '')),
   },
 }
 
@@ -49,7 +50,7 @@ export default function MissingFieldsModal({ customerName, report, onClose, onEd
       const v = (values[f.key] || '').trim()
       const err = v ? INLINE_FIELDS[f.key].validate(v) : 'Required.'
       if (err) errs[f.key] = err
-      else data[f.key] = v
+      else data[f.key] = INLINE_FIELDS[f.key].toValue(v)
     }
     setErrors(errs)
     if (Object.keys(errs).length) return

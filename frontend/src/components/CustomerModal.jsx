@@ -1,14 +1,21 @@
 import { useState, useEffect } from 'react'
 import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil, FileText } from 'lucide-react'
 import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
+import { useCatalog } from '../context/CatalogContext'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
-import { useCatalog } from '../context/CatalogContext'
 import toast from 'react-hot-toast'
 
+// Field `kind`s and how the form value is sent to the API:
+//   (none)  text, sent as typed ('' clears it)
+//   money   whole rupees            → integer
+//   kw      kilowatts               → number
+//   count   whole number            → integer
+//   date    <input type="date">     → "YYYY-MM-DD"
 // Select fields take their options from the admin-managed catalog
 // (`catalog: <list type>`); admins add new dealers / equipment from the
-// Customers page ("Dealers & Equipment").
+// Customers page ("Dealers & Equipment"). `derived` fields are calculated by
+// the server on save; the form only shows a preview and never sends them.
 const SECTIONS = [
   {
     title: 'Consumer Information',
@@ -18,22 +25,16 @@ const SECTIONS = [
     fields: [
       { key: 'CONSUMER_NAME',    label: 'Consumer Name',    required: true },
       { key: 'CONSUMER_ADDRESS', label: 'Address',          required: true, span: 2 },
-      { key: 'CONSUMER_PHONE',   label: 'Phone',            required: true },
+      { key: 'CONSUMER_PHONE',   label: 'Phone',            required: true, type: 'tel', hint: '10-digit mobile number' },
       { key: 'CONSUMER_EMAIL',   label: 'Email',            type: 'email' },
-      { key: 'CONSUMER_AADHAR',  label: 'Aadhar Number',    required: true },
+      { key: 'CONSUMER_AADHAR',  label: 'Aadhaar Number',   required: true, hint: '12 digits' },
       { key: 'CONSUMER_NO',      label: 'Consumer No',      required: true },
-      {
-        key: 'DEALER_NAME',
-        label: 'Dealer Name',
-        type: 'select',
-        required: true,
-        catalog: 'dealer',
-      },
+      { key: 'DEALER_NAME',      label: 'Dealer Name',      required: true, type: 'select', catalog: 'dealer' },
       { key: 'CONSUMER_APP_NO',     label: 'Application No',   required: true },
-      { key: 'CONSUMER_APP_DATE',   label: 'Application Date', type: 'date', required: true },
+      { key: 'CONSUMER_APP_DATE',   label: 'Application Date', kind: 'date', required: true },
       { key: 'SUBSIDY_APP_NO',      label: 'Subsidy Portal Application No' },
-      { key: 'SUBSIDY_APP_DATE',    label: 'Subsidy Portal Application Date', type: 'date' },
-      { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity (kW)' },
+      { key: 'SUBSIDY_APP_DATE',    label: 'Subsidy Portal Application Date', kind: 'date' },
+      { key: 'SANCTIONED_CAPACITY', label: 'Sanctioned Capacity (kW)', kind: 'kw' },
     ],
   },
   {
@@ -42,40 +43,21 @@ const SECTIONS = [
     color: 'text-amber-600',
     bg: 'bg-amber-50',
     fields: [
-      { key: 'SOLAR_CAPACITY', label: 'Solar Capacity (kW)', required: true },
+      { key: 'SOLAR_CAPACITY', label: 'Solar Capacity (kW)', kind: 'kw', required: true },
+      { key: 'INVERTER_MAKE', label: 'Inverter Make', type: 'select', required: true, catalog: 'inverter_make' },
       {
-        key: 'INVERTER_MAKE',
-        label: 'Inverter Make',
-        type: 'select',
-        required: true,
-        catalog: 'inverter_make',
-      },
-      {
-        key: 'INVERTER_CAPACITY',
-        label: 'Inverter Capacity',
-        type: 'select',
-        required: true,
+        key: 'INVERTER_CAPACITY', label: 'Inverter Capacity', type: 'select', kind: 'kw', required: true,
         catalog: 'inverter_capacity',
       },
-      { key: 'INVERTER_GURANTEE', label: 'Inverter Guarantee', readOnly: true },
+      { key: 'INVERTER_GUARANTEE', label: 'Inverter Guarantee', derived: true },
+      { key: 'PANEL_COMPANY', label: 'Panel Company', type: 'select', required: true, catalog: 'panel_company' },
       {
-        key: 'PANEL_COMPANY',
-        label: 'Panel Company',
-        type: 'select',
-        required: true,
-        catalog: 'panel_company',
+        key: 'PANEL_WATT', label: 'Panel Watt', type: 'select', kind: 'count', required: true,
+        catalog: 'panel_watt', unit: ' W',
       },
-      {
-        key: 'PANEL_WATT',
-        label: 'Panel Watt',
-        type: 'select',
-        required: true,
-        catalog: 'panel_watt',
-        unit: ' W',
-      },
-      { key: 'NO_OF_PANEL',          label: 'No of Panels', type: 'number', required: true },
-      { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', readOnly: true },
-      { key: 'PANEL_GURANTEE',       label: 'Panel Guarantee', readOnly: true },
+      { key: 'NO_OF_PANEL',          label: 'No of Panels', kind: 'count', required: true },
+      { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', derived: true },
+      { key: 'PANEL_GUARANTEE',      label: 'Panel Guarantee', derived: true },
     ],
   },
   {
@@ -87,7 +69,7 @@ const SECTIONS = [
       { key: 'INSTALLATION_CITY',        label: 'City' },
       { key: 'INSTALLATION_DISTRICT',    label: 'District' },
       { key: 'DISCOM_REGISTERED_OFFICE', label: 'DISCOM Registered Office', span: 2 },
-      { key: 'SYSTEM_COST',              label: 'System Cost (₹)', required: true },
+      { key: 'SYSTEM_COST',              label: 'System Cost (₹)', kind: 'money', required: true },
     ],
   },
   {
@@ -96,8 +78,8 @@ const SECTIONS = [
     color: 'text-purple-600',
     bg: 'bg-purple-50',
     fields: [
-      { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', type: 'date' },
-      { key: 'METER_RECIPT_NO',       label: 'Meter Receipt No' },
+      { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', kind: 'date' },
+      { key: 'METER_RECEIPT_NO',      label: 'Meter Receipt No' },
       { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make', type: 'select', catalog: 'generation_meter_make' },
       { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
     ],
@@ -115,19 +97,33 @@ const SECTIONS = [
       {
         key: 'AGREEMENT_SYSTEM_COST',
         label: 'Agreement System Cost (₹)',
+        kind: 'money',
         hint: 'Printed on the Net-Metering Agreement',
       },
     ],
   },
 ]
 
-const EMPTY = SECTIONS.flatMap(s => s.fields).reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
-const DOCUMENT_KEYS = SECTIONS.filter(s => s.documentsOnly).flatMap(s => s.fields.map(f => f.key))
+const ALL_FIELDS = SECTIONS.flatMap((s) => s.fields.map((f) => ({ ...f, documentsOnly: s.documentsOnly })))
+const EMPTY = ALL_FIELDS.reduce((acc, f) => ({ ...acc, [f.key]: '' }), {})
+const NUMERIC = { money: true, kw: true, count: true }
 
-function calcTotalCapacity(watt, qty) {
-  const w = parseFloat(watt)
-  const q = parseInt(qty, 10)
-  return !isNaN(w) && !isNaN(q) && q > 0 ? String(w * q) : ''
+// <input type="number"> attributes per kind.
+const NUMBER_INPUT = {
+  money: { min: 0, step: 1, inputMode: 'numeric' },
+  kw:    { min: 0, step: 'any', inputMode: 'decimal' },
+  count: { min: 1, step: 1, inputMode: 'numeric' },
+}
+
+// Form strings → the typed values the API stores. Derived fields are left out.
+function toPayload(form, includeDocuments) {
+  const payload = {}
+  for (const f of ALL_FIELDS) {
+    if (f.derived || (f.documentsOnly && !includeDocuments)) continue
+    const v = String(form[f.key] ?? '').trim()
+    payload[f.key] = NUMERIC[f.kind] ? (v === '' ? null : Number(v)) : v
+  }
+  return payload
 }
 
 export default function CustomerModal({ customer, onClose, onSaved }) {
@@ -143,32 +139,44 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
   useEffect(() => {
     if (customer) {
       const filled = { ...EMPTY }
-      Object.keys(EMPTY).forEach(k => { filled[k] = customer[k] || '' })
+      Object.keys(EMPTY).forEach(k => { filled[k] = customer[k] == null ? '' : String(customer[k]) })
       setForm(filled)
     }
   }, [customer])
 
   function set(key, val) {
-    setForm(f => {
-      const next = { ...f, [key]: val }
+    setForm(f => ({ ...f, [key]: val }))
+  }
 
-      if (key === 'INVERTER_MAKE') {
-        next.INVERTER_GURANTEE = warrantyFor('inverter_make', val)
-      }
+  // Dropdown options from the catalog. Capacity / watt items are text
+  // ("3.3 kW", "540") but the customer stores the number, so the option value
+  // is the number and the label the catalog text. Hidden items aren't offered,
+  // but the customer's current value always is.
+  function selectOptions(field) {
+    const current = form[field.key]
+    if (!NUMERIC[field.kind]) {
+      return catalogValues(field.catalog, { keep: current }).map(v => ({ value: v, label: v }))
+    }
+    const opts = catalogValues(field.catalog).map(v => ({
+      value: String(parseFloat(v)),
+      label: `${v}${field.unit || ''}`,
+    }))
+    if (current !== '' && !opts.some(o => o.value === String(parseFloat(current)))) {
+      opts.push({ value: current, label: `${current}${field.kind === 'kw' ? ' kW' : field.unit || ''}` })
+    }
+    return opts
+  }
 
-      if (key === 'PANEL_COMPANY') {
-        next.PANEL_GURANTEE = warrantyFor('panel_company', val)
-      }
-
-      if (key === 'PANEL_WATT' || key === 'NO_OF_PANEL') {
-        next.TOTAL_PANEL_CAPACITY = calcTotalCapacity(
-          key === 'PANEL_WATT' ? val : f.PANEL_WATT,
-          key === 'NO_OF_PANEL' ? val : f.NO_OF_PANEL,
-        )
-      }
-
-      return next
-    })
+  // Preview of what the server will calculate on save.
+  function derivedPreview(key) {
+    if (key === 'INVERTER_GUARANTEE') return warrantyFor('inverter_make', form.INVERTER_MAKE)
+    if (key === 'PANEL_GUARANTEE') return warrantyFor('panel_company', form.PANEL_COMPANY)
+    if (key === 'TOTAL_PANEL_CAPACITY') {
+      const w = parseInt(form.PANEL_WATT, 10)
+      const q = parseInt(form.NO_OF_PANEL, 10)
+      return w > 0 && q > 0 ? String(w * q) : ''
+    }
+    return ''
   }
 
   async function handleConsumerNoBlur() {
@@ -187,9 +195,8 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
     if (consumerNoError) return
     setLoading(true)
     // Only send document fields when they're on screen, so other roles never
-    // submit them (an empty string would otherwise mean "clear it").
-    const payload = { ...form }
-    if (!showDocuments) DOCUMENT_KEYS.forEach(k => { delete payload[k] })
+    // submit them (a blank value would otherwise mean "clear it").
+    const payload = toPayload(form, showDocuments)
     try {
       let res
       if (isEdit) {
@@ -263,7 +270,7 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                         <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1.5 uppercase tracking-wide">
                           {field.label}
                           {field.required && <span className="text-red-500 dark:text-red-400 ml-0.5 normal-case">*</span>}
-                          {field.readOnly && <span className="ml-1 font-normal normal-case text-[10px] text-gray-400 dark:text-gray-500">(auto)</span>}
+                          {field.derived && <span className="ml-1 font-normal normal-case text-[10px] text-gray-400 dark:text-gray-500">(auto)</span>}
                         </label>
 
                         {field.type === 'select' ? (
@@ -276,22 +283,23 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                             <option value="">Select…</option>
                             {/* Hidden (deactivated) options aren't offered, but the
                                 value this customer already has always is. */}
-                            {catalogValues(field.catalog, { keep: form[field.key] }).map(v => (
-                              <option key={v} value={v}>{v}{field.unit || ''}</option>
+                            {selectOptions(field).map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
                             ))}
                           </select>
                         ) : (
                           <>
                             <input
-                              type={field.type || 'text'}
+                              type={field.kind === 'date' ? 'date' : NUMERIC[field.kind] ? 'number' : field.type || 'text'}
+                              {...(NUMBER_INPUT[field.kind] || {})}
                               required={field.required}
-                              readOnly={field.readOnly}
-                              value={form[field.key]}
-                              onChange={field.readOnly ? undefined : e => set(field.key, e.target.value)}
+                              readOnly={field.derived}
+                              value={field.derived ? derivedPreview(field.key) : form[field.key]}
+                              onChange={field.derived ? undefined : e => set(field.key, e.target.value)}
                               onBlur={field.key === 'CONSUMER_NO' ? handleConsumerNoBlur : undefined}
                               placeholder={field.hint || ''}
                               className={
-                                field.readOnly
+                                field.derived
                                   ? readOnlyCls
                                   : field.key === 'CONSUMER_NO' && consumerNoError
                                     ? `${inputCls} border-red-400 dark:border-red-500 focus:border-red-400 dark:focus:border-red-500`

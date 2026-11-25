@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
 from .core.config import settings
 from .core.database import connect_db, close_db
-from .routers import auth, customers, documents, signing, uploads, installations, inventory, users, catalog
+from .routers import auth, catalog, customers, documents, signing, uploads, installations, inventory, users
+from .models.customer import field_label
 
 
 @asynccontextmanager
@@ -44,7 +46,41 @@ async def reject_cross_site_writes(request: Request, call_next):
         return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
     return await call_next(request)
 
+# Plain-language wording for the common validation failures.
+_VALIDATION_WORDING = {
+    "int_parsing": "must be a whole number",
+    "int_from_float": "must be a whole number",
+    "int_type": "must be a whole number",
+    "float_parsing": "must be a number",
+    "float_type": "must be a number",
+    "greater_than_equal": "can't be negative",
+    "greater_than": "must be more than 0",
+    "less_than_equal": "is too large",
+    "date_parsing": "must be a valid date",
+    "date_from_datetime_parsing": "must be a valid date",
+    "date_type": "must be a valid date",
+    "value_error": None,  # use the validator's own message
+}
+
+
+@app.exception_handler(RequestValidationError)
+async def readable_validation_error(request: Request, exc: RequestValidationError):
+    """Turn Pydantic's error list into one sentence the UI can show as-is,
+    e.g. "Phone must be a 10-digit mobile number; System Cost must be a whole number"."""
+    parts = []
+    for err in exc.errors():
+        field = next((str(p) for p in reversed(err.get("loc", ())) if isinstance(p, str) and p.isupper()), None)
+        if field is None:
+            field = next((str(p) for p in reversed(err.get("loc", ())) if isinstance(p, str) and p != "body"), "Input")
+        wording = _VALIDATION_WORDING.get(err.get("type"), err.get("msg"))
+        if wording is None:
+            wording = str(err.get("msg", "")).removeprefix("Value error, ")
+        parts.append(f"{field_label(field) if field.isupper() else field.replace('_', ' ').capitalize()} {wording}")
+    return JSONResponse(status_code=422, content={"detail": "; ".join(dict.fromkeys(parts)) or "Invalid input"})
+
+
 app.include_router(auth.router, prefix="/api")
+app.include_router(catalog.router, prefix="/api")
 app.include_router(customers.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(signing.router, prefix="/api")
@@ -52,7 +88,6 @@ app.include_router(uploads.router, prefix="/api")
 app.include_router(installations.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
-app.include_router(catalog.router, prefix="/api")
 
 
 @app.get("/api/health")
