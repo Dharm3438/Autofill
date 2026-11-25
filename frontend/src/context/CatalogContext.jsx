@@ -4,7 +4,7 @@ import { useAuth } from './AuthContext'
 import { PERM } from '../utils/access'
 
 // Admin-managed option lists (dealers, inverter makes/capacities, panel
-// companies/watts, generation meter makes). Loaded once per session and shared
+// companies/watts). Loaded once per session and shared
 // by the customer form, the installations dealer filter and the inventory
 // panel, so an option an admin adds shows up everywhere at once.
 

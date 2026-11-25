@@ -99,11 +99,10 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 
 ### CatalogItem (`catalog_items` — admin-managed customer-form dropdowns)
 ```
-_id, type (dealer/inverter_make/inverter_capacity/panel_company/panel_watt/
-  generation_meter_make), value, key (lower-cased value; unique per type),
+_id, type (dealer/inverter_make/inverter_capacity/panel_company/panel_watt), value, key (lower-cased value; unique per type),
 warranty (makes only, e.g. "10 YEAR"), active, created_by, created_at, updated_at
 ```
-- Seeded on startup when a list is empty (`seed_catalog` in `core/database.py`; defaults in `models/catalog.py`). Meter makes seed from existing customers.
+- Seeded on startup when a list is empty (`seed_catalog` in `core/database.py`; defaults in `models/catalog.py`).
 - Customers store a make/dealer's *text* (and capacity/watt as numbers matched through the item's text), so items are never renamed/deleted — only hidden (`active: false`). The form always keeps a customer's current value as an option.
 - The server checks every customer choice field against active items (`services/catalog_rules.py`); a customer may keep a value that was later hidden.
 - Values are normalised (`"7 kW"`, `"550"`) because inventory groups stock by exact text.
@@ -115,15 +114,14 @@ MongoDB can sort, filter and calculate on it. Never store numbers or dates as fr
 ```
 _id, CONSUMER_NAME, CONSUMER_ADDRESS, CONSUMER_EMAIL,
 CONSUMER_PHONE (10 digits), CONSUMER_AADHAR (12 digits), CONSUMER_NO (no spaces, unique index),
-DEALER_NAME, INVERTER_MAKE, PANEL_COMPANY, GENERATION_METER_MAKE — active catalog item (exact text)
+DEALER_NAME, INVERTER_MAKE, PANEL_COMPANY      — active catalog item (exact text)
 SYSTEM_COST, AGREEMENT_SYSTEM_COST             — whole rupees (int)
 SOLAR_CAPACITY, SANCTIONED_CAPACITY, INVERTER_CAPACITY — kW (float); inverter capacity must be in the catalog
 PANEL_WATT (int, must be in the catalog), NO_OF_PANEL (int)
-CONSUMER_APP_DATE, SUBSIDY_APP_DATE, METER_TESTING_DATE — "YYYY-MM-DD", validated
+CONSUMER_APP_DATE, SUBSIDY_APP_DATE            — "YYYY-MM-DD", validated
 CONSUMER_APP_NO, SUBSIDY_APP_NO (subsidy portal application; only on the Customer
   Details sheet — documents use CONSUMER_APP_NO/DATE), INSTALLATION_CITY,
-INSTALLATION_DISTRICT, DISCOM_REGISTERED_OFFICE, METER_RECEIPT_NO,
-GENERATION_METER_NO                            — text
+INSTALLATION_DISTRICT, DISCOM_REGISTERED_OFFICE — text
 INVERTER_SR_NO, PANEL_SR_NO                    — comma-separated text ("A1, A2, A3")
 Derived by the server on every save (never sent by the client):
   TOTAL_PANEL_CAPACITY (W = watt × panels), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from the make's catalog warranty),
@@ -133,6 +131,9 @@ doc_status (none/generating/complete), signing_status (none/sent/signed),
 signing_token, signing_token_expiry, r2_prefix, created_by, created_at, updated_at
 ```
 - Blank values are stored as `null`, never `""`.
+- Meter details (testing date, receipt no., generation meter make/no.) are no longer collected —
+  the Meter Testing Letter was retired. Old customers may still carry those keys; nothing reads them.
+- Inventory (`models/inventory.py`) tracks only solar panels and inverters.
 - AGREEMENT_SYSTEM_COST is documents/admin only and is the amount printed on documents;
   SYSTEM_COST is the real price for payments and must never appear in a template.
 - Payment status / paid % are **not stored**: `payment_info()` (Python) and
@@ -207,7 +208,6 @@ Location: `backend/DOCS/`
 | WCR | WCR.docx |
 | Annexure_3 | Annexure-3-Net-Metering.docx |
 | NP_Agreement | np_agreement.docx |
-| Meter_testing_letter | Meter Testing Letter.docx |
 | DCR | DCR.docx |
 
 Placeholder format in templates: `${FIELD_NAME}$`

@@ -67,9 +67,7 @@ async def _ensure_indexes():
 async def seed_catalog(database):
     """
     Idempotent: fill each dealer/equipment list the first time it's empty, with
-    the options that used to be hard-coded in the frontend. Generation meter
-    makes had no list, so that one starts from the makes already typed on
-    customers (deduped case-insensitively). Once a list has any item — even a
+    the options that used to be hard-coded in the frontend. Once a list has any item — even a
     deactivated one — it's left alone, so admin changes are never overwritten.
     """
     try:
@@ -81,10 +79,6 @@ async def seed_catalog(database):
                 (d, None) if isinstance(d, str) else d
                 for d in defaults
             ]
-            if type_ == "generation_meter_make":
-                async for c in database.customers.find({}, {"GENERATION_METER_MAKE": 1}):
-                    if c.get("GENERATION_METER_MAKE"):
-                        entries.append((c["GENERATION_METER_MAKE"], None))
             seen = set()
             n = 0
             for raw, warranty in entries:

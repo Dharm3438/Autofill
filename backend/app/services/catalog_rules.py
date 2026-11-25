@@ -24,7 +24,6 @@ CHOICE_FIELDS = {
     "INVERTER_CAPACITY": "inverter_capacity",
     "PANEL_COMPANY": "panel_company",
     "PANEL_WATT": "panel_watt",
-    "GENERATION_METER_MAKE": "generation_meter_make",
 }
 
 

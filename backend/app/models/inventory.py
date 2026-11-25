@@ -6,8 +6,10 @@ Two quantities are surfaced per equipment combination on the installation page:
                 installation step is NOT yet done.
   • in_stock  — units physically on hand right now = the base stock you
                 entered minus what's already been consumed by customers whose
-                matching step IS done. So completing a customer's panel/inverter/
-                meter step automatically deducts from available stock.
+                matching step IS done. So completing a customer's panel or
+                inverter step automatically deducts from available stock.
+
+Only solar panels and inverters are tracked.
 
 Base stock lives in the `inventory` collection, one doc per (category, company,
 spec) key. Everything else (required / consumed / in_stock / shortfall) is
@@ -22,16 +24,12 @@ from typing import Optional, Literal
 CATEGORY_STEP = {
     "panel": "panels",
     "inverter": "inverter",
-    "generation_meter": "generation_meter",
-    "net_meter": "net_meter",
 }
 CATEGORIES = tuple(CATEGORY_STEP.keys())
 
 CATEGORY_LABEL = {
     "panel": "Solar Panels",
     "inverter": "Inverters",
-    "generation_meter": "Generation Meters",
-    "net_meter": "Net Meters",
 }
 
 
@@ -51,10 +49,6 @@ def line_label(category: str, company: str, spec: str) -> str:
         if spec:
             parts.append(spec)
         return " · ".join(parts)
-    if category == "generation_meter":
-        return company or "Unspecified make"
-    if category == "net_meter":
-        return "Net Meter"
     return company or "Unspecified"
 
 
@@ -69,7 +63,7 @@ def stock_key(category: str, company: str, spec: str) -> dict:
 
 class StockUpdate(BaseModel):
     """Set the base (on-hand) stock quantity for one equipment combination."""
-    category: Literal["panel", "inverter", "generation_meter", "net_meter"]
+    category: Literal["panel", "inverter"]
     company: str = ""
     spec: str = ""
     stock: int = Field(ge=0)

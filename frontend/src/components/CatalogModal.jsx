@@ -14,7 +14,6 @@ const PLACEHOLDERS = {
   inverter_capacity: 'Capacity, e.g. 7 or 3.3',
   panel_company: 'Panel company, e.g. Vikram',
   panel_watt: 'Watt, e.g. 550',
-  generation_meter_make: 'Meter make, e.g. Secure',
 }
 
 const HELP = {

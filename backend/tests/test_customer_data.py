@@ -87,10 +87,10 @@ class ConvertTest(unittest.TestCase):
                          ("9876543210", "123456789012", "0123456"))
         self.assertIsNone(doc["CONSUMER_EMAIL"])
         self.assertEqual((doc["INVERTER_GUARANTEE"], doc["PANEL_GUARANTEE"]), (8, 30))
-        self.assertEqual(doc["METER_RECEIPT_NO"], "R-77")
         self.assertEqual(doc["received_payments"], [{"amount": 50000, "date": "2026-03-20"}])
         self.assertEqual(doc["INSTALLATION_DATE"], "2026-04-10")
-        for gone in ("INVERTER_GURANTEE", "METER_RECIPT_NO", "payment_status", "paid_percent"):
+        for gone in ("INVERTER_GURANTEE", "METER_RECIPT_NO", "METER_RECEIPT_NO", "METER_TESTING_DATE",
+                     "payment_status", "paid_percent"):
             self.assertNotIn(gone, doc)
         # Status / ownership fields carried over untouched.
         self.assertEqual((doc["doc_status"], doc["created_by"]), ("complete", "u1"))

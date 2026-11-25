@@ -41,7 +41,6 @@ TEMPLATES = {
     "Annexure_3":           "Annexure-3-Net-Metering.docx",
     "NP_Agreement":         "np_agreement.docx",
     "NP_Agreement_First_Page": "np_agreement_first_page.docx",
-    "Meter_testing_letter": "Meter Testing Letter.docx",
     # DCR is no longer auto-generated — the admin uploads the official
     # government DCR PDF (see uploads router / DCR_UPLOAD_KEY below).
 }
@@ -114,14 +113,6 @@ _PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z0-9_]+)\}\$")
 # data form, so they are intentionally excluded from the data-field check.
 IMAGE_FIELD_KEYS = {k.strip("${}$") for k in IMAGE_PLACEHOLDERS}
 
-# Documents that are generated only when all their required fields are present.
-# These fields (meter make/number, receipt no., testing date) are filled in late
-# — after the installation and meter testing are actually done — so leaving them
-# blank must NOT block the rest of the (compulsory) documents. When they're
-# missing we simply skip the optional document and generate everything else; the
-# admin fills the meter details in later and regenerates to produce it.
-OPTIONAL_DOCUMENTS = {"Meter_testing_letter"}
-
 # Friendly, admin-facing labels for each generated document.
 DOCUMENT_LABELS = {
     "Annexure_1":              "Annexure-1 — Solar Installation Declaration",
@@ -130,7 +121,6 @@ DOCUMENT_LABELS = {
     "Annexure_3":              "Annexure-3 — Net Metering",
     "NP_Agreement":            "Net-Metering Agreement",
     "NP_Agreement_First_Page": "Net-Metering Agreement (First Page)",
-    "Meter_testing_letter":    "Meter Testing Letter",
 }
 
 def document_label(doc_type: str) -> str:
@@ -216,11 +206,6 @@ def validate_customer_for_generation(customer: dict) -> dict | None:
     missing_by_doc: dict[str, list[str]] = {}
 
     for doc_type, fields in required.items():
-        # Optional documents (e.g. Meter Testing Letter) never block generation —
-        # their late-filled fields are checked separately and only cause that one
-        # document to be skipped, not the whole compulsory set.
-        if doc_type in OPTIONAL_DOCUMENTS:
-            continue
         for key in fields:
             if not _has_value(customer, key):
                 missing_field_docs.setdefault(key, []).append(doc_type)
@@ -250,36 +235,6 @@ def validate_customer_for_generation(customer: dict) -> dict | None:
     ]
 
     return {"missing_fields": missing_fields, "documents": documents}
-
-
-def skipped_optional_documents(customer: dict) -> list[dict]:
-    """
-    Optional documents that will NOT be generated because some of their required
-    fields are still blank. Used to tell the admin (without blocking generation)
-    which document — e.g. the Meter Testing Letter — was skipped and what to fill
-    in to produce it on a later regeneration.
-
-    Returns a list like:
-        [{"document": "Meter Testing Letter",
-          "missing": [{"key": "METER_TESTING_DATE", "label": "Meter Testing Date"}, ...]}]
-    Empty when every optional document has all its fields.
-    """
-    required = required_fields_by_document()
-    result: list[dict] = []
-    for doc_type in sorted(OPTIONAL_DOCUMENTS, key=document_label):
-        fields = required.get(doc_type)
-        if not fields:
-            continue
-        missing = [key for key in fields if not _has_value(customer, key)]
-        if missing:
-            result.append({
-                "document": document_label(doc_type),
-                "missing": [
-                    {"key": key, "label": field_label(key)}
-                    for key in sorted(missing, key=field_label)
-                ],
-            })
-    return result
 
 
 def _copy_run_format(src_run, dst_run):
@@ -495,21 +450,12 @@ async def generate_for_customer(customer: dict) -> str:
             await loop.run_in_executor(None, storage.delete_keys, stale)
 
         # Phase 1 — fill every template's DOCX.
-        required = required_fields_by_document()
         docx_paths: list[Path] = []
         for doc_type, template_file in TEMPLATES.items():
             template_path = TEMPLATE_DIR / template_file
             if not template_path.exists():
                 print(f"Template not found: {template_path}")
                 continue
-            # Optional documents (e.g. Meter Testing Letter) are skipped when their
-            # late-filled fields aren't ready yet, so the compulsory documents still
-            # generate. The admin regenerates once the meter details are entered.
-            if doc_type in OPTIONAL_DOCUMENTS:
-                missing = [k for k in required.get(doc_type, ()) if not _has_value(customer, k)]
-                if missing:
-                    print(f"Skipping optional document {doc_type}; missing: {', '.join(missing)}")
-                    continue
             docx_path = work_dir / f"{safe_name}_{doc_type}.docx"
             await loop.run_in_executor(None, fill_template, template_path, docx_path, replacements, images)
             docx_paths.append(docx_path)
@@ -605,7 +551,6 @@ SIGNING_DOC_LABELS = {
     "WCR_Aadhar":           "Work Completion Report & Aadhaar Declaration",
     "Annexure_3":           "Annexure-3 — Net Metering",
     "NP_Agreement":         "Net-Metering Agreement",
-    "Meter_testing_letter": "Meter Testing Letter",
 }
 
 

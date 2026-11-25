@@ -32,10 +32,8 @@ def _spec(type_: str, number) -> str:
 def _demand_lines(customer: dict, step_done: dict) -> list:
     """Yield (category, company, spec, qty, done) tuples for one customer.
 
-    Every customer in the system is an upcoming/ongoing install, so each one
-    needs a generation meter and a net meter. Panels and inverters are only
-    counted once their combination is specified (otherwise there's nothing to
-    attribute the demand to). `done` reflects that category's install step
+    Panels and inverters are only counted once their combination is specified
+    (otherwise there's nothing to attribute the demand to). `done` reflects that category's install step
     (step_done is keyed by category, not step key).
     """
     lines = []
@@ -61,24 +59,6 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
             step_done["inverter"],
         ))
 
-    # Generation meter — one per customer, grouped by make.
-    lines.append((
-        "generation_meter",
-        _clean(customer.get("GENERATION_METER_MAKE")),
-        "",
-        1,
-        step_done["generation_meter"],
-    ))
-
-    # Net meter — one per customer, single generic line (no make field).
-    lines.append((
-        "net_meter",
-        "",
-        "",
-        1,
-        step_done["net_meter"],
-    ))
-
     return lines
 
 
@@ -101,7 +81,7 @@ async def inventory_overview(_=Depends(require(P.INSTALLATIONS_READ))):
         {
             "NO_OF_PANEL": 1, "PANEL_COMPANY": 1, "PANEL_WATT": 1,
             "INVERTER_MAKE": 1, "INVERTER_CAPACITY": 1,
-            "GENERATION_METER_MAKE": 1, "installation_steps": 1,
+            "installation_steps": 1,
         },
     )
     async for c in cursor:

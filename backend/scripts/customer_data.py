@@ -57,20 +57,22 @@ FORMAT_VERSION = 1
 RENAMED = {
     "INVERTER_GURANTEE": "INVERTER_GUARANTEE",
     "PANEL_GURANTEE": "PANEL_GUARANTEE",
-    "METER_RECIPT_NO": "METER_RECEIPT_NO",
 }
 # Calculated now, never stored, or replaced by a calculation on import.
 DROPPED = {
     "payment_status", "paid_percent", "total_payment", "received_payment",
     "TOTAL_PANEL_CAPACITY", "INVERTER_GUARANTEE", "PANEL_GUARANTEE",
     "inverter_sr_set_date", "panel_sr_set_date",
+    # Meter details are no longer collected (the Meter Testing Letter was retired).
+    "METER_TESTING_DATE", "METER_RECEIPT_NO", "METER_RECIPT_NO",
+    "GENERATION_METER_MAKE", "GENERATION_METER_NO",
 }
 NUMERIC_FIELDS = {
     "SYSTEM_COST": "money", "AGREEMENT_SYSTEM_COST": "money",
     "SOLAR_CAPACITY": "number", "SANCTIONED_CAPACITY": "number", "INVERTER_CAPACITY": "number",
     "PANEL_WATT": "number", "NO_OF_PANEL": "number",
 }
-DATE_FIELDS = ("CONSUMER_APP_DATE", "SUBSIDY_APP_DATE", "METER_TESTING_DATE")
+DATE_FIELDS = ("CONSUMER_APP_DATE", "SUBSIDY_APP_DATE")
 CUSTOMER_FIELDS = set(CustomerCreate.model_fields)
 
 

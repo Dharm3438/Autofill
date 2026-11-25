@@ -124,19 +124,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
   async function handleGenerateDocs(customer) {
     setLoadingId(`gen-${customer.id}`)
     try {
-      const res = await generateDocs(customer.id)
+      await generateDocs(customer.id)
       toast.success('Document generation started')
-      // Optional documents (e.g. the Meter Testing Letter) are skipped — not
-      // blocked — when their late-filled fields aren't ready yet. Let the admin
-      // know which one wasn't produced so they can fill the details and regenerate.
-      const skipped = res?.data?.skipped_optional || []
-      if (skipped.length > 0) {
-        const names = skipped.map(s => s.document).join(', ')
-        toast(
-          `Skipped (missing details): ${names}. Fill in the details and generate again to produce it.`,
-          { icon: '⚠️', duration: 7000 },
-        )
-      }
       // Show it as generating straight away; the poller above takes it from here.
       onRowPatch(customer.id, { doc_status: 'generating' })
     } catch (err) {
@@ -350,8 +339,6 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           ['System Cost', fmtINR(c.SYSTEM_COST)],
           // Only returned by the API to document users.
           ['Agreement System Cost', fmtINR(c.AGREEMENT_SYSTEM_COST)],
-          ['Meter Receipt No', c.METER_RECEIPT_NO],
-          ['Generation Meter', c.GENERATION_METER_NO],
         ].filter(([, val]) => val).map(([label, val]) => (
           <div key={label} className="bg-white dark:bg-white/5 rounded-lg px-3 py-2 border border-[#1a3a2a]/10 dark:border-white/10">
             <p className="text-xs text-gray-400 dark:text-gray-500 mb-0.5">{label}</p>

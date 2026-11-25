@@ -60,7 +60,7 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(CustomerCreate(CONSUMER_APP_DATE="2026-03-05").to_store()["CONSUMER_APP_DATE"],
                          "2026-03-05")
         self.assertIn("CONSUMER_APP_DATE", errors(CONSUMER_APP_DATE="05-03-2026"))
-        self.assertIn("METER_TESTING_DATE", errors(METER_TESTING_DATE="2026-02-30"))
+        self.assertIn("SUBSIDY_APP_DATE", errors(SUBSIDY_APP_DATE="2026-02-30"))
 
     def test_ids_normalised(self):
         c = CustomerCreate(CONSUMER_PHONE="+91 98765-43210", CONSUMER_AADHAR="1234 5678 9012",
@@ -166,14 +166,14 @@ class FormattingTest(unittest.TestCase):
     def test_document_replacements(self):
         r = build_replacements({
             "CONSUMER_APP_DATE": "2026-03-05", "INVERTER_CAPACITY": 5.0,
-            "AGREEMENT_SYSTEM_COST": 240000, "PANEL_GUARANTEE": 30, "METER_TESTING_DATE": None,
+            "AGREEMENT_SYSTEM_COST": 240000, "PANEL_GUARANTEE": 30, "SUBSIDY_APP_DATE": None,
             "CONSUMER_NAME": "Ramesh", "installation_steps": [{"key": "x"}],
         })
         self.assertEqual(r["${CONSUMER_APP_DATE}$"], "05-03-2026")
         self.assertEqual(r["${INVERTER_CAPACITY}$"], "5")      # template adds "KW"
         self.assertEqual(r["${AGREEMENT_SYSTEM_COST}$"], "2,40,000")
         self.assertEqual(r["${PANEL_GUARANTEE}$"], "30 YEAR")
-        self.assertNotIn("${METER_TESTING_DATE}$", r)
+        self.assertNotIn("${SUBSIDY_APP_DATE}$", r)
         self.assertNotIn("${installation_steps}$", r)
 
 
