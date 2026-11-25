@@ -219,6 +219,10 @@ VITE_API_URL=http://localhost:8000
 
 ## Development Notes
 
+- Back up / wipe / restore customer data with `backend/scripts/customer_data.py`
+  (`export [--with-files]`, `delete --backup DIR`, `import --backup DIR [--dry-run]`).
+  Backups go to `backend/backups/` (gitignored — they contain customer data). Import
+  converts old free-text values to the typed format.
 - PDF conversion uses LibreOffice headless (`libreoffice --headless --convert-to pdf`) — works on Windows and Linux.
 - Generated files stored in Cloudflare R2 (S3-compatible). Never commit customer data.
 - Templates in `DOCS/` are committed to the repo (no customer data in them).
