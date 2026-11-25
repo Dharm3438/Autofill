@@ -73,8 +73,14 @@ async def readable_validation_error(request: Request, exc: RequestValidationErro
         if field is None:
             field = next((str(p) for p in reversed(err.get("loc", ())) if isinstance(p, str) and p != "body"), "Input")
         wording = _VALIDATION_WORDING.get(err.get("type"), err.get("msg"))
+        if err.get("type") == "string_too_short":
+            wording = f"must be at least {err.get('ctx', {}).get('min_length', 1)} characters"
+        elif err.get("type") == "string_too_long":
+            wording = f"must be at most {err.get('ctx', {}).get('max_length')} characters"
         if wording is None:
             wording = str(err.get("msg", "")).removeprefix("Value error, ")
+            if wording.startswith("value is not a valid email address"):
+                wording = "is not a valid email address"
         parts.append(f"{field_label(field) if field.isupper() else field.replace('_', ' ').capitalize()} {wording}")
     return JSONResponse(status_code=422, content={"detail": "; ".join(dict.fromkeys(parts)) or "Invalid input"})
 

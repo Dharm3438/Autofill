@@ -15,7 +15,7 @@ A full-stack web application to manage solar installation customers, auto-genera
 | Database | MongoDB Atlas (cloud, free tier) |
 | Auth | JWT (python-jose + bcrypt) |
 | Doc Generation | python-docx + LibreOffice headless (cross-platform PDF) |
-| OTP Delivery | Gmail SMTP via `fastapi-mail` (free, App Password auth) |
+| Email (codes, signing links) | Brevo transactional API (`services/mailer.py`) |
 | File Storage | Cloudflare R2 (10 GB free, S3-compatible) |
 | Signing Page | Existing HTML page (UI/signing-page.html) integrated into frontend routing |
 
@@ -57,8 +57,33 @@ A full-stack web application to manage solar installation customers, auto-genera
 
 ### User
 ```
-_id, email, password_hash, name, roles[] (admin/data_entry/installation/documents), is_active, created_at
+_id, email (lower-case, unique), username (lower-case, unique; a-z 0-9 . _ -, 3-30, starts
+with a letter, never contains "@"), password_hash, name,
+roles[] (admin/data_entry/installation/documents), is_active, email_verified, email_verified_at,
+token_version (int; in every JWT as "ver"), password_changed_at, created_at, updated_at
 ```
+
+### Authentication (`routers/auth.py`)
+- **No account exists until its email is proven.** `POST /auth/register` stores a pending
+  sign-up in `auth_codes` and emails a 6-digit code; `POST /auth/register/verify` creates the
+  user only if the code is right. Forgot password and email change use the same code mechanism.
+- `auth_codes`: one live code per (purpose, subject), only an HMAC of the code is stored,
+  10-minute code, 5 wrong guesses then it's discarded, 60s resend cool-down, TTL-indexed.
+- Login takes `identifier` (email or username; anything containing "@" is an email).
+- `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 10 failed
+  logins per account / 15 min, 50 per IP, 5 code emails per address / hour, 20 per IP.
+  Client IP is the *last* X-Forwarded-For entry (Render's proxy appends it).
+- Bumping `token_version` signs out every device (password reset/change, "log out everywhere").
+  `get_current_user` rejects tokens whose `ver` doesn't match.
+- bcrypt always runs off the event loop (`hash_password_async` / `verify_password_async`), and
+  unknown users are checked against a dummy hash so timing doesn't reveal accounts.
+- Forgot password answers the same whether or not the account exists.
+- Accounts from before usernames existed must pick one (blocking screen); unverified emails get
+  a banner linking to `/account`. Startup lower-cases stored emails (`_migrate_user_emails`).
+- Emergency reset on the server: `python scripts/reset_password.py <email-or-username> [--make-admin]`.
+- Without `BREVO_API_KEY` and with a localhost `FRONTEND_URL`, emails (with codes) are printed
+  to the console instead of sent. `EMAIL_DNS_CHECK=false` disables the domain check.
+- Auth tests: `backend/tests/test_auth.py`.
 
 ### Roles & access (RBAC)
 - Defined in `backend/app/core/permissions.py`: roles map to permissions; a user's permissions are the union of their roles. No roles = pending (welcome page only).
@@ -123,14 +148,22 @@ submitted_at, ip_address
 ## API Routes
 
 ### Auth
-- `POST /api/auth/login`
+- `POST /api/auth/login`             — `{identifier, password}` (email or username)
 - `POST /api/auth/logout`
-- `GET  /api/auth/me`                — includes roles + permissions
-- `POST /api/auth/register`          — public signup, creates a pending user (no roles)
+- `POST /api/auth/logout-all`        — sign out every device
+- `GET  /api/auth/me`                — includes username, email_verified, roles + permissions
+- `POST /api/auth/register`          — step 1: emails a code; creates nothing
+- `POST /api/auth/register/verify`   — step 2: `{email, code}` → creates the user (no roles)
+- `POST /api/auth/forgot-password`   — `{identifier}`; always the same answer
+- `POST /api/auth/reset-password`    — `{identifier, code, password}`
+- `POST /api/auth/change-password`   — logged in; `{current_password, new_password}`
+- `PUT  /api/auth/me/username`
+- `POST /api/auth/me/email`          — `{email, password}`: emails a code (new or current address)
+- `POST /api/auth/me/email/confirm`  — `{code}`: sets the email + marks it verified
 
 ### Users (admin only)
 - `GET /api/users`                   — list users + available roles
-- `PUT /api/users/{id}`              — set `roles[]` and/or `is_active`
+- `PUT /api/users/{id}`              — set `roles[]`, `is_active`, `email` (→ unverified), `username`
 
 ### Catalog (dealer & equipment dropdowns)
 - `GET  /api/catalog`                — all lists (incl. hidden items, flagged); any customer-form/installations user
@@ -188,7 +221,7 @@ plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR
 - JWT tokens stored in httpOnly cookies (not localStorage)
 - Generated docs folder: `generated_docs/{mongo_id}_{sanitized_consumer_name}/`
 - Signing links: `/sign/{unique_token}` — token expires in 72 hours
-- OTP: 6-digit, valid for 10 minutes
+- OTP / account codes: 6-digit, valid for 10 minutes
 - Frontend uses `#1a3a2a` as primary accent color (matching existing signing page)
 - All dates stored as ISO strings in MongoDB, formatted DD-MM-YYYY in documents
 
@@ -199,13 +232,11 @@ plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR
 Backend `.env`:
 ```
 MONGODB_URI=mongodb+srv://...
-JWT_SECRET=your_secret_key
+JWT_SECRET=your_secret_key        # 32+ random chars: python -c "import secrets; print(secrets.token_urlsafe(48))"
 JWT_EXPIRE_HOURS=24
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your@gmail.com
-SMTP_PASSWORD=your_16_char_app_password   # Gmail > Security > 2-Step > App Passwords
-FROM_EMAIL=your@gmail.com
+BREVO_API_KEY=xkeysib-...          # Brevo > SMTP & API > API keys
+FROM_EMAIL=you@yourdomain.com      # must be a verified sender in Brevo
+FROM_NAME=Solar Docs Platform
 BASE_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:5173
 ```

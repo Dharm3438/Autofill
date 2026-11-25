@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { homePath } from '../utils/access'
+import { ChooseUsername } from './AccountNotices'
 
 // `perm` (string or any-of array) is optional: without it the route only needs
 // a logged-in user. Users lacking the permission are sent to their own landing
@@ -17,6 +18,8 @@ export default function ProtectedRoute({ perm, children }) {
   }
 
   if (!user) return <Navigate to="/login" replace />
+  // Older accounts pick a username once before anything else.
+  if (!user.username) return <ChooseUsername />
   if (perm && !can(perm)) return <Navigate to={homePath(user)} replace />
   return children
 }

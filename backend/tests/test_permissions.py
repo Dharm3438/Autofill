@@ -157,7 +157,16 @@ PUBLIC_ROUTES = {
     ("POST", "/api/auth/login"),
     ("POST", "/api/auth/logout"),
     ("POST", "/api/auth/register"),
-    ("GET", "/api/auth/me"),            # needs login, returns only the caller
+    ("POST", "/api/auth/register/verify"),
+    ("POST", "/api/auth/forgot-password"),
+    ("POST", "/api/auth/reset-password"),
+    # The rest need login (get_current_user) and act only on the caller.
+    ("GET", "/api/auth/me"),
+    ("POST", "/api/auth/logout-all"),
+    ("POST", "/api/auth/change-password"),
+    ("PUT", "/api/auth/me/username"),
+    ("POST", "/api/auth/me/email"),
+    ("POST", "/api/auth/me/email/confirm"),
     ("GET", "/api/health"),
     ("GET", "/api/signing/verify/{token}"),
     ("GET", "/api/signing/document/{token}/{key}"),
@@ -390,10 +399,10 @@ class UserAdminTest(unittest.TestCase):
 class HardeningTest(unittest.TestCase):
     def test_signup_rejects_short_password(self):
         from pydantic import ValidationError
-        from app.models.user import UserCreate
+        from app.models.user import RegisterStart
         with self.assertRaises(ValidationError):
-            UserCreate(email="a@example.com", password="short", name="A")
-        UserCreate(email="a@example.com", password="long-enough", name="A")
+            RegisterStart(email="a@example.com", password="short", name="Ab", username="abc")
+        RegisterStart(email="a@example.com", password="long-enough", name="Ab", username="abc")
 
     def test_search_input_is_literal_not_regex(self):
         database.db = seeded_db()

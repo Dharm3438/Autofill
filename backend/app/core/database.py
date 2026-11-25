@@ -60,6 +60,7 @@ async def _ensure_indexes():
     except Exception as e:
         print(f"Unique CONSUMER_NO index not created (duplicate consumer numbers exist?): {e}")
     await _migrate_user_roles()
+    await _setup_auth_collections()
     await seed_catalog(db)
 
 
@@ -127,6 +128,56 @@ async def _migrate_user_roles():
             print(f"Migrated user {u['_id']} to roles={roles}")
     except Exception as e:
         print(f"User role migration warning: {e}")
+
+
+async def _migrate_user_emails(database) -> list[str]:
+    """
+    Lower-case stored emails so login is case-insensitive. An address whose
+    lower-cased form already belongs to another account is left alone and
+    reported: an admin must merge or fix those two accounts by hand.
+    Returns the list of conflicting emails.
+    """
+    conflicts = []
+    async for u in database.users.find({}, {"email": 1}):
+        email = u.get("email") or ""
+        lower = email.strip().lower()
+        if email == lower:
+            continue
+        if await database.users.find_one({"email": lower, "_id": {"$ne": u["_id"]}}):
+            conflicts.append(email)
+            continue
+        await database.users.update_one({"_id": u["_id"]}, {"$set": {"email": lower}})
+        print(f"Lower-cased email for user {u['_id']}")
+    for email in conflicts:
+        print(f"WARNING: {email!r} differs only in letter case from another account; "
+              "this user can't sign in by email until one of the two is changed (Users page).")
+    return conflicts
+
+
+async def _setup_auth_collections():
+    """Email normalisation + the unique / expiry indexes the auth flows rely on."""
+    try:
+        await _migrate_user_emails(db)
+    except Exception as e:
+        print(f"User email migration warning: {e}")
+    for args, kwargs, label in [
+        (("email",), {"unique": True}, "unique users.email"),
+        # Only real usernames are unique; older accounts may not have one yet.
+        (("username",), {"unique": True, "partialFilterExpression": {"username": {"$type": "string"}}},
+         "unique users.username"),
+        (([("purpose", 1), ("subject", 1)],), {"unique": True}, "auth_codes key"),
+        (("expires_at",), {"expireAfterSeconds": 0}, "auth_codes expiry"),
+    ]:
+        coll = db.users if label.startswith("unique users") else db.auth_codes
+        try:
+            await coll.create_index(*args, **kwargs)
+        except Exception as e:
+            print(f"Index {label} not created: {e}")
+    try:
+        await db.auth_attempts.create_index([("key", 1), ("created_at", 1)])
+        await db.auth_attempts.create_index("expires_at", expireAfterSeconds=0)
+    except Exception as e:
+        print(f"auth_attempts index warning: {e}")
 
 
 async def close_db():
