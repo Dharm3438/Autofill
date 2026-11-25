@@ -199,12 +199,13 @@ def _db():
 
 
 def export(db, out: Path, with_files: bool = False, storage=None) -> Path:
-    out.mkdir(parents=True, exist_ok=False)
+    # Read everything first, so a failed connection doesn't leave an empty folder.
     data = {
         "format_version": FORMAT_VERSION,
         "exported_at": datetime.now(timezone.utc).isoformat(),
         "collections": {name: list(db[name].find({})) for name in COLLECTIONS},
     }
+    out.mkdir(parents=True, exist_ok=False)
     (out / "data.json").write_text(json_util.dumps(data, json_options=RELAXED_JSON_OPTIONS, indent=1),
                                    encoding="utf-8")
     counts = {k: len(v) for k, v in data["collections"].items()}
