@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from .core.config import settings
 from .core.database import connect_db, close_db
-from .routers import auth, customers, documents, signing, uploads, installations, inventory, users
+from .routers import auth, customers, documents, signing, uploads, installations, inventory, users, catalog
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ app.include_router(uploads.router, prefix="/api")
 app.include_router(installations.router, prefix="/api")
 app.include_router(inventory.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
+app.include_router(catalog.router, prefix="/api")
 
 
 @app.get("/api/health")

@@ -3,15 +3,12 @@ import { X, User2, Zap, MapPin, Gauge, UserPlus, Pencil, FileText } from 'lucide
 import { createCustomer, updateCustomer, checkConsumerNo } from '../api/customers'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
-import { DEALER_OPTIONS } from '../constants/dealers'
-import {
-  INVERTER_OPTIONS,
-  PANEL_OPTIONS,
-  PANEL_WATT_OPTIONS,
-  INVERTER_CAPACITY_OPTIONS,
-} from '../constants/equipment'
+import { useCatalog } from '../context/CatalogContext'
 import toast from 'react-hot-toast'
 
+// Select fields take their options from the admin-managed catalog
+// (`catalog: <list type>`); admins add new dealers / equipment from the
+// Customers page ("Dealers & Equipment").
 const SECTIONS = [
   {
     title: 'Consumer Information',
@@ -30,7 +27,7 @@ const SECTIONS = [
         label: 'Dealer Name',
         type: 'select',
         required: true,
-        options: DEALER_OPTIONS.map(v => ({ label: v, value: v })),
+        catalog: 'dealer',
       },
       { key: 'CONSUMER_APP_NO',     label: 'Application No',   required: true },
       { key: 'CONSUMER_APP_DATE',   label: 'Application Date', type: 'date', required: true },
@@ -51,14 +48,14 @@ const SECTIONS = [
         label: 'Inverter Make',
         type: 'select',
         required: true,
-        options: INVERTER_OPTIONS.map(o => ({ label: o.label, value: o.value })),
+        catalog: 'inverter_make',
       },
       {
         key: 'INVERTER_CAPACITY',
         label: 'Inverter Capacity',
         type: 'select',
         required: true,
-        options: INVERTER_CAPACITY_OPTIONS.map(v => ({ label: v, value: v })),
+        catalog: 'inverter_capacity',
       },
       { key: 'INVERTER_GURANTEE', label: 'Inverter Guarantee', readOnly: true },
       {
@@ -66,14 +63,15 @@ const SECTIONS = [
         label: 'Panel Company',
         type: 'select',
         required: true,
-        options: PANEL_OPTIONS.map(o => ({ label: o.label, value: o.value })),
+        catalog: 'panel_company',
       },
       {
         key: 'PANEL_WATT',
         label: 'Panel Watt',
         type: 'select',
         required: true,
-        options: PANEL_WATT_OPTIONS.map(v => ({ label: `${v} W`, value: v })),
+        catalog: 'panel_watt',
+        unit: ' W',
       },
       { key: 'NO_OF_PANEL',          label: 'No of Panels', type: 'number', required: true },
       { key: 'TOTAL_PANEL_CAPACITY', label: 'Total Panel Capacity (W)', readOnly: true },
@@ -100,7 +98,7 @@ const SECTIONS = [
     fields: [
       { key: 'METER_TESTING_DATE',    label: 'Meter Testing Date', type: 'date' },
       { key: 'METER_RECIPT_NO',       label: 'Meter Receipt No' },
-      { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make' },
+      { key: 'GENERATION_METER_MAKE', label: 'Generation Meter Make', type: 'select', catalog: 'generation_meter_make' },
       { key: 'GENERATION_METER_NO',   label: 'Generation Meter No' },
     ],
   },
@@ -138,6 +136,7 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
   const [consumerNoError, setConsumerNoError] = useState('')
   const isEdit = Boolean(customer)
   const { can } = useAuth()
+  const { values: catalogValues, warrantyFor } = useCatalog()
   const showDocuments = isEdit && can(PERM.DOCUMENTS_MANAGE)
   const sections = SECTIONS.filter(s => !s.documentsOnly || showDocuments)
 
@@ -154,13 +153,11 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
       const next = { ...f, [key]: val }
 
       if (key === 'INVERTER_MAKE') {
-        const inv = INVERTER_OPTIONS.find(o => o.value === val)
-        next.INVERTER_GURANTEE = inv ? inv.warranty : ''
+        next.INVERTER_GURANTEE = warrantyFor('inverter_make', val)
       }
 
       if (key === 'PANEL_COMPANY') {
-        const panel = PANEL_OPTIONS.find(o => o.value === val)
-        next.PANEL_GURANTEE = panel ? panel.warranty : ''
+        next.PANEL_GURANTEE = warrantyFor('panel_company', val)
       }
 
       if (key === 'PANEL_WATT' || key === 'NO_OF_PANEL') {
@@ -277,8 +274,10 @@ export default function CustomerModal({ customer, onClose, onSaved }) {
                             className={selectCls}
                           >
                             <option value="">Select…</option>
-                            {field.options.map(opt => (
-                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            {/* Hidden (deactivated) options aren't offered, but the
+                                value this customer already has always is. */}
+                            {catalogValues(field.catalog, { keep: form[field.key] }).map(v => (
+                              <option key={v} value={v}>{v}{field.unit || ''}</option>
                             ))}
                           </select>
                         ) : (

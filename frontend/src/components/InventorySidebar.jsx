@@ -3,25 +3,24 @@ import {
   Boxes, Pencil, Check, Plus, X, AlertTriangle, RefreshCw, PackageX,
 } from 'lucide-react'
 import { getInventoryOverview, setInventoryStock } from '../api/inventory'
-import {
-  PANEL_OPTIONS, INVERTER_OPTIONS, PANEL_WATT_OPTIONS, INVERTER_CAPACITY_OPTIONS,
-} from '../constants/equipment'
+import { useCatalog } from '../context/CatalogContext'
 import toast from 'react-hot-toast'
 
 const rowKey = (r) => `${r.category}|${r.company}|${r.spec}`
 
-// Which selectors the "add stock" form shows for each category.
+// Which selectors the "add stock" form shows for each category; options come
+// from the admin-managed catalog list named in `catalog`.
 const ADD_FIELDS = {
   panel: {
-    company: { label: 'Company', options: PANEL_OPTIONS.map((o) => o.value) },
-    spec: { label: 'Watt', options: PANEL_WATT_OPTIONS, suffix: ' W' },
+    company: { label: 'Company', catalog: 'panel_company' },
+    spec: { label: 'Watt', catalog: 'panel_watt', suffix: ' W' },
   },
   inverter: {
-    company: { label: 'Make', options: INVERTER_OPTIONS.map((o) => o.value) },
-    spec: { label: 'Capacity', options: INVERTER_CAPACITY_OPTIONS },
+    company: { label: 'Make', catalog: 'inverter_make' },
+    spec: { label: 'Capacity', catalog: 'inverter_capacity' },
   },
   generation_meter: {
-    company: { label: 'Make', options: null }, // free text
+    company: { label: 'Make', catalog: 'generation_meter_make' },
   },
 }
 
@@ -306,29 +305,20 @@ export default function InventorySidebar({ refreshSignal }) {
 
 function AddStockForm({ catKey, form, setForm, onSubmit, onCancel }) {
   const fields = ADD_FIELDS[catKey]
+  const { values } = useCatalog()
   const selCls = 'flex-1 min-w-0 px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-white/10 bg-white dark:bg-white/5 text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25'
   return (
     <div className="p-2.5 rounded-lg border border-dashed border-gray-300 dark:border-white/15 bg-gray-50 dark:bg-white/[0.03] space-y-2">
       <div className="flex gap-2">
         {fields.company && (
-          fields.company.options ? (
-            <select
-              value={form.company}
-              onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-              className={selCls}
-            >
-              <option value="">{fields.company.label}…</option>
-              {fields.company.options.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
-          ) : (
-            <input
-              type="text"
-              placeholder={fields.company.label}
-              value={form.company}
-              onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
-              className={selCls}
-            />
-          )
+          <select
+            value={form.company}
+            onChange={(e) => setForm((f) => ({ ...f, company: e.target.value }))}
+            className={selCls}
+          >
+            <option value="">{fields.company.label}…</option>
+            {values(fields.company.catalog).map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
         )}
         {fields.spec && (
           <select
@@ -337,7 +327,7 @@ function AddStockForm({ catKey, form, setForm, onSubmit, onCancel }) {
             className={selCls}
           >
             <option value="">{fields.spec.label}…</option>
-            {fields.spec.options.map((o) => (
+            {values(fields.spec.catalog).map((o) => (
               <option key={o} value={o}>{o}{fields.spec.suffix || ''}</option>
             ))}
           </select>
