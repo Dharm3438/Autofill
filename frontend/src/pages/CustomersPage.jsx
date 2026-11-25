@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { UserPlus, Search, RefreshCw, Users } from 'lucide-react'
+import { UserPlus, Search, RefreshCw, Users, ListPlus } from 'lucide-react'
 import { getCustomers } from '../api/customers'
 import CustomerModal from '../components/CustomerModal'
 import CustomerTable from '../components/CustomerTable'
+import CatalogModal from '../components/CatalogModal'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { PERM } from '../utils/access'
@@ -10,6 +11,8 @@ import { PERM } from '../utils/access'
 export default function CustomersPage() {
   const { can } = useAuth()
   const canCreate = can(PERM.CUSTOMERS_CREATE)
+  const canManageCatalog = can(PERM.CATALOG_MANAGE)
+  const [showCatalog, setShowCatalog] = useState(false)
   // Data-entry users only ever receive their own customers from the API.
   const ownOnly = !can(PERM.CUSTOMERS_READ_ALL)
   const [customers, setCustomers] = useState([])
@@ -116,14 +119,27 @@ export default function CustomersPage() {
               </p>
             </div>
           </div>
-          {canCreate && (
-            <button
-              onClick={openAdd}
-              className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm"
-            >
-              <UserPlus className="w-4 h-4" />
-              Add Customer
-            </button>
+          {(canCreate || canManageCatalog) && (
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              {canManageCatalog && (
+                <button
+                  onClick={() => setShowCatalog(true)}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-white dark:bg-[#16201b] text-[#1a3a2a] dark:text-emerald-400 text-sm font-semibold rounded-xl border border-gray-200 dark:border-white/10 hover:border-[#1a3a2a] dark:hover:border-emerald-500/50 transition-colors shadow-sm"
+                >
+                  <ListPlus className="w-4 h-4" />
+                  Dealers &amp; Equipment
+                </button>
+              )}
+              {canCreate && (
+                <button
+                  onClick={openAdd}
+                  className="flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 bg-[#1a3a2a] text-white text-sm font-semibold rounded-xl hover:bg-[#2d5a3d] transition-colors shadow-sm"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Add Customer
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -215,6 +231,8 @@ export default function CustomersPage() {
           onSaved={onSaved}
         />
       )}
+
+      {showCatalog && <CatalogModal onClose={() => setShowCatalog(false)} />}
     </div>
   )
 }

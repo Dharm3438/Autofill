@@ -1,6 +1,13 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from .config import settings
+from datetime import datetime, timezone
+
 from ..models.installation import compute_payment_status
+from ..models.catalog import (
+    DEFAULTS as CATALOG_DEFAULTS,
+    normalize_value as normalize_catalog_value,
+    value_key,
+)
 
 client: AsyncIOMotorClient = None
 db = None
@@ -40,11 +47,60 @@ async def _ensure_indexes():
         await db.inventory.create_index(
             [("category", 1), ("company", 1), ("spec", 1)], unique=True
         )
+        # One option per (list, lower-cased value) — blocks "Polycab"/"polycab".
+        await db.catalog_items.create_index([("type", 1), ("key", 1)], unique=True)
         print("MongoDB indexes ensured")
     except Exception as e:
         print(f"Index creation warning: {e}")
     await _migrate_user_roles()
     await _backfill_payment_status()
+    await seed_catalog(db)
+
+
+async def seed_catalog(database):
+    """
+    Idempotent: fill each dealer/equipment list the first time it's empty, with
+    the options that used to be hard-coded in the frontend. Generation meter
+    makes had no list, so that one starts from the makes already typed on
+    customers (deduped case-insensitively). Once a list has any item — even a
+    deactivated one — it's left alone, so admin changes are never overwritten.
+    """
+    try:
+        now = datetime.now(timezone.utc).isoformat()
+        for type_, defaults in CATALOG_DEFAULTS.items():
+            if await database.catalog_items.count_documents({"type": type_}):
+                continue
+            entries = [
+                (d, None) if isinstance(d, str) else d
+                for d in defaults
+            ]
+            if type_ == "generation_meter_make":
+                async for c in database.customers.find({}, {"GENERATION_METER_MAKE": 1}):
+                    if c.get("GENERATION_METER_MAKE"):
+                        entries.append((c["GENERATION_METER_MAKE"], None))
+            seen = set()
+            n = 0
+            for raw, warranty in entries:
+                try:
+                    value = normalize_catalog_value(type_, raw)
+                except ValueError:
+                    continue
+                if value_key(value) in seen:
+                    continue
+                seen.add(value_key(value))
+                doc = {
+                    "type": type_, "value": value, "key": value_key(value),
+                    "active": True, "created_by": None,
+                    "created_at": now, "updated_at": now,
+                }
+                if warranty:
+                    doc["warranty"] = warranty
+                await database.catalog_items.insert_one(doc)
+                n += 1
+            if n:
+                print(f"Seeded {n} {type_} catalog items")
+    except Exception as e:
+        print(f"Catalog seed warning: {e}")
 
 
 async def _backfill_payment_status():

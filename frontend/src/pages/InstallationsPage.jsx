@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
-import { DEALER_OPTIONS } from '../constants/dealers'
+import { useCatalog } from '../context/CatalogContext'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
 import InventorySidebar from '../components/InventorySidebar'
@@ -154,6 +154,7 @@ export default function InstallationsPage() {
   const [doneStep, setDoneStep] = useState('')
   const [paymentFilter, setPaymentFilter] = useState('')
   const [dealerFilter, setDealerFilter] = useState('')
+  const { values: catalogValues } = useCatalog()
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
   const [manageCustomer, setManageCustomer] = useState(null)
@@ -304,7 +305,8 @@ export default function InstallationsPage() {
             className="px-3 py-2.5 bg-white dark:bg-[#16201b] border border-gray-200 dark:border-white/10 rounded-xl text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/25 shadow-sm"
           >
             <option value="">All dealers</option>
-            {DEALER_OPTIONS.map((d) => (
+            {/* Hidden dealers too: older customers still carry them. */}
+            {catalogValues('dealer', { includeInactive: true }).map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>
