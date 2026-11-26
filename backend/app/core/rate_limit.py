@@ -10,18 +10,27 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request
 
+from .config import settings
+
 
 def client_ip(request: Request) -> str:
     """
-    The caller's IP. Behind Render's proxy the TCP peer is the proxy itself, so
-    use the LAST X-Forwarded-For entry: that one is appended by the proxy and
-    can't be forged (a client can only prepend fake entries to the left).
+    The caller's IP. Render's proxy appends the address it saw to
+    X-Forwarded-For, so the LAST entry can't be forged. When the frontend's
+    Cloudflare Pages Function (frontend/functions/api) sits in front, that last entry is the frontend
+    proxy's own address and the real client is the one before it,
+    which the function sets from Cloudflare's CF-Connecting-IP. TRUSTED_PROXY_HOPS says how many such entries to step back.
+
+    Someone calling Render directly (skipping the frontend) could forge the entry we
+    step back to and dodge the per-IP limits; the per-account / per-address
+    limits still apply to them.
     """
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
-        last = forwarded.split(",")[-1].strip()
-        if last:
-            return last
+        entries = [e.strip() for e in forwarded.split(",") if e.strip()]
+        if entries:
+            index = max(0, len(entries) - 1 - max(0, settings.TRUSTED_PROXY_HOPS))
+            return entries[index]
     return request.client.host if request.client else "unknown"
 
 

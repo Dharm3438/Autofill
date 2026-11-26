@@ -579,5 +579,36 @@ class MigrationTest(AuthTestBase):
         self.assertEqual(conflicts, ["DUP@example.com"])
 
 
+class ClientIpTest(unittest.TestCase):
+    """Rate limits key on the caller's IP, seen through the frontend's /api proxy (Pages Function)."""
+
+    def ip(self, forwarded, hops):
+        from app.core import rate_limit
+        headers = [(b"x-forwarded-for", forwarded.encode())] if forwarded is not None else []
+        req = Request({"type": "http", "headers": headers, "client": ("10.0.0.1", 1234)})
+        old = settings.TRUSTED_PROXY_HOPS
+        settings.TRUSTED_PROXY_HOPS = hops
+        try:
+            return rate_limit.client_ip(req)
+        finally:
+            settings.TRUSTED_PROXY_HOPS = old
+
+    def test_through_frontend_proxy_uses_the_client(self):
+        # The frontend proxy sends "client"; the backend's proxy appends the frontend proxy's address.
+        self.assertEqual(self.ip("203.0.113.7, 76.76.21.21", 1), "203.0.113.7")
+
+    def test_forged_left_entries_are_ignored(self):
+        self.assertEqual(self.ip("1.2.3.4, 203.0.113.7, 76.76.21.21", 1), "203.0.113.7")
+
+    def test_direct_to_render(self):
+        self.assertEqual(self.ip("1.2.3.4, 203.0.113.7", 0), "203.0.113.7")
+
+    def test_short_header_falls_back_to_first_entry(self):
+        self.assertEqual(self.ip("203.0.113.7", 1), "203.0.113.7")
+
+    def test_no_header_uses_the_tcp_peer(self):
+        self.assertEqual(self.ip(None, 1), "10.0.0.1")
+
+
 if __name__ == "__main__":
     unittest.main()

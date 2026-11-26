@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .core import rate_limit
 from .core.config import settings
 from .core.database import connect_db, close_db
 from .routers import auth, catalog, customers, documents, signing, uploads, installations, inventory, users
@@ -35,8 +36,9 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 @app.middleware("http")
 async def reject_cross_site_writes(request: Request, call_next):
     """
-    CSRF guard. The auth cookie is SameSite=None (frontend and API live on
-    different sites), so a browser attaches it even to requests started by some
+    CSRF guard. The auth cookie is SameSite=None (kept so login also works
+    when the API is reached on its own domain rather than through the frontend's
+    /api proxy), so a browser attaches it even to requests started by some
     other website. CORS stops that site from *reading* responses, but "simple"
     requests (form/multipart POSTs, bodiless POSTs like generate / send-link)
     are still *executed*. Browsers always send an Origin header on cross-site
@@ -98,7 +100,13 @@ async def log_auth_rejections(request: Request, exc: StarletteHTTPException):
     path = request.url.path
     # /auth/me answers 401 on every page load while signed out: not worth logging.
     if path.startswith("/api/auth/") and 400 <= exc.status_code < 500 and path != "/api/auth/me":
-        print(f"auth {request.method} {path} -> {exc.status_code}: {exc.detail}")
+        # ip / xff show which X-Forwarded-For entry is the real visitor, to
+        # check TRUSTED_PROXY_HOPS is right behind the frontend's /api rewrite.
+        xff = request.headers.get("x-forwarded-for", "")
+        print(
+            f"auth {request.method} {path} -> {exc.status_code}: {exc.detail} "
+            f"(ip={rate_limit.client_ip(request)} xff={xff})"
+        )
     return await http_exception_handler(request, exc)
 
 

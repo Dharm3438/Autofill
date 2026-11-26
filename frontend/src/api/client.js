@@ -1,7 +1,13 @@
 import axios from 'axios'
 
+// Always same-origin. The browser never talks to the backend's own domain:
+// in production the Cloudflare Pages Function functions/api/[[path]].js
+// forwards it to Render, in dev vite.config.js does.
+// That keeps the login cookie first-party — Safari and private/incognito
+// windows throw away cookies set by another site (a third-party cookie), which
+// used to bounce people straight back to the login screen after signing in.
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
+  baseURL: '/api',
   withCredentials: true,
 })
 
