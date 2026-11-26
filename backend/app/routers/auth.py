@@ -240,6 +240,10 @@ async def login(body: UserLogin, request: Request, response: Response):
     if not await verify_password_async(body.password, user.get("password_hash") if user else None):
         await rate_limit.record(db, acct_key, LOGIN_FAILS_PER_ACCOUNT[1])
         await rate_limit.record(db, ip_key, LOGIN_FAILS_PER_IP[1])
+        # Server log only (the response stays the same, so it can't be used to
+        # find out which accounts exist): tells "no such account" from "wrong password".
+        kind = "email" if "@" in body.identifier else "username"
+        print(f"auth login failed: {'wrong password' if user else f'no account with that {kind}'}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email/username or password")
     if user.get("is_active") is False:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been disabled")

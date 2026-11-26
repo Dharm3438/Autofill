@@ -18,13 +18,14 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # How many proxies sit in front of the backend's own Render proxy. The
-    # frontend's Cloudflare Pages Function forwards /api to us so the auth
-    # cookie is first-party, which adds one hop: it sends X-Forwarded-For as
-    # the visitor's IP and Render appends the function's. 0 = clients hit the
-    # backend directly.
-    # Failed /api/auth requests log ip= and xff= so this can be checked.
-    TRUSTED_PROXY_HOPS: int = 1
+    # How many X-Forwarded-For entries, counted from the right, were added after
+    # the visitor's. The frontend's Cloudflare Pages Function sends XFF as just
+    # the visitor's IP (from CF-Connecting-IP), then Render's side appends three:
+    # the function's address (as Render's Cloudflare saw it), Render's
+    # Cloudflare edge, and Render's internal load balancer. Seen in production:
+    #   "223.233.85.74,2a06:98c0:3600::103, 172.69.86.98, 10.198.213.136"
+    # Failed /api/auth requests log ip= and xff= so this can be re-checked.
+    TRUSTED_PROXY_HOPS: int = 3
 
     @property
     def allowed_origins(self) -> list[str]:
