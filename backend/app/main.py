@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from .core import rate_limit
 from .core.config import settings
 from .core.database import connect_db, close_db
 from .routers import auth, catalog, customers, documents, signing, uploads, installations, inventory, users
@@ -99,7 +100,13 @@ async def log_auth_rejections(request: Request, exc: StarletteHTTPException):
     path = request.url.path
     # /auth/me answers 401 on every page load while signed out: not worth logging.
     if path.startswith("/api/auth/") and 400 <= exc.status_code < 500 and path != "/api/auth/me":
-        print(f"auth {request.method} {path} -> {exc.status_code}: {exc.detail}")
+        # ip / xff show which X-Forwarded-For entry is the real visitor, to
+        # check TRUSTED_PROXY_HOPS is right behind the frontend's /api rewrite.
+        xff = request.headers.get("x-forwarded-for", "")
+        print(
+            f"auth {request.method} {path} -> {exc.status_code}: {exc.detail} "
+            f"(ip={rate_limit.client_ip(request)} xff={xff})"
+        )
     return await http_exception_handler(request, exc)
 
 

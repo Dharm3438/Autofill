@@ -72,7 +72,7 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Login takes `identifier` (email or username; anything containing "@" is an email).
 - `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 10 failed
   logins per account / 15 min, 50 per IP, 5 code emails per address / hour, 20 per IP.
-  Client IP: Render appends the last X-Forwarded-For entry; with the Vercel `/api` proxy in
+  Client IP: Render appends the last X-Forwarded-For entry; with the frontend's `/api` rewrite in
   front, the client is `TRUSTED_PROXY_HOPS` (default 1) entries before it (0 = no proxy).
 - Bumping `token_version` signs out every device (password reset/change, "log out everywhere").
   `get_current_user` rejects tokens whose `ver` doesn't match.
@@ -95,11 +95,13 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
 - Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.
-- **The browser only talks to the frontend's own domain.** `frontend/vercel.json` proxies
-  `/api/*` to Render (`vite.config.js` does the same in dev), and `api/client.js` always uses
+- **The browser only talks to the frontend's own domain.** The frontend Render static site
+  has a Rewrite rule `/api/*` → `https://autofill-blgf.onrender.com/api/*` (set in the Render
+  dashboard: Redirects/Rewrites, above the `/*` → `/index.html` rule; `vite.config.js` does the
+  same in dev), and `api/client.js` always uses
   `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
   cookies, which caused a login loop. Never point the app at the Render domain again; if the
-  backend URL changes, update `vercel.json`. (The public signing page `frontend/public/signing.html`
+  backend URL changes, update that Rewrite rule. (The public signing page `frontend/public/signing.html`
   uses tokens, not cookies, and still calls Render directly.)
 - CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
 - User search text is `re.escape`d before Mongo `$regex`.
@@ -265,4 +267,4 @@ Frontend: no env vars needed (`VITE_API_URL` is no longer read — `/api` is pro
 - Generated files stored in Cloudflare R2 (S3-compatible). Never commit customer data.
 - Templates in `DOCS/` are committed to the repo (no customer data in them).
 - MongoDB Atlas free tier (M0) supports up to 512 MB — sufficient for metadata. Files stored in R2, not MongoDB.
-- Deployment: Frontend → Vercel, Backend → Render or Oracle Cloud (TBD), DB → MongoDB Atlas.
+- Deployment: Frontend → Render static site, Backend → Render web service, DB → MongoDB Atlas.

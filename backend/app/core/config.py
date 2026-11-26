@@ -18,9 +18,11 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
-    # How many proxies sit in front of Render's own proxy. The frontend (Vercel)
-    # proxies /api to us so the auth cookie is first-party, which adds one hop:
-    # X-Forwarded-For arrives as "client, vercel". 0 = clients hit Render directly.
+    # How many proxies sit in front of the backend's own Render proxy. The
+    # frontend static site rewrites /api to us so the auth cookie is
+    # first-party, which adds one hop: X-Forwarded-For arrives as
+    # "client, frontend-proxy". 0 = clients hit the backend directly.
+    # Failed /api/auth requests log ip= and xff= so this can be checked.
     TRUSTED_PROXY_HOPS: int = 1
 
     @property

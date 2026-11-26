@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 // Always same-origin. The browser never talks to the backend's own domain:
-// in production vercel.json proxies /api to Render, in dev vite.config.js does.
+// in production the Render static site's Rewrite rule (/api/* → backend)
+// proxies it, in dev vite.config.js does.
 // That keeps the login cookie first-party — Safari and private/incognito
 // windows throw away cookies set by another site (a third-party cookie), which
 // used to bounce people straight back to the login screen after signing in.

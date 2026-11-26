@@ -580,7 +580,7 @@ class MigrationTest(AuthTestBase):
 
 
 class ClientIpTest(unittest.TestCase):
-    """Rate limits key on the caller's IP, seen through Vercel's and Render's proxies."""
+    """Rate limits key on the caller's IP, seen through the frontend's /api rewrite."""
 
     def ip(self, forwarded, hops):
         from app.core import rate_limit
@@ -593,8 +593,8 @@ class ClientIpTest(unittest.TestCase):
         finally:
             settings.TRUSTED_PROXY_HOPS = old
 
-    def test_through_vercel_uses_the_client_not_vercel(self):
-        # Vercel sets "client"; Render appends Vercel's address.
+    def test_through_frontend_proxy_uses_the_client(self):
+        # The frontend proxy sends "client"; the backend's proxy appends the frontend proxy's address.
         self.assertEqual(self.ip("203.0.113.7, 76.76.21.21", 1), "203.0.113.7")
 
     def test_forged_left_entries_are_ignored(self):

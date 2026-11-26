@@ -16,12 +16,11 @@ from .config import settings
 def client_ip(request: Request) -> str:
     """
     The caller's IP. Render's proxy appends the address it saw to
-    X-Forwarded-For, so the LAST entry can't be forged. When the frontend's
-    proxy (Vercel, see frontend/vercel.json) sits in front, that last entry is
-    Vercel's own address and the real client is the one before it, which Vercel
-    sets itself. TRUSTED_PROXY_HOPS says how many such entries to step back.
+    X-Forwarded-For, so the LAST entry can't be forged. When the frontend
+    static site's /api rewrite sits in front, that last entry is the frontend
+    proxy's own address and the real client is the one before it. TRUSTED_PROXY_HOPS says how many such entries to step back.
 
-    Someone calling Render directly (skipping Vercel) could forge the entry we
+    Someone calling Render directly (skipping the frontend) could forge the entry we
     step back to and dodge the per-IP limits; the per-account / per-address
     limits still apply to them.
     """
