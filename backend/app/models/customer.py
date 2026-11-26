@@ -71,11 +71,11 @@ def field_label(key: str) -> str:
 
 
 # Fields the customer form requires (they all appear on the printable Customer
-# Details sheet). Email is deliberately optional. Enforced on create, and on
+# Details sheet). Email and application no/date are deliberately optional. Enforced on create, and on
 # update so a required field can't be blanked out.
 REQUIRED_CUSTOMER_FIELDS = (
     "CONSUMER_NAME", "CONSUMER_ADDRESS", "CONSUMER_PHONE", "CONSUMER_AADHAR",
-    "CONSUMER_NO", "DEALER_NAME", "CONSUMER_APP_NO", "CONSUMER_APP_DATE",
+    "CONSUMER_NO", "DEALER_NAME",
     "SOLAR_CAPACITY", "INVERTER_MAKE", "INVERTER_CAPACITY", "PANEL_COMPANY",
     "PANEL_WATT", "NO_OF_PANEL", "SYSTEM_COST",
 )
