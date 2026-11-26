@@ -54,7 +54,6 @@ FIELD_LABELS = {
     "PANEL_WATT":               "Panel Watt",
     "NO_OF_PANEL":              "No of Panels",
     "TOTAL_PANEL_CAPACITY":     "Total Panel Capacity",
-    "PANEL_SR_NO":              "Panel Serial No",
     "PANEL_GUARANTEE":          "Panel Guarantee",
     "CELL_MANUFACTURER":        "Cell Manufacturer",
     "INSTALLATION_DATE":        "Installation Date",
@@ -180,7 +179,6 @@ class CustomerCreate(BaseModel):
     PANEL_COMPANY: Text = None
     PANEL_WATT: Count = None
     NO_OF_PANEL: Count = None
-    PANEL_SR_NO: Serials = None
     INSTALLATION_CITY: Text = None
     INSTALLATION_DISTRICT: Text = None
     DISCOM_REGISTERED_OFFICE: Text = None

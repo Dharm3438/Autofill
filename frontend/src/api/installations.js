@@ -18,7 +18,7 @@ export const updateInstallationStep = (customerId, stepKey, data) =>
 export const updateInstallationPayment = (customerId, data) =>
   api.put(`/installations/${customerId}/payment`, data)
 
-// data: { INVERTER_SR_NO, PANEL_SR_NO } — equipment data only.
+// data: { INVERTER_SR_NO } — equipment data only.
 // Installation date is derived from the Inverter / Solar Panel Installation
 // checklist steps, not from serials.
 export const updateInstallationSerials = (customerId, data) =>

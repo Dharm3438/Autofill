@@ -288,7 +288,6 @@ async def get_installation(customer_id: str, _=Depends(require(P.INSTALLATIONS_R
             "customer_id": customer_id,
             "CONSUMER_NAME": c.get("CONSUMER_NAME"),
             "INVERTER_SR_NO": c.get("INVERTER_SR_NO") or "",
-            "PANEL_SR_NO": c.get("PANEL_SR_NO") or "",
             "INSTALLATION_DATE": c.get("INSTALLATION_DATE") or "",
             **_summarize(steps),
             **payment_info(c),
@@ -302,12 +301,12 @@ async def update_installation_serials(
     body: SerialsUpdate,
     _=Depends(require(P.INSTALLATIONS_WRITE)),
 ):
-    """Save the inverter / panel serial numbers entered after installation
-    (comma-separated, one box per kind).
+    """Save the inverter serial number(s) entered after installation
+    (comma-separated). It can also be set on the customer form.
 
-    These are recorded as equipment data only. The installation date is no
-    longer derived here — it comes from the checklist's Inverter / Solar Panel
-    Installation completion dates (see update_installation_step)."""
+    Recorded as equipment data only. The installation date is not derived
+    here — it comes from the checklist's Inverter / Solar Panel Installation
+    completion dates (see update_installation_step)."""
     db = get_db()
     c = await db.customers.find_one({"_id": parse_object_id(customer_id)})
     if not c:
@@ -329,7 +328,6 @@ async def update_installation_serials(
         "data": {
             "customer_id": customer_id,
             "INVERTER_SR_NO": fields["INVERTER_SR_NO"],
-            "PANEL_SR_NO": fields["PANEL_SR_NO"],
         },
     }
 

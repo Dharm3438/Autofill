@@ -83,7 +83,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-1 group-hover:text-[#1a3a2a] dark:group-hover:text-emerald-400 transition-colors">Generate Documents</h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Auto-generate Annexure, WCR, DCR, and all required regulatory documents.</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Auto-generate Annexure, WCR, Net-Metering Agreement, and all required regulatory documents.</p>
             </div>
           </button>
         </div>
