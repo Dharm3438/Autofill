@@ -80,8 +80,8 @@ def user_to_out(u: dict) -> dict:
 
 
 def _set_auth_cookie(response: Response, user: dict) -> None:
-    # The frontend proxies /api through its own domain (a Rewrite rule on the
-    # Render static site),
+    # The frontend proxies /api through its own domain (Cloudflare Pages
+    # Function frontend/functions/api/[[path]].js),
     # so browsers see this as a first-party cookie. Safari and private windows
     # drop cookies from a *different* site, so never point the frontend at the
     # API's own domain. SameSite=None keeps it working if someone does.

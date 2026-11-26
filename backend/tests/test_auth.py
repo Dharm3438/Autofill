@@ -580,7 +580,7 @@ class MigrationTest(AuthTestBase):
 
 
 class ClientIpTest(unittest.TestCase):
-    """Rate limits key on the caller's IP, seen through the frontend's /api rewrite."""
+    """Rate limits key on the caller's IP, seen through the frontend's /api proxy (Pages Function)."""
 
     def ip(self, forwarded, hops):
         from app.core import rate_limit
