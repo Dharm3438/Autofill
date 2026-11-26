@@ -70,6 +70,12 @@ export function PasswordInput({ value, onChange, autoComplete = 'current-passwor
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
+        // With "show password" on this is a plain text box, and phone keyboards
+        // would capitalise the first letter, autocorrect, or add a space after a
+        // suggestion — sending a different password than the one typed.
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         placeholder={placeholder}
         className={`${inputClass} pr-11`}
         {...rest}

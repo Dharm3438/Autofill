@@ -72,8 +72,9 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Login takes `identifier` (email or username; anything containing "@" is an email).
 - `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 10 failed
   logins per account / 15 min, 50 per IP, 5 code emails per address / hour, 20 per IP.
-  Client IP: Render appends the last X-Forwarded-For entry; with the frontend's `/api` proxy (Pages Function) in
-  front, the client is `TRUSTED_PROXY_HOPS` (default 1) entries before it (0 = no proxy).
+  Client IP: the Pages Function sets X-Forwarded-For to the visitor's IP and Render's side appends
+  3 entries, so the client is `TRUSTED_PROXY_HOPS` (default 3) entries from the right. Failed logins
+  log `ip=`/`xff=` plus `auth login failed: wrong password` / `no account with that email|username`.
 - Bumping `token_version` signs out every device (password reset/change, "log out everywhere").
   `get_current_user` rejects tokens whose `ver` doesn't match.
 - bcrypt always runs off the event loop (`hash_password_async` / `verify_password_async`), and

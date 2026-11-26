@@ -15,11 +15,11 @@ from .config import settings
 
 def client_ip(request: Request) -> str:
     """
-    The caller's IP. Render's proxy appends the address it saw to
-    X-Forwarded-For, so the LAST entry can't be forged. When the frontend's
-    Cloudflare Pages Function (frontend/functions/api) sits in front, that last entry is the frontend
-    proxy's own address and the real client is the one before it,
-    which the function sets from Cloudflare's CF-Connecting-IP. TRUSTED_PROXY_HOPS says how many such entries to step back.
+    The caller's IP. The frontend's Cloudflare Pages Function
+    (frontend/functions/api) sets X-Forwarded-For to just the visitor's IP
+    (from CF-Connecting-IP, which clients can't forge), and Render's side then
+    appends three entries of its own. TRUSTED_PROXY_HOPS (3) says how many to
+    step back from the right; a shorter header falls back to its first entry.
 
     Someone calling Render directly (skipping the frontend) could forge the entry we
     step back to and dodge the per-IP limits; the per-account / per-address

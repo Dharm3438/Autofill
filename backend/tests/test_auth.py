@@ -593,6 +593,12 @@ class ClientIpTest(unittest.TestCase):
         finally:
             settings.TRUSTED_PROXY_HOPS = old
 
+    def test_production_header_through_pages_function(self):
+        # Real header from the Render logs: Pages Function, then Render's three hops.
+        xff = "223.233.85.74,2a06:98c0:3600::103, 172.69.86.98, 10.198.213.136"
+        self.assertEqual(self.ip(xff, 3), "223.233.85.74")
+        self.assertEqual(self.ip(xff, settings.TRUSTED_PROXY_HOPS), "223.233.85.74")
+
     def test_through_frontend_proxy_uses_the_client(self):
         # The frontend proxy sends "client"; the backend's proxy appends the frontend proxy's address.
         self.assertEqual(self.ip("203.0.113.7, 76.76.21.21", 1), "203.0.113.7")
