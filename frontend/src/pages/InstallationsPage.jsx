@@ -444,7 +444,6 @@ export default function InstallationsPage() {
           ) : (
             <ul className={`divide-y divide-gray-100 dark:divide-white/10 transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
               {rows.map((c) => {
-                const pct = c.total ? Math.round((c.done_count / c.total) * 100) : 0
                 return (
                   <li key={c.id} className="px-4 sm:px-6 py-4">
                     <div className="flex items-center gap-4">
@@ -491,34 +490,19 @@ export default function InstallationsPage() {
                         </div>
                       </div>
 
-                      {/* Progress */}
-                      <div className="hidden sm:flex items-center gap-3 w-44 flex-shrink-0">
-                        <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-9 text-right">
+                      {/* Steps done, with Manage underneath */}
+                      <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                        <span className="text-lg font-semibold text-gray-700 dark:text-gray-200 tabular-nums">
                           {c.done_count}/{c.total}
                         </span>
+                        <button
+                          onClick={() => setManageCustomer(c)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] transition-colors"
+                        >
+                          <Settings2 className="w-4 h-4" />
+                          Manage
+                        </button>
                       </div>
-
-                      <button
-                        onClick={() => setManageCustomer(c)}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-[#1a3a2a] text-white hover:bg-[#2d5a3d] transition-colors flex-shrink-0"
-                      >
-                        <Settings2 className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Manage</span>
-                      </button>
-                    </div>
-
-                    {/* Mobile progress */}
-                    <div className="sm:hidden flex items-center gap-3 mt-3">
-                      <div className="flex-1 h-2 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
-                      </div>
-                      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{c.done_count}/{c.total}</span>
                     </div>
 
                   </li>

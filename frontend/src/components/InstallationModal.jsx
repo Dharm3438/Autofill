@@ -25,11 +25,12 @@ const serializeRows = (rows) =>
       .map((r) => ({ amount: toRupees(r.amount), date: r.date || null }))
   )
 
+// Shown alphabetically in the "Done by" list so names are easy to find.
 const TEAM = [
   'Manoj Agone', 'Swapnil Jane', 'Vaibhav Gaikwad', 'Firoz Bhai', 'Yogesh Agone',
   'Pranav', 'Sidhesh', 'Kalpesh', 'Hussein', 'Aavesh', 'Anil Bachav',
   'Sonu Jadhav', 'Satish Khairnar', 'Kiran Chavan',
-]
+].sort((a, b) => a.localeCompare(b))
 
 const today = () => new Date().toISOString().slice(0, 10)
 
