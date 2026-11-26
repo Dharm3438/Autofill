@@ -35,17 +35,17 @@ _RIGHT = (393.8, 561.0)   # right half
 
 # Row top/bottom per details-table row.
 _ROWS = {
-    "name":    (132.2, 154.7),
-    "address": (154.7, 183.2),
-    "mobile":  (183.2, 206.4),
-    "email":   (206.4, 228.9),
-    "aadhar":  (228.9, 251.4),
-    "consumer_no": (251.4, 274.7),
-    "load":    (274.7, 297.9),
-    "inverter": (297.9, 320.4),
-    "panel":   (320.4, 342.9),
-    "subsidy_app_no": (342.9, 366.2),   # row 10: Subsidy Portal Application No / Date
-    "app_no":  (366.2, 388.7),          # row 11: Application No / Date
+    "name":    (133.3, 155.8),
+    "address": (155.8, 184.3),
+    "mobile":  (184.3, 207.5),
+    "email":   (207.5, 230.1),
+    "aadhar":  (230.1, 252.5),
+    "consumer_no": (252.5, 275.8),
+    "load":    (275.8, 299.1),
+    "inverter": (299.1, 321.5),
+    "panel":   (321.5, 344.1),
+    "subsidy_app_no": (344.1, 367.3),   # row 10: Subsidy Portal Application No / Date
+    "app_no":  (367.3, 389.8),          # row 11: Application No / Date
 }
 
 # Right-half cells that already carry a printed label ("Dealer:", "Date:");
@@ -54,7 +54,7 @@ _DEALER_LABEL_END_X = 431.2
 _DATE_LABEL_END_X = 422.9
 
 # Amount table: "Total System Cost" row, amount column.
-_TOTAL_COST_CELL = (70.5, 685.1, 306.8, 708.3)
+_TOTAL_COST_CELL = (70.5, 686.2, 306.8, 709.5)
 
 
 def _s(customer: dict, key: str) -> str:
