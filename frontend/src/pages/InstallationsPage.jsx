@@ -90,7 +90,7 @@ function PaymentCircle({ customer: c }) {
 const CIRCLE_ORDER = [
   'structure', 'painting', 'cement_grouting', 'wiring', 'earthing_la',
   'acdb', 'dcdb', 'inverter', 'panels', 'generation_meter',
-  'net_meter', 'document_upload', 'dcr_ready', 'subsidy_received',
+  'net_meter', 'document_upload', 'dcr_ready', 'rts_upload', 'subsidy_received',
 ]
 
 // Return a customer's steps ordered for the circle row. Any step not listed in

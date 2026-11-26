@@ -25,6 +25,7 @@ INSTALLATION_STEPS = [
     {"key": "inverter", "label": "Inverter Installation", "short": "I"},
     {"key": "panels", "label": "Solar Panel Installation", "short": "P"},
     {"key": "dcr_ready", "label": "DCR Ready", "short": "DR"},
+    {"key": "rts_upload", "label": "RTS Document Upload", "short": "RTS"},
     {"key": "document_upload", "label": "Documents Uploaded", "short": "DU"},
     {"key": "net_meter", "label": "Net Meter Installation", "short": "N"},
     {"key": "subsidy_received", "label": "Subsidy Received", "short": "SR"},
