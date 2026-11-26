@@ -90,7 +90,7 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 
 ### Roles & access (RBAC)
 - Defined in `backend/app/core/permissions.py`: roles map to permissions; a user's permissions are the union of their roles. No roles = pending (welcome page only).
-- **admin**: everything + Users page + "Dealers & Equipment" lists (`catalog:manage`). **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments. **documents**: all customers, edit, generate/print/upload/send/download.
+- **admin**: everything + Users page + "Dealers & Equipment" lists (`catalog:manage`) + the Inventory card on the Installations page (`inventory:manage`). **data_entry**: create customers, list/view/edit only ones they created (`created_by`). **installation**: installations page, steps + payments (no inventory). **documents**: all customers, edit, generate/print/upload/send/download.
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
 - Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.

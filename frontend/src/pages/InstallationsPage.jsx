@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Wrench, Search, RefreshCw, Settings2, Printer } from 'lucide-react'
 import { getInstallationOverview } from '../api/installations'
 import { useCatalog } from '../context/CatalogContext'
+import { useAuth } from '../context/AuthContext'
+import { PERM } from '../utils/access'
 import { fmtINR as fmtINRBlank, fmtKw } from '../utils/format'
 import InstallationStats from '../components/InstallationStats'
 import InstallationModal from '../components/InstallationModal'
@@ -200,6 +202,9 @@ export default function InstallationsPage() {
   const [dealerFilter, setDealerFilter] = useState('')
   const [sortBy, setSortBy] = useState(loadSort)
   const { values: catalogValues } = useCatalog()
+  // Inventory (stock levels + editing) is admin-only; installers see just the list.
+  const { can } = useAuth()
+  const showInventory = can(PERM.INVENTORY_MANAGE)
   // True from the start so the first paint shows the spinner, not the empty state.
   const [loading, setLoading] = useState(true)
   const [manageCustomer, setManageCustomer] = useState(null)
@@ -330,7 +335,7 @@ export default function InstallationsPage() {
           <InstallationStats summary={summary} />
         </div>
 
-        {/* Two-column: list (left) + inventory sidebar (right on desktop, below on mobile) */}
+        {/* Two-column: list (left) + inventory sidebar for admins (right on desktop, below on mobile) */}
         <div className="flex flex-col lg:flex-row gap-6">
         <div className="flex-1 min-w-0">
 
@@ -551,12 +556,14 @@ export default function InstallationsPage() {
 
         </div>{/* /list column */}
 
-        {/* Inventory sidebar — sticky on desktop, stacked below on mobile */}
-        <aside className="lg:w-80 xl:w-96 flex-shrink-0">
-          <div className="lg:sticky lg:top-8">
-            <InventorySidebar refreshSignal={inventoryRefresh} />
-          </div>
-        </aside>
+        {/* Inventory sidebar (admin only) — sticky on desktop, stacked below on mobile */}
+        {showInventory && (
+          <aside className="lg:w-80 xl:w-96 flex-shrink-0">
+            <div className="lg:sticky lg:top-8">
+              <InventorySidebar refreshSignal={inventoryRefresh} />
+            </div>
+          </aside>
+        )}
         </div>{/* /two-column */}
       </div>
 

@@ -63,7 +63,7 @@ def _demand_lines(customer: dict, step_done: dict) -> list:
 
 
 @router.get("/overview")
-async def inventory_overview(_=Depends(require(P.INSTALLATIONS_READ))):
+async def inventory_overview(_=Depends(require(P.INVENTORY_MANAGE))):
     """Aggregate required vs. available stock for every equipment combination."""
     db = get_db()
 
@@ -147,7 +147,7 @@ async def inventory_overview(_=Depends(require(P.INSTALLATIONS_READ))):
 
 
 @router.put("/stock")
-async def set_stock(body: StockUpdate, _=Depends(require(P.INSTALLATIONS_WRITE))):
+async def set_stock(body: StockUpdate, _=Depends(require(P.INVENTORY_MANAGE))):
     """Upsert the base on-hand stock for one equipment combination."""
     db = get_db()
     key = stock_key(body.category, body.company, body.spec)
