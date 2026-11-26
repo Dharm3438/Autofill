@@ -32,12 +32,27 @@ export async function onRequest({ request, env }) {
   else headers.delete('x-forwarded-for')
 
   const hasBody = !['GET', 'HEAD'].includes(request.method)
-  const response = await fetch(target, {
-    method: request.method,
-    headers,
-    body: hasBody ? request.body : undefined,
-    redirect: 'manual',
-  })
+  let response
+  try {
+    response = await fetch(target, {
+      method: request.method,
+      headers,
+      body: hasBody ? request.body : undefined,
+      redirect: 'manual',
+    })
+  } catch (err) {
+    // Render unreachable (restarting, network). Answer in the backend's own
+    // {detail} format so the app shows this instead of a misleading message.
+    console.error(`api proxy: ${request.method} ${incoming.pathname} -> fetch failed: ${err}`)
+    return Response.json(
+      { detail: "Couldn't reach the server. It may be starting up — please try again in a minute." },
+      { status: 502 },
+    )
+  }
+  if (response.status >= 500) {
+    // Visible in Cloudflare: Pages project > Functions > Real-time logs.
+    console.error(`api proxy: ${request.method} ${incoming.pathname} -> backend answered ${response.status}`)
+  }
 
   // A redirect from the backend (e.g. a trailing-slash fix) would point at the
   // Render domain; keep the browser on ours.

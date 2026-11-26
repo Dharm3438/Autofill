@@ -7,7 +7,15 @@ export function apiError(err, fallback = 'Something went wrong') {
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg.replace(/^Value error, /, '')
   if (!err?.response) return 'Network error. Check your connection and try again.'
-  return fallback
+  // No reason from our backend: the request never got a proper answer (server
+  // waking up / restarting, proxy error). Say so, with the code, instead of
+  // the page's fallback — which for login would wrongly blame the password.
+  const status = err.response.status
+  if (status >= 500) {
+    return `The server didn't respond properly (error ${status}). It may be starting up — please try again in a minute.`
+  }
+  if (status === 429) return 'Too many attempts. Please wait a few minutes and try again.'
+  return `${fallback} (error ${status})`
 }
 
 // Same rules as the backend (models/user.py), checked early for quick feedback.
