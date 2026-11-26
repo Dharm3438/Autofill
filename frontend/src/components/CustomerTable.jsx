@@ -457,11 +457,6 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           customerName={missingFor.customer.CONSUMER_NAME}
           report={missingFor.report}
           onClose={() => setMissingFor(null)}
-          onEdit={() => {
-            const c = missingFor.customer
-            setMissingFor(null)
-            onEdit(c)
-          }}
           onSaveAndGenerate={async (data) => {
             const c = missingFor.customer
             try {
