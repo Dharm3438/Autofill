@@ -224,16 +224,15 @@ class PaymentUpdate(BaseModel):
 
 
 class SerialsUpdate(BaseModel):
-    """Inverter / panel serial numbers entered on the installation page.
+    """Inverter serial number(s) entered on the installation page.
 
-    These are recorded purely as equipment data — they no longer drive the
-    installation date, which is derived from the checklist's Inverter / Solar
-    Panel Installation steps (see compute_installation_date).
+    Recorded purely as equipment data — it does not drive the installation
+    date, which is derived from the checklist's Inverter / Solar Panel
+    Installation steps (see compute_installation_date).
     """
     INVERTER_SR_NO: Serials = None
-    PANEL_SR_NO: Serials = None
 
 
 def compute_serials_update(body: "SerialsUpdate") -> dict:
     """Build the $set fields for a serials update (comma-separated, cleaned)."""
-    return {"INVERTER_SR_NO": body.INVERTER_SR_NO, "PANEL_SR_NO": body.PANEL_SR_NO}
+    return {"INVERTER_SR_NO": body.INVERTER_SR_NO}

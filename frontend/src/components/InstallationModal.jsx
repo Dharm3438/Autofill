@@ -113,7 +113,7 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
   const [pay, setPay] = useState({ total_payment: 0, received_payment: 0, remaining_payment: 0 })  // server truth
   const [payRows, setPayRows] = useState([])   // editable [{ amount: string, date: string }]
   const [savingPay, setSavingPay] = useState(false)
-  const [serials, setSerials] = useState({ INVERTER_SR_NO: '', PANEL_SR_NO: '' })  // editable
+  const [serials, setSerials] = useState({ INVERTER_SR_NO: '' })  // editable
   const [installationDate, setInstallationDate] = useState('')  // server-derived, read-only
   const [savingSerials, setSavingSerials] = useState(false)
   const changedRef = useRef(false)
@@ -137,7 +137,6 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
       savedRowsRef.current = serializeRows(rows)
       const sr = {
         INVERTER_SR_NO: data.INVERTER_SR_NO || '',
-        PANEL_SR_NO: data.PANEL_SR_NO || '',
       }
       setSerials(sr)
       savedSerialsRef.current = JSON.stringify(sr)
@@ -325,13 +324,11 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
     try {
       const res = await updateInstallationSerials(customer.id, {
         INVERTER_SR_NO: serials.INVERTER_SR_NO.trim(),
-        PANEL_SR_NO: serials.PANEL_SR_NO.trim(),
       })
       changedRef.current = true
       const d = res.data.data
       const sr = {
         INVERTER_SR_NO: d.INVERTER_SR_NO || '',
-        PANEL_SR_NO: d.PANEL_SR_NO || '',
       }
       setSerials(sr)
       savedSerialsRef.current = JSON.stringify(sr)
@@ -565,20 +562,20 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
           </div>
         )}
 
-        {/* Equipment serial numbers (recorded as data only) */}
+        {/* Inverter serial number (recorded as data only) */}
         {!loading && (
           <div className="px-6 pt-6">
             <div className="rounded-xl border border-gray-200 bg-gray-50/60 dark:border-white/10 dark:bg-white/5 p-4">
               <div className="flex items-center gap-2 mb-1">
                 <Hash className="w-4 h-4 text-[#1a3a2a] dark:text-emerald-400" />
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Equipment Serial Numbers</p>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Inverter Serial Number</p>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Enter these once the equipment is installed. They're recorded as equipment
-                data for the documents.
+                Enter it once the inverter is installed. It can also be filled in on the
+                customer form.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
                 <label className="block">
                   <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Inverter Serial No</span>
                   <input
@@ -586,16 +583,6 @@ export default function InstallationModal({ customer, onClose, onChanged }) {
                     value={serials.INVERTER_SR_NO}
                     onChange={(ev) => updateSerial('INVERTER_SR_NO', ev.target.value)}
                     placeholder="Inverter serial number"
-                    className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/30"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-medium text-gray-500 dark:text-gray-400">Panel Serial Nos</span>
-                  <input
-                    type="text"
-                    value={serials.PANEL_SR_NO}
-                    onChange={(ev) => updateSerial('PANEL_SR_NO', ev.target.value)}
-                    placeholder="Comma separated"
                     className="mt-1 w-full px-2.5 py-2 rounded-lg border border-gray-200 dark:border-white/10 bg-white dark:bg-[#16201b] text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1a3a2a]/30"
                   />
                 </label>

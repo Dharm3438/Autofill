@@ -71,8 +71,8 @@ class ValidationTest(unittest.TestCase):
         self.assertIn("CONSUMER_AADHAR", errors(CONSUMER_AADHAR="1234"))
 
     def test_serials_comma_separated(self):
-        c = CustomerCreate(PANEL_SR_NO="A1,A2 ,\n A3,, ").to_store()
-        self.assertEqual(c["PANEL_SR_NO"], "A1, A2, A3")
+        c = CustomerCreate(INVERTER_SR_NO="A1,A2 ,\n A3,, ").to_store()
+        self.assertEqual(c["INVERTER_SR_NO"], "A1, A2, A3")
 
     def test_update_keeps_only_sent_fields(self):
         self.assertEqual(CustomerCreate(SYSTEM_COST=5).to_store(only_sent=True), {"SYSTEM_COST": 5})

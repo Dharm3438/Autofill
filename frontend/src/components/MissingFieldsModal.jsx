@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { X, AlertTriangle, Pencil, FileWarning, Wrench, Loader2 } from 'lucide-react'
 
-// Fields that are no longer edited on the customer form — they're filled on the
-// Installation page (Manage). The installation date is derived from the Inverter
-// and Solar Panel Installation checklist steps, so it can't be entered directly.
-const INSTALLATION_MANAGED_KEYS = new Set(['INVERTER_SR_NO', 'PANEL_SR_NO', 'INSTALLATION_DATE'])
+// Fields filled on the Installation page (Manage). The installation date is
+// derived from the Inverter and Solar Panel Installation checklist steps, so it
+// can't be entered directly. (The inverter serial number can be entered on the
+// customer form or the Installation page.)
+const INSTALLATION_MANAGED_KEYS = new Set(['INSTALLATION_DATE'])
 
 // Fields asked for right here in the popup rather than on the customer form.
 // Deliberately NOT pre-filled from SYSTEM_COST: that's the real price and must

@@ -134,7 +134,9 @@ CONSUMER_APP_DATE, SUBSIDY_APP_DATE            — "YYYY-MM-DD", validated
 CONSUMER_APP_NO, SUBSIDY_APP_NO (subsidy portal application; only on the Customer
   Details sheet — documents use CONSUMER_APP_NO/DATE), INSTALLATION_CITY,
 INSTALLATION_DISTRICT, DISCOM_REGISTERED_OFFICE — text
-INVERTER_SR_NO, PANEL_SR_NO                    — comma-separated text ("A1, A2, A3")
+INVERTER_SR_NO                                 — comma-separated text ("A1, A2, A3"); set on the customer
+  form (Solar System) or the Installations page. Panel serial numbers are no longer collected
+  (old customers may still carry PANEL_SR_NO; nothing reads it).
 Derived by the server on every save (never sent by the client):
   TOTAL_PANEL_CAPACITY (W = watt × panels), INVERTER_GUARANTEE / PANEL_GUARANTEE (years, from the make's catalog warranty),
   INSTALLATION_DATE (from the Inverter / Solar Panel checklist steps)
@@ -211,6 +213,8 @@ submitted_at, ip_address
 
 ## Document Templates
 
+(DCR is not generated — the admin uploads the government portal DCR PDF.)
+
 Location: `backend/DOCS/`
 
 | Key | File |
@@ -220,7 +224,6 @@ Location: `backend/DOCS/`
 | WCR | WCR.docx |
 | Annexure_3 | Annexure-3-Net-Metering.docx |
 | NP_Agreement | np_agreement.docx |
-| DCR | DCR.docx |
 
 Placeholder format in templates: `${FIELD_NAME}$`
 

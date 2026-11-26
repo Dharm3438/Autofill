@@ -50,6 +50,7 @@ const SECTIONS = [
         catalog: 'inverter_capacity',
       },
       { key: 'INVERTER_GUARANTEE', label: 'Inverter Guarantee', derived: true },
+      { key: 'INVERTER_SR_NO', label: 'Inverter Serial No', hint: 'Optional · comma-separated if more than one' },
       { key: 'PANEL_COMPANY', label: 'Panel Company', type: 'select', required: true, catalog: 'panel_company' },
       {
         key: 'PANEL_WATT', label: 'Panel Watt', type: 'select', kind: 'count', required: true,
