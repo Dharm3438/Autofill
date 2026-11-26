@@ -72,7 +72,8 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Login takes `identifier` (email or username; anything containing "@" is an email).
 - `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 10 failed
   logins per account / 15 min, 50 per IP, 5 code emails per address / hour, 20 per IP.
-  Client IP is the *last* X-Forwarded-For entry (Render's proxy appends it).
+  Client IP: Render appends the last X-Forwarded-For entry; with the Vercel `/api` proxy in
+  front, the client is `TRUSTED_PROXY_HOPS` (default 1) entries before it (0 = no proxy).
 - Bumping `token_version` signs out every device (password reset/change, "log out everywhere").
   `get_current_user` rejects tokens whose `ver` doesn't match.
 - bcrypt always runs off the event loop (`hash_password_async` / `verify_password_async`), and
@@ -94,6 +95,12 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
 - Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.
+- **The browser only talks to the frontend's own domain.** `frontend/vercel.json` proxies
+  `/api/*` to Render (`vite.config.js` does the same in dev), and `api/client.js` always uses
+  `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
+  cookies, which caused a login loop. Never point the app at the Render domain again; if the
+  backend URL changes, update `vercel.json`. (The public signing page `frontend/public/signing.html`
+  uses tokens, not cookies, and still calls Render directly.)
 - CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
 - User search text is `re.escape`d before Mongo `$regex`.
 
@@ -221,7 +228,7 @@ plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR
 ## Key Conventions
 
 - All API responses follow `{ success: bool, data: ..., message: str }` format
-- JWT tokens stored in httpOnly cookies (not localStorage)
+- JWT tokens stored in httpOnly first-party cookies (not localStorage), via the `/api` proxy
 - Generated docs folder: `generated_docs/{mongo_id}_{sanitized_consumer_name}/`
 - Signing links: `/sign/{unique_token}` — token expires in 72 hours
 - OTP / account codes: 6-digit, valid for 10 minutes
@@ -244,10 +251,7 @@ BASE_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:5173
 ```
 
-Frontend `.env`:
-```
-VITE_API_URL=http://localhost:8000
-```
+Frontend: no env vars needed (`VITE_API_URL` is no longer read — `/api` is proxied).
 
 ---
 

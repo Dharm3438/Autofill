@@ -80,6 +80,10 @@ def user_to_out(u: dict) -> dict:
 
 
 def _set_auth_cookie(response: Response, user: dict) -> None:
+    # The frontend proxies /api through its own domain (frontend/vercel.json),
+    # so browsers see this as a first-party cookie. Safari and private windows
+    # drop cookies from a *different* site, so never point the frontend at the
+    # API's own domain. SameSite=None keeps it working if someone does.
     response.set_cookie(
         key="access_token",
         value=create_access_token(user),

@@ -18,6 +18,11 @@ class Settings(BaseSettings):
 
     FRONTEND_URL: str = "http://localhost:5173"
 
+    # How many proxies sit in front of Render's own proxy. The frontend (Vercel)
+    # proxies /api to us so the auth cookie is first-party, which adds one hop:
+    # X-Forwarded-For arrives as "client, vercel". 0 = clients hit Render directly.
+    TRUSTED_PROXY_HOPS: int = 1
+
     @property
     def allowed_origins(self) -> list[str]:
         origins = ["http://localhost:5173", "http://localhost:4173"]

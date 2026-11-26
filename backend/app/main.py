@@ -35,8 +35,9 @@ _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 @app.middleware("http")
 async def reject_cross_site_writes(request: Request, call_next):
     """
-    CSRF guard. The auth cookie is SameSite=None (frontend and API live on
-    different sites), so a browser attaches it even to requests started by some
+    CSRF guard. The auth cookie is SameSite=None (kept so login also works
+    when the API is reached on its own domain rather than through the frontend's
+    /api proxy), so a browser attaches it even to requests started by some
     other website. CORS stops that site from *reading* responses, but "simple"
     requests (form/multipart POSTs, bodiless POSTs like generate / send-link)
     are still *executed*. Browsers always send an Origin header on cross-site
