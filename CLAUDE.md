@@ -99,7 +99,9 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - **The browser only talks to the frontend's own domain.** The frontend is on Cloudflare
   Pages; the Pages Function `frontend/functions/api/[[path]].js` forwards `/api/*` to Render
   (`https://autofill-blgf.onrender.com`, or the `BACKEND_URL` Pages variable) and
-  `public/_routes.json` limits functions to `/api/*` (`vite.config.js` does the same in dev), and `api/client.js` always uses
+  `public/_routes.json` limits functions to `/api/*`. While Render's free plan wakes the backend
+  (non-JSON 502/503/504 or a failed fetch) the function retries for up to 90s, re-sending bodies
+  up to 10 MB; our app's own JSON 5xx answers are never retried. Render's health check calls `/health` (`vite.config.js` does the same in dev), and `api/client.js` always uses
   `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
   cookies, which caused a login loop. Never point the app at the Render domain again; if the
   backend URL changes, set `BACKEND_URL` in the Pages project (or update the default in the function). (The public signing page `frontend/public/signing.html`

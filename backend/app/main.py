@@ -122,5 +122,6 @@ app.include_router(users.router, prefix="/api")
 
 
 @app.get("/api/health")
+@app.get("/health")  # the path Render's health check calls
 async def health():
     return {"status": "ok"}
