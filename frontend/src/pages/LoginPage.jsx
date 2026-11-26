@@ -44,6 +44,9 @@ export default function LoginPage() {
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true)
+    // The backend sleeps when idle and takes up to a minute to wake; the /api
+    // proxy keeps retrying meanwhile. Say so, so a slow sign-in doesn't look stuck.
+    const slow = setTimeout(() => toast.loading('Starting the server — this can take up to a minute…', { id: 'waking' }), 5000)
     try {
       const res = await login(identifier.trim(), password)
       finish(res.data.data)
@@ -52,6 +55,8 @@ export default function LoginPage() {
       // so the fallback is only for failures that have nothing to do with it.
       toast.error(apiError(err, 'Sign-in failed. Please try again'))
     } finally {
+      clearTimeout(slow)
+      toast.dismiss('waking')
       setLoading(false)
     }
   }
