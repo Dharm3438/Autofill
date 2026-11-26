@@ -48,7 +48,9 @@ export default function LoginPage() {
       const res = await login(identifier.trim(), password)
       finish(res.data.data)
     } catch (err) {
-      toast.error(apiError(err, 'Incorrect email/username or password'))
+      // A wrong password always arrives as the backend's own sentence (detail),
+      // so the fallback is only for failures that have nothing to do with it.
+      toast.error(apiError(err, 'Sign-in failed. Please try again'))
     } finally {
       setLoading(false)
     }
