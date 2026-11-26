@@ -31,6 +31,7 @@ class P:
     DASHBOARD_VIEW = "dashboard:view"
     USERS_MANAGE = "users:manage"
     CATALOG_MANAGE = "catalog:manage"          # add dealers / equipment options
+    INVENTORY_MANAGE = "inventory:manage"      # view inventory + set stock (admin only)
 
 
 ALL_PERMISSIONS = frozenset(v for k, v in vars(P).items() if not k.startswith("_"))

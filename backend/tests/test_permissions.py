@@ -245,6 +245,11 @@ class RoleMatrixTest(unittest.TestCase):
         self.assertNotIn(P.INSTALLATIONS_READ, p)
         self.assertNotIn(P.USERS_MANAGE, p)
 
+    def test_inventory_is_admin_only(self):
+        for role in ("data_entry", "installation", "documents"):
+            self.assertNotIn(P.INVENTORY_MANAGE, user_permissions(make_user(role)))
+        self.assertIn(P.INVENTORY_MANAGE, user_permissions(make_user("admin")))
+
     def test_multiple_roles_union(self):
         p = user_permissions(make_user("installation", "documents"))
         self.assertIn(P.INSTALLATIONS_WRITE, p)
