@@ -360,12 +360,20 @@ class LoginTest(AuthTestBase):
 
     def test_lockout_after_repeated_failures(self):
         self.add_user()
-        for i in range(10):
+        for i in range(20):
             with self.assertRaises(HTTPException):
                 self.login("ravi", "wrong-password", ip=f"198.51.100.{i}")
         with self.assertRaises(HTTPException) as e:
             self.login("ravi@example.com", "Correct-horse-1")  # right password, still locked
         self.assertEqual(e.exception.status_code, 429)
+
+    def test_other_users_failures_dont_block_login(self):
+        # Many people can share one IP; their wrong passwords must not lock anyone else out.
+        self.add_user()
+        for i in range(60):
+            with self.assertRaises(HTTPException):
+                self.login(f"nobody{i}", "wrong-password")
+        self.login("ravi", "Correct-horse-1")
 
     def test_success_clears_failures(self):
         self.add_user()
