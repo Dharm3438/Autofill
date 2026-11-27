@@ -61,6 +61,8 @@ async def _ensure_indexes():
         print(f"Unique CONSUMER_NO index not created (duplicate consumer numbers exist?): {e}")
     await _migrate_user_roles()
     await _setup_auth_collections()
+    from .idempotency import ensure_indexes as ensure_idempotency_indexes
+    await ensure_idempotency_indexes(db)
     await seed_catalog(db)
 
 

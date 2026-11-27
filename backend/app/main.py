@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core import rate_limit
 from .core.config import settings
+from .core.idempotency import idempotency_middleware
 from .core.database import connect_db, close_db
 from .routers import auth, catalog, customers, documents, signing, uploads, installations, inventory, users
 from .models.customer import field_label
@@ -31,6 +32,11 @@ app.add_middleware(
 )
 
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+# Retried writes (proxy wake-up retries, the frontend's retry once the server is
+# up) run once: see core/idempotency.py. Registered before the CSRF guard below,
+# so the guard wraps it and cross-site writes are refused before anything runs.
+app.middleware("http")(idempotency_middleware)
 
 
 @app.middleware("http")

@@ -367,6 +367,29 @@ class LoginTest(AuthTestBase):
             self.login("ravi@example.com", "Correct-horse-1")  # right password, still locked
         self.assertEqual(e.exception.status_code, 429)
 
+    def test_lockout_says_how_long_to_wait(self):
+        self.add_user()
+        for _ in range(20):
+            with self.assertRaises(HTTPException):
+                self.login("ravi", "wrong-password")
+        with self.assertRaises(HTTPException) as e:
+            self.login("ravi", "Correct-horse-1")
+        self.assertIn("Please wait 15 minutes", e.exception.detail)
+        self.assertIn("Forgot password", e.exception.detail)
+        self.assertTrue(880 <= int(e.exception.headers["Retry-After"]) <= 901)
+
+        # Ten minutes later the oldest failure is ten minutes old: 5 minutes to go.
+        for d in self.db.auth_attempts.docs:
+            d["created_at"] -= timedelta(minutes=10)
+        with self.assertRaises(HTTPException) as e:
+            self.login("ravi", "Correct-horse-1")
+        self.assertIn("Please wait 5 minutes", e.exception.detail)
+
+        # Once the window has passed, the right password works again.
+        for d in self.db.auth_attempts.docs:
+            d["created_at"] -= timedelta(minutes=6)
+        self.login("ravi", "Correct-horse-1")
+
     def test_other_users_failures_dont_block_login(self):
         # Many people can share one IP; their wrong passwords must not lock anyone else out.
         self.add_user()

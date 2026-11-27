@@ -12,22 +12,29 @@
 
 const DEFAULT_BACKEND = 'https://autofill-blgf.onrender.com'
 
-// Render's free plan puts the backend to sleep when idle; waking it takes
-// up to about a minute, and meanwhile Render answers with a gateway error
-// instead of holding the request. Keep retrying for this long, so a request
-// made during wake-up just takes longer instead of failing.
-const WAKE_UP_WAIT_MS = 90_000
+// Render's free plan puts the backend to sleep after ~15 idle minutes. Waking
+// it (starting a large Docker image on a tiny CPU share) can take 1-3 minutes,
+// and meanwhile Render answers with gateway errors or holds the request. Keep
+// retrying for this long, so a request made during wake-up just takes longer
+// instead of failing. (90s was too short: cold starts often ran past it.)
+// If it still isn't up, the app itself keeps waiting and retries
+// (frontend/src/api/serverWake.js), so this is not the last line of defence.
+const WAKE_UP_WAIT_MS = 180_000
 // Bodies up to this size are kept in memory so they can be re-sent on retry.
 // Bigger uploads are streamed once and not retried.
 const MAX_RETRY_BODY_BYTES = 10 * 1024 * 1024
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
-// A gateway error from Render's routing layer (backend asleep / starting /
-// restarting), not an answer from our app. Our app always answers in JSON, so
-// a JSON 502 (e.g. "couldn't send the email") is a real answer — never retried.
+// Gateway errors that mean "the backend isn't answering yet": Render's own
+// 502/503/504 while it starts, and Cloudflare's 52x/530 from the edge in front
+// of Render (e.g. 524 when Render held the request for 100s, 522/523 when it
+// couldn't connect). Our app always answers in JSON, so a JSON 5xx (e.g. 502
+// "couldn't send the email") is a real answer and is never retried.
+const WAKE_UP_STATUSES = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530])
+
 function isWakeUpError(response) {
-  if (![502, 503, 504].includes(response.status)) return false
+  if (!WAKE_UP_STATUSES.has(response.status)) return false
   return !(response.headers.get('content-type') || '').includes('application/json')
 }
 
@@ -80,11 +87,12 @@ export async function onRequest({ request, env }) {
   }
 
   if (!response || isWakeUpError(response)) {
-    // Still not up. Answer in the backend's own {detail} format so the app
-    // shows this instead of a misleading message.
+    // Still not up. Answer in the backend's own {detail} format, marked so the
+    // app knows the server is still waking (it then keeps waiting and retries
+    // by itself; Idempotency-Key keeps a retried write from running twice).
     return Response.json(
-      { detail: "The server is taking too long to start. Please try again in a minute." },
-      { status: 503 },
+      { detail: 'The server is still starting up. Please wait a moment.', code: 'server_waking' },
+      { status: 503, headers: { 'x-server-waking': '1', 'retry-after': '5' } },
     )
   }
 
