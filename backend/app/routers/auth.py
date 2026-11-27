@@ -42,8 +42,9 @@ RESEND_COOLDOWN = timedelta(seconds=60)
 MAX_CODE_ATTEMPTS = 5                   # wrong guesses before a code is thrown away
 
 # (limit, window in seconds)
-LOGIN_FAILS_PER_ACCOUNT = (10, 15 * 60)
-LOGIN_FAILS_PER_IP = (50, 15 * 60)      # generous: a whole office can share one IP
+# Only per account: a per-IP login limit once locked everyone out at the same
+# time (many users share an IP behind mobile CGNAT / the proxy chain).
+LOGIN_FAILS_PER_ACCOUNT = (20, 15 * 60)
 EMAILS_PER_ADDRESS = (5, 60 * 60)       # also protects the email provider's daily quota
 EMAILS_PER_IP = (20, 60 * 60)
 REGISTER_PER_IP = (30, 60 * 60)         # sign-up attempts, sent or not
@@ -217,7 +218,6 @@ async def _password_ok_or_count(db, user: dict, password: str, request: Request)
     if await verify_password_async(password, user.get("password_hash")):
         return True
     await rate_limit.record(db, acct_key, LOGIN_FAILS_PER_ACCOUNT[1])
-    await rate_limit.record(db, f"login-fail:ip:{rate_limit.client_ip(request)}", LOGIN_FAILS_PER_IP[1])
     return False
 
 
@@ -226,9 +226,6 @@ async def _password_ok_or_count(db, user: dict, password: str, request: Request)
 @router.post("/login")
 async def login(body: UserLogin, request: Request, response: Response):
     db = get_db()
-    ip_key = f"login-fail:ip:{rate_limit.client_ip(request)}"
-    await rate_limit.enforce(db, ip_key, *LOGIN_FAILS_PER_IP, consume=False)
-
     user = await db.users.find_one(_identifier_query(body.identifier))
     acct_key = f"login-fail:acct:{user['_id'] if user else body.identifier}"
     await rate_limit.enforce(
@@ -239,7 +236,6 @@ async def login(body: UserLogin, request: Request, response: Response):
     # Runs bcrypt even for unknown users, so timing doesn't reveal accounts.
     if not await verify_password_async(body.password, user.get("password_hash") if user else None):
         await rate_limit.record(db, acct_key, LOGIN_FAILS_PER_ACCOUNT[1])
-        await rate_limit.record(db, ip_key, LOGIN_FAILS_PER_IP[1])
         # Server log only (the response stays the same, so it can't be used to
         # find out which accounts exist): tells "no such account" from "wrong password".
         kind = "email" if "@" in body.identifier else "username"

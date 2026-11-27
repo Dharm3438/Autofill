@@ -70,8 +70,8 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - `auth_codes`: one live code per (purpose, subject), only an HMAC of the code is stored,
   10-minute code, 5 wrong guesses then it's discarded, 60s resend cool-down, TTL-indexed.
 - Login takes `identifier` (email or username; anything containing "@" is an email).
-- `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 10 failed
-  logins per account / 15 min, 50 per IP, 5 code emails per address / hour, 20 per IP.
+- `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 20 failed
+  logins per account / 15 min (no per-IP login limit — shared IPs locked everyone out), 5 code emails per address / hour, 20 per IP.
   Client IP: the Pages Function sets X-Forwarded-For to the visitor's IP and Render's side appends
   3 entries, so the client is `TRUSTED_PROXY_HOPS` (default 3) entries from the right. Failed logins
   log `ip=`/`xff=` plus `auth login failed: wrong password` / `no account with that email|username`.
