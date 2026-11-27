@@ -57,20 +57,52 @@ class Catalog:
         return int(m.group(1)) if m else None
 
 
+def _same_value(a, b) -> bool:
+    """Is `a` the same stored choice as `b`? Text ignores case/spacing; numbers compare as numbers."""
+    if a is None or b is None:
+        return False
+    if isinstance(a, str) and isinstance(b, str):
+        return value_key(" ".join(a.split())) == value_key(" ".join(b.split()))
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        return False
+
+
+def _shown(list_type: str, value) -> str:
+    """The value as the error message shows it ("3.3 kW"); falls back to the raw value."""
+    if isinstance(value, str):
+        return value
+    try:
+        return normalize_value(list_type, value)
+    except ValueError:  # e.g. outside the catalog's range
+        try:
+            number = f"{float(value):g}"
+        except (TypeError, ValueError):
+            return str(value)
+        return f"{number} kW" if CATALOG_TYPES[list_type]["format"] == "kw" else number
+
+
 def check_choices(catalog: Catalog, data: dict, current: dict | None = None) -> dict:
     """Validate the choice fields present in `data` (in place) and return it.
 
     Raises 422 naming every field whose value isn't an active catalog item —
-    unless it's the value the customer already has (`current`)."""
+    unless it's the value the customer already has (`current`). The edit form
+    sends every field back on each save, so an unchanged value is always
+    accepted, even one that matches no catalog item at all (e.g. a dealer saved
+    before the dealer list existed): otherwise such a customer could never be
+    saved again."""
     problems = []
     for field, list_type in CHOICE_FIELDS.items():
         value = data.get(field)
         if value is None:
             continue
+        if current is not None and _same_value(value, current.get(field)):
+            data[field] = current[field]  # unchanged: keep exactly what's stored
+            continue
         item = catalog.find(list_type, value)
-        kept = current is not None and item is not None and item is catalog.find(list_type, current.get(field))
-        if item is None or not (item.get("active", True) or kept):
-            shown = value if isinstance(value, str) else normalize_value(list_type, value)
+        if item is None or not item.get("active", True):
+            shown = _shown(list_type, value)
             problems.append(
                 f"{field_label(field)} “{shown}” isn't in the {CATALOG_TYPES[list_type]['label']} list"
             )

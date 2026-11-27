@@ -136,6 +136,23 @@ class CatalogRulesTest(unittest.TestCase):
         self.check({"INVERTER_MAKE": "Polycab"}, current={"INVERTER_MAKE": "Polycab"})
         self.rejects({"INVERTER_MAKE": "Polycab"}, current={"INVERTER_MAKE": "UTL"})
 
+    def test_unchanged_value_missing_from_catalog_can_be_saved(self):
+        # Old customers can hold a dealer / capacity that no catalog item matches.
+        # The edit form sends every field back, so editing anything else must work.
+        current = {"DEALER_NAME": "Old Dealer Pvt Ltd", "INVERTER_CAPACITY": 3.25, "PANEL_WATT": 333}
+        out = self.check({"DEALER_NAME": "old dealer pvt ltd ", "INVERTER_CAPACITY": 3.25, "PANEL_WATT": 333},
+                         current=current)
+        self.assertEqual((out["DEALER_NAME"], out["INVERTER_CAPACITY"], out["PANEL_WATT"]),
+                         ("Old Dealer Pvt Ltd", 3.25, 333))
+        # Changing it to another value that isn't in the catalog is still refused.
+        self.rejects({"DEALER_NAME": "Someone New"}, current=current)
+        self.rejects({"INVERTER_CAPACITY": 3.5}, current=current)
+
+    def test_out_of_range_number_gives_422_not_500(self):
+        detail = self.rejects({"INVERTER_CAPACITY": 2000.0, "PANEL_WATT": 6000})
+        self.assertIn("Inverter Capacity “2000 kW” isn't in the Inverter Capacities list", detail)
+        self.assertIn("Panel Watt “6000” isn't in the Panel Watts list", detail)
+
     def test_warranty_from_catalog(self):
         c = self.catalog()
         self.assertEqual(c.warranty_years("inverter_make", "Polycab"), 8)

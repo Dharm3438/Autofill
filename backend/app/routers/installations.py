@@ -21,7 +21,8 @@ from ..models.installation import (
     SerialsUpdate,
 )
 from bson import ObjectId
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone
+from ..core.localtime import local_today
 
 router = APIRouter(prefix="/installations", tags=["installations"])
 
@@ -388,9 +389,10 @@ async def update_installation_step(
         target["completed_date"] = (
             body.completed_date
             if body.completed_date is not None
-            else (target["completed_date"] or date.today().isoformat())
+            else (target["completed_date"] or local_today().isoformat())
         )
-        if body.performed_by is not None:
+        # Sent blank (the "Done by (select)" option) clears it; not sent keeps it.
+        if "performed_by" in body.model_fields_set:
             target["performed_by"] = body.performed_by
         # Grouped steps share one date and person: keep the group's other done
         # members in sync with this one.

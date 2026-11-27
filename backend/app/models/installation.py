@@ -1,8 +1,8 @@
-from datetime import date
 from pydantic import BaseModel, Field
 from typing import Optional, List, Literal
 
 from .customer import IsoDay, Serials, Text
+from ..core.localtime import local_today
 
 
 # Single source of truth for the physical installation steps tracked per customer.
@@ -142,7 +142,7 @@ def apply_group_update(steps: List[dict], group_key: str, body: "InstallationGro
     in `done_keys` go back to pending with their details cleared."""
     members = set(group_step_keys(group_key))
     done = set(body.done_keys) & members
-    shared_date = body.completed_date or date.today().isoformat()
+    shared_date = body.completed_date or local_today().isoformat()
     for s in steps:
         if s["key"] not in members:
             continue
