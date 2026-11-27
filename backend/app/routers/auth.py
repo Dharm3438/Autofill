@@ -156,7 +156,7 @@ async def _check_send_allowed(db, purpose: str, subject: str, address: str, ip: 
         raise HTTPException(status_code=429, detail="A code was just sent. Please wait a minute before asking for another.")
     await rate_limit.enforce(db, f"email-send:ip:{ip}", *EMAILS_PER_IP)
     await rate_limit.enforce(db, f"email-send:addr:{address}", *EMAILS_PER_ADDRESS,
-                             message="Too many codes were sent to this email. Please try again in an hour.")
+                             message="Too many codes were sent to this email. Please try again in {wait}.")
 
 
 async def _issue_code(db, purpose: str, subject: str, data: dict | None = None) -> str:
@@ -214,7 +214,7 @@ async def _password_ok_or_count(db, user: dict, password: str, request: Request)
     """Check a logged-in user's password, sharing the login failure counters."""
     acct_key = f"login-fail:acct:{user['_id']}"
     await rate_limit.enforce(db, acct_key, *LOGIN_FAILS_PER_ACCOUNT, consume=False,
-                             message="Too many wrong passwords. Please try again in 15 minutes.")
+                             message="Too many wrong passwords. Please wait {wait}, then try again.")
     if await verify_password_async(password, user.get("password_hash")):
         return True
     await rate_limit.record(db, acct_key, LOGIN_FAILS_PER_ACCOUNT[1])
@@ -230,7 +230,7 @@ async def login(body: UserLogin, request: Request, response: Response):
     acct_key = f"login-fail:acct:{user['_id'] if user else body.identifier}"
     await rate_limit.enforce(
         db, acct_key, *LOGIN_FAILS_PER_ACCOUNT, consume=False,
-        message="Too many failed sign-in attempts. Try again in 15 minutes, or use Forgot password.",
+        message="Too many failed sign-in attempts. Please wait {wait}, then try again, or use Forgot password to reset your password.",
     )
 
     # Runs bcrypt even for unknown users, so timing doesn't reveal accounts.

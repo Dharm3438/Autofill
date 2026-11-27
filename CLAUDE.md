@@ -72,6 +72,7 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Login takes `identifier` (email or username; anything containing "@" is an email).
 - `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 20 failed
   logins per account / 15 min (no per-IP login limit — shared IPs locked everyone out), 5 code emails per address / hour, 20 per IP.
+  A 429 says the real time left ("Please wait 7 minutes") and sends `Retry-After`.
   Client IP: the Pages Function sets X-Forwarded-For to the visitor's IP and Render's side appends
   3 entries, so the client is `TRUSTED_PROXY_HOPS` (default 3) entries from the right. Failed logins
   log `ip=`/`xff=` plus `auth login failed: wrong password` / `no account with that email|username`.
@@ -100,12 +101,27 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
   Pages; the Pages Function `frontend/functions/api/[[path]].js` forwards `/api/*` to Render
   (`https://autofill-blgf.onrender.com`, or the `BACKEND_URL` Pages variable) and
   `public/_routes.json` limits functions to `/api/*`. While Render's free plan wakes the backend
-  (non-JSON 502/503/504 or a failed fetch) the function retries for up to 90s, re-sending bodies
-  up to 10 MB; our app's own JSON 5xx answers are never retried. Render's health check calls `/health` (`vite.config.js` does the same in dev), and `api/client.js` always uses
+  (non-JSON 502/503/504/52x/530 or a failed fetch) the function retries for up to 180s, re-sending
+  bodies up to 10 MB; our app's own JSON 5xx answers are never retried. If it gives up it answers
+  503 JSON `{code: "server_waking"}` + header `x-server-waking`. Render's health check calls `/health`, and `api/client.js` always uses
   `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
   cookies, which caused a login loop. Never point the app at the Render domain again; if the
   backend URL changes, set `BACKEND_URL` in the Pages project (or update the default in the function). (The public signing page `frontend/public/signing.html`
   uses tokens, not cookies, and still calls Render directly.)
+- **A sleeping backend must never look like an error or a sign-out.** `api/serverWake.js` +
+  `api/client.js`: a request that gets no answer / a gateway page / the proxy's `server_waking`
+  is re-sent once `/api/health` answers (up to 5 min), with a "Connecting to the server…" banner
+  (`components/ServerStatus.jsx`); a slow request (3s) triggers a quick health check so the banner
+  shows during long waits; requests made while waking wait. Only a 401 from `/auth/me` signs
+  someone out (`AuthContext`); after 5 min of no server, protected pages show a "Try again"
+  screen. The signing page has its own `apiFetch` doing the same. Never add a code path that
+  treats "no response" as "signed out" or "wrong password".
+- **Idempotency-Key** (`core/idempotency.py`, tests `tests/test_idempotency.py`): every
+  POST/PUT/PATCH/DELETE from the app carries one (same key on every retry of one action). The
+  first copy runs and its response is stored (encrypted, 15 min, collection `idempotency`);
+  copies replay it — so retries never double-run a write or double-count a wrong password. A
+  record left "running" by a dead process is taken over. Binary/streamed responses are GETs and
+  untouched. Moving to our own domain: see the "move to our own domain" plan doc.
 - CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
 - User search text is `re.escape`d before Mongo `$regex`.
 

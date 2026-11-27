@@ -1,8 +1,13 @@
 // Shared helpers for the sign-in / sign-up / account forms.
 
+export const SERVER_UNREACHABLE =
+  "We couldn't reach the server for several minutes. Please check your internet connection and try again."
+
 // Error text from an API failure. The backend sends one readable sentence in
 // `detail`; anything else falls back to `fallback`.
 export function apiError(err, fallback = 'Something went wrong') {
+  // The app already waited minutes for the server (api/serverWake.js).
+  if (err?.serverUnavailable) return SERVER_UNREACHABLE
   const detail = err?.response?.data?.detail
   if (typeof detail === 'string') return detail
   if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg.replace(/^Value error, /, '')

@@ -5,6 +5,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import { CatalogProvider } from './context/CatalogContext'
 import ProtectedRoute, { HomeRedirect } from './components/ProtectedRoute'
 import Layout from './components/Layout'
+import { ServerStatusBanner } from './components/ServerStatus'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import CustomersPage from './pages/CustomersPage'
@@ -30,6 +31,7 @@ export default function App() {
         <CatalogProvider>
           <BrowserRouter>
             <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
+            <ServerStatusBanner />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />

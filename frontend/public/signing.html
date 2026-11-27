@@ -1541,6 +1541,68 @@
   const API_BASE = 'https://autofill-blgf.onrender.com/api';
   const TOKEN = new URLSearchParams(window.location.search).get('token');
 
+  // ── Waiting for a sleeping server ──────
+  // The backend sleeps when idle (Render free plan) and takes 1-3 minutes to
+  // start. Instead of failing, keep retrying "not answering yet" errors (no
+  // response, or a gateway error page — our API always answers in JSON) for up
+  // to 5 minutes, with a small "Connecting…" notice. POSTs carry an
+  // Idempotency-Key so a retried submit / OTP check runs only once.
+  const WAKE_STATUSES = [502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530];
+  const WAKE_MAX_MS = 5 * 60 * 1000;
+  let connectingTimer = null;
+
+  function newIdempotencyKey() {
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  }
+
+  function setConnecting(on) {
+    let el = document.getElementById('connecting-notice');
+    if (!on) { if (el) el.remove(); return; }
+    if (el) return;
+    el = document.createElement('div');
+    el.id = 'connecting-notice';
+    el.setAttribute('role', 'status');
+    el.style.cssText = 'position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:9999;' +
+      'max-width:calc(100% - 32px);background:#fff8e6;color:#5c4400;border:1px solid #f0d58a;' +
+      'border-radius:12px;padding:10px 16px;font-size:0.85rem;box-shadow:0 4px 16px rgba(0,0,0,0.12);text-align:center;';
+    el.textContent = 'Connecting to the server… it can take up to 3 minutes to start. Please keep this page open.';
+    document.body.appendChild(el);
+  }
+
+  async function apiFetch(url, options = {}) {
+    const opts = { ...options, headers: { ...(options.headers || {}) } };
+    if ((opts.method || 'GET').toUpperCase() !== 'GET' && !opts.headers['Idempotency-Key']) {
+      opts.headers['Idempotency-Key'] = newIdempotencyKey();
+    }
+    const start = Date.now();
+    let pause = 2000;
+    clearTimeout(connectingTimer);
+    connectingTimer = setTimeout(() => setConnecting(true), 4000);  // slow = probably waking
+    try {
+      for (;;) {
+        let res = null, error = null;
+        try {
+          res = await fetch(url, opts);
+          const type = res.headers.get('content-type') || '';
+          if (!(WAKE_STATUSES.includes(res.status) && !type.includes('application/json'))) return res;
+        } catch (e) {
+          error = e;
+        }
+        if (Date.now() - start > WAKE_MAX_MS) {
+          if (res) return res;
+          throw error;
+        }
+        setConnecting(true);
+        await new Promise(r => setTimeout(r, pause));
+        pause = Math.min(pause * 1.5, 10000);
+      }
+    } finally {
+      clearTimeout(connectingTimer);
+      setConnecting(false);
+    }
+  }
+
   // PDF.js worker (renders document pages to canvas — reliable on mobile and
   // lets us detect scroll-to-end for the review gate).
   if (window.pdfjsLib) {
@@ -2494,7 +2556,7 @@
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing...'; }
     try {
-      const res = await fetch(`${API_BASE}/signing/download/${TOKEN}`);
+      const res = await apiFetch(`${API_BASE}/signing/download/${TOKEN}`);
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         alert(d.detail || 'Your documents are still being finalized. Please try again in a few seconds.');
@@ -2523,7 +2585,7 @@
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/signing/verify/${TOKEN}`);
+      const res = await apiFetch(`${API_BASE}/signing/verify/${TOKEN}`);
       const data = await res.json();
       if (!res.ok) {
         showLinkError(data.detail || 'Invalid or expired link.');
@@ -2569,7 +2631,7 @@
   // ── API: send OTP ──────────────────────
   async function sendOtp(force = false) {
     try {
-      await fetch(`${API_BASE}/signing/send-otp/${TOKEN}?force=${force}`, { method: 'POST' });
+      await apiFetch(`${API_BASE}/signing/send-otp/${TOKEN}?force=${force}`, { method: 'POST' });
       document.querySelector('.section-subtitle').innerHTML =
         `We've sent a 6-digit code to <strong>${state.customerName}</strong>'s registered email`;
     } catch (e) {
@@ -2584,7 +2646,7 @@
     btn.disabled = true;
     btn.textContent = 'Verifying...';
     try {
-      const res = await fetch(`${API_BASE}/signing/verify-otp/${TOKEN}`, {
+      const res = await apiFetch(`${API_BASE}/signing/verify-otp/${TOKEN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ otp }),
@@ -2618,7 +2680,7 @@
     btn.disabled = true;
     btn.textContent = '⏳ Submitting...';
     try {
-      const res = await fetch(`${API_BASE}/signing/submit/${TOKEN}`, {
+      const res = await apiFetch(`${API_BASE}/signing/submit/${TOKEN}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

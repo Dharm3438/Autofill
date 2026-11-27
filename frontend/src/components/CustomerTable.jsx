@@ -88,7 +88,12 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
         clearInterval(pollingRef.current[c.id])
         delete pollingRef.current[c.id]
       }
+      let inFlight = false
       pollingRef.current[c.id] = setInterval(async () => {
+        // A check can take minutes while the server wakes up (the request waits
+        // instead of failing); don't stack more checks behind it meanwhile.
+        if (inFlight) return
+        inFlight = true
         try {
           const res = await getDocStatus(c.id)
           const status = res.data.data.doc_status
@@ -100,6 +105,8 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
           }
         } catch {
           stop()
+        } finally {
+          inFlight = false
         }
       }, DOC_STATUS_POLL_MS)
     })
