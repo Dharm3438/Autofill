@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import unittest
+from datetime import timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -240,16 +241,54 @@ class MiddlewareTest(unittest.TestCase):
         self.assertIn("still being processed", json.loads(body)["detail"])
         self.assertEqual(self.runs, 1)
 
-    def test_record_left_by_a_stopped_server_is_taken_over(self):
-        # The process that started it died (restart / cold start) mid-request.
+    def _orphan(self, heartbeat_age):
+        # A record "running" on another server process, last heartbeat `heartbeat_age` ago.
         self.post("/count", key="z" * 32)  # learn the record id format
         rid = next(iter(self.store.docs))
-        self.store.docs[rid].update({"state": "running", "instance": "dead-process"})
+        self.store.docs[rid].update({"state": "running", "instance": "other-process",
+                                     "heartbeat_at": idempotency._now() - timedelta(seconds=heartbeat_age)})
         self.store.docs[rid].pop("response", None)
+        return rid
+
+    def test_record_left_by_a_stopped_server_is_taken_over(self):
+        # The process that started it died (restart / cold start): no heartbeat for a while.
+        rid = self._orphan(heartbeat_age=idempotency.STALE_SECONDS + 5)
         status, _, body = self.post("/count", key="z" * 32)
         self.assertEqual(status, 200)
         self.assertEqual(self.runs, 2)
         self.assertEqual(self.store.docs[rid]["state"], "done")
+
+    def test_live_request_on_another_server_is_not_run_twice(self):
+        # Old and new containers overlap during a deploy: the other one is still working on it.
+        old = idempotency.WAIT_SECONDS
+        idempotency.WAIT_SECONDS = 0.3
+        try:
+            self._orphan(heartbeat_age=1)
+            status, _, _ = self.post("/count", key="z" * 32)
+        finally:
+            idempotency.WAIT_SECONDS = old
+        self.assertEqual(status, 409)
+        self.assertEqual(self.runs, 1)  # only the first post that created the record
+
+    def test_long_request_keeps_its_heartbeat_fresh(self):
+        old = idempotency.HEARTBEAT_SECONDS
+        idempotency.HEARTBEAT_SECONDS = 0.05
+        try:
+            async def scenario():
+                self.release = asyncio.Event()
+                task = asyncio.create_task(call(self.app, "POST", "/slow", {"idempotency-key": KEY}))
+                await asyncio.sleep(0.02)
+                rec = next(iter(self.store.docs.values()))
+                first = rec["heartbeat_at"]
+                await asyncio.sleep(0.3)
+                later = rec["heartbeat_at"]
+                self.release.set()
+                await task
+                return first, later
+            first, later = asyncio.run(scenario())
+        finally:
+            idempotency.HEARTBEAT_SECONDS = old
+        self.assertGreater(later, first)
 
     def test_unreadable_stored_answer_runs_again(self):
         self.post("/count")
@@ -308,6 +347,12 @@ class LoginReplayTest(unittest.TestCase):
             status, headers, _ = self.login("Correct-horse-1", key="c" * 32)
             self.assertEqual(status, 200)
             self.assertTrue(any(v.startswith("access_token=") for v in header(headers, "set-cookie")))
+
+    def test_own_answers_carry_cors_headers(self):
+        status, headers, _ = asyncio.run(call(self.app, "POST", "/api/auth/login",
+                                              {"origin": settings.FRONTEND_URL, "idempotency-key": "bad"}, b"{}"))
+        self.assertEqual(status, 400)
+        self.assertEqual(header(headers, "access-control-allow-origin"), [settings.FRONTEND_URL])
 
     def test_cross_site_write_still_blocked_before_anything_runs(self):
         body = json.dumps({"identifier": "ravi", "password": "wrong-password"}).encode()

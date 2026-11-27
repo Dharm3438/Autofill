@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { getMe } from '../api/auth'
 import { hasPerm } from '../utils/access'
 
@@ -13,6 +13,9 @@ const isSignedOut = (err) => err?.response?.status === 401
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Latest user, for refreshUser's fallback (a stale closure could hand back old roles).
+  const userRef = useRef(null)
+  useEffect(() => { userRef.current = user }, [user])
   // Set when /auth/me failed for a reason other than "not signed in".
   const [unreachable, setUnreachable] = useState(false)
 
@@ -44,9 +47,9 @@ export function AuthProvider({ children }) {
       return await loadUser()
     } catch {
       setUnreachable(false) // keep the page as it is; the caller decides what to show
-      return user
+      return userRef.current
     }
-  }, [loadUser, user])
+  }, [loadUser])
 
   // "Try again" on the can't-reach-the-server screen.
   const retry = useCallback(async () => {

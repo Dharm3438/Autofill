@@ -15,9 +15,11 @@ instead of running again — so a wrong password is counted once, a payment is
 added once, "generate documents" doesn't answer "already in progress", and so on.
 
 A copy that arrives while the first is still running waits for it (up to
-WAIT_SECONDS). A record left "running" by a process that is gone (restart,
-crash, Render waking a new instance) is taken over and run again here, since
-that process can never finish it.
+WAIT_SECONDS). The process running it refreshes a heartbeat every
+HEARTBEAT_SECONDS; only a record whose heartbeat has gone stale (that process
+died: restart, crash, Render replacing the instance) is taken over and run
+again. A live process on another instance — old and new containers overlap
+during a deploy — is waited for, never doubled.
 
 Requests without the header (curl, old clients) are untouched. If the store
 itself fails, the request just runs normally.
@@ -42,6 +44,8 @@ HEADER = "idempotency-key"
 TTL = timedelta(minutes=15)       # longer than the frontend keeps retrying one action
 WAIT_SECONDS = 60                 # how long a duplicate waits for the original
 POLL_SECONDS = 0.5
+HEARTBEAT_SECONDS = 5             # the running process says "still working" this often
+STALE_SECONDS = 30                # no heartbeat for this long = that process is gone
 MAX_STORED_BYTES = 512 * 1024     # bigger answers aren't stored (a retry then runs again)
 
 _UNSAFE = {"POST", "PUT", "PATCH", "DELETE"}
@@ -97,7 +101,26 @@ async def _forget(db, rid: str) -> None:
         print(f"idempotency: couldn't clear record: {e!r}")
 
 
+def _aware(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)  # Motor returns naive UTC
+
+
+async def _heartbeat(db, rid: str) -> None:
+    while True:
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+        try:
+            await db.idempotency.update_one(
+                {"_id": rid, "instance": INSTANCE, "state": "running"},
+                {"$set": {"heartbeat_at": _now()}},
+            )
+        except Exception as e:
+            print(f"idempotency: heartbeat failed: {e!r}")
+
+
 async def _run_and_store(db, rid: str, request: Request, call_next) -> Response:
+    beat = asyncio.create_task(_heartbeat(db, rid))
     try:
         response = await call_next(request)
         body = b""
@@ -107,6 +130,8 @@ async def _run_and_store(db, rid: str, request: Request, call_next) -> Response:
         # Crashed or cancelled: nothing to replay; a retry may run it again.
         await _forget(db, rid)
         raise
+    finally:
+        beat.cancel()
 
     headers = [(k, v) for k, v in response.raw_headers if k.lower() not in _DROP_HEADERS]
     out = Response(content=body, status_code=response.status_code)
@@ -130,7 +155,7 @@ async def _claim(db, rid: str) -> bool:
     try:
         await db.idempotency.insert_one({
             "_id": rid, "state": "running", "instance": INSTANCE,
-            "created_at": now, "expires_at": now + TTL,
+            "created_at": now, "heartbeat_at": now, "expires_at": now + TTL,
         })
         return True
     except DuplicateKeyError:
@@ -156,11 +181,13 @@ async def _replay(db, rid: str, request: Request, call_next) -> Response:
                 print(f"idempotency: stored answer unreadable ({e!r}); running again")
                 await db.idempotency.delete_one({"_id": rid})
                 continue
-        if rec.get("instance") != INSTANCE:
-            # Started by a process that no longer exists: take it over.
+        beat = _aware(rec.get("heartbeat_at") or rec.get("created_at"))
+        stale = beat is None or (_now() - beat).total_seconds() > STALE_SECONDS
+        if rec.get("instance") != INSTANCE and stale:
+            # Started by a process that has stopped (no heartbeat): take it over.
             taken = await db.idempotency.update_one(
                 {"_id": rid, "state": "running", "instance": rec.get("instance")},
-                {"$set": {"instance": INSTANCE, "created_at": _now()}},
+                {"$set": {"instance": INSTANCE, "heartbeat_at": _now()}},
             )
             if getattr(taken, "modified_count", 0) == 1:
                 print(f"idempotency: taking over {request.method} {request.url.path} from a stopped server")

@@ -23,14 +23,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Solar Docs API", version="1.0.0", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 _UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 # Retried writes (proxy wake-up retries, the frontend's retry once the server is
@@ -55,6 +47,18 @@ async def reject_cross_site_writes(request: Request, call_next):
     if request.method in _UNSAFE_METHODS and origin and origin not in settings.allowed_origins:
         return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
     return await call_next(request)
+
+# Added last = outermost layer, so every answer carries CORS headers — including
+# the CSRF guard's 403 and the idempotency layer's own 400/409. Without them a
+# cross-origin caller (the signing page today; the whole app once it calls
+# api.<domain> directly) sees those answers as a network error.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Plain-language wording for the common validation failures.
 _VALIDATION_WORDING = {
