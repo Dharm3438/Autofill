@@ -32,7 +32,12 @@ const TEAM = [
   'Sonu Jadhav', 'Satish Khairnar', 'Kiran Chavan',
 ].sort((a, b) => a.localeCompare(b))
 
-const today = () => new Date().toISOString().slice(0, 10)
+// The user's local calendar day. (toISOString() is UTC: in India it gave
+// yesterday's date between midnight and 05:30.)
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 // Shorter chip labels inside a group ("ACDB Installation" → "ACDB").
 const chipLabel = (label) => label.replace(/ Installation$/, '')

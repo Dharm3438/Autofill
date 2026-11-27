@@ -132,7 +132,7 @@ warranty (makes only, e.g. "10 YEAR"), active, created_by, created_at, updated_a
 ```
 - Seeded on startup when a list is empty (`seed_catalog` in `core/database.py`; defaults in `models/catalog.py`).
 - Customers store a make/dealer's *text* (and capacity/watt as numbers matched through the item's text), so items are never renamed/deleted — only hidden (`active: false`). The form always keeps a customer's current value as an option.
-- The server checks every customer choice field against active items (`services/catalog_rules.py`); a customer may keep a value that was later hidden.
+- The server checks every customer choice field against active items (`services/catalog_rules.py`); a customer may keep its current value unchanged — one later hidden, or one that was never in the list (old data) — since the edit form sends every field back.
 - Values are normalised (`"7 kW"`, `"550"`) because inventory groups stock by exact text.
 - Frontend reads them via `useCatalog()` (`context/CatalogContext.jsx`); there are no hard-coded option lists.
 
@@ -258,6 +258,8 @@ plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR
 - OTP / account codes: 6-digit, valid for 10 minutes
 - Frontend uses `#1a3a2a` as primary accent color (matching existing signing page)
 - All dates stored as ISO strings in MongoDB, formatted DD-MM-YYYY in documents
+- "Today" defaults use India's day, never the server's UTC day: `core/localtime.local_today()` on
+  the server, local date parts (not `toISOString()`) in the browser
 
 ---
 
