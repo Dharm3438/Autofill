@@ -25,20 +25,42 @@ export const MAX_WAIT_MS = 5 * 60_000       // per request, from its first failu
 const SLOW_REQUEST_MS = 3_000               // a request this slow gets a health check
 const QUICK_CHECK_MS = 3_000                // an awake server answers /health well within this
 const HEALTH_ATTEMPT_MS = 200_000           // the /api proxy itself waits up to 180s
-const POLL_GAP_MS = 3_000
+const POLL_GAPS_MS = [3_000, 5_000, 10_000, 20_000, 30_000]  // pause between /health checks (grows)
+const POLL_GIVE_UP_MS = MAX_WAIT_MS         // never poll forever: an open tab must not hammer the server
+const DIRECT_WAKE_EVERY_MS = 30_000
 const AWAY_PING_MS = 5 * 60_000             // tab hidden this long → ping on return
 
-// Gateway errors (Render while starting, Cloudflare's edge in front of it).
-const WAKE_STATUSES = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530])
+// Gateway errors (Render while starting, Cloudflare's edge in front of it),
+// including the edge's 429 while the server starts. Only non-JSON answers count:
+// our backend always answers in JSON, so its own 429 (sign-in lockout) or 502
+// is a real answer, never retried.
+const WAKE_STATUSES = new Set([429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530])
 
 let healthUrl = '/api/health'
+// Render's own address, pinged straight from the browser to wake it (see pokeBackend).
+let directWakeUrl = 'https://autofill-blgf.onrender.com/health'
+let lastPoke = 0
 let status = 'ok'                           // 'ok' | 'waking'
 let wakingSince = null
 let poller = null                           // Promise while polling /health
 const listeners = new Set()
 
-export function configureServerWake({ baseURL }) {
+export function configureServerWake({ baseURL, wakeUrl } = {}) {
   healthUrl = `${(baseURL || '/api').replace(/\/$/, '')}/health`
+  if (wakeUrl !== undefined) directWakeUrl = wakeUrl
+}
+
+// Wake Render straight from the user's browser. Requests through the /api proxy
+// come from Cloudflare's shared servers, and Render's edge can turn those away
+// with a 429 without ever starting the backend (the backend logs stay empty and
+// only a redeploy woke it). A plain request from the user's own connection
+// starts it. Fire-and-forget: no cookie, no data, the answer isn't read
+// (no-cors), at most every 30s. Skipped in the Vite dev server (local backend).
+function pokeBackend() {
+  if (!directWakeUrl || Date.now() - lastPoke < DIRECT_WAKE_EVERY_MS) return
+  if (import.meta.env?.DEV) return
+  lastPoke = Date.now()
+  fetch(directWakeUrl, { mode: 'no-cors', credentials: 'omit', cache: 'no-store' }).catch(() => {})
 }
 
 export function getServerStatus() {
@@ -73,7 +95,7 @@ export function isServerUnavailable(err) {
   if (!res) return true // network error, timeout, or a gateway page without CORS headers
   if (header(res, 'x-server-waking') || res.data?.code === 'server_waking') return true
   if (!WAKE_STATUSES.has(res.status)) return false
-  // Our backend always answers in JSON; a JSON 502/503 is a real answer.
+  // Our backend always answers in JSON; a JSON 429/502/503 is a real answer.
   return !String(header(res, 'content-type') || '').includes('application/json')
 }
 
@@ -92,17 +114,25 @@ async function healthOk(timeoutMs) {
   }
 }
 
-// Resolves once /health answers. One shared poller, however many requests wait.
+// Resolves true once /health answers, or false after POLL_GIVE_UP_MS (then
+// the waiting requests fail with "couldn't reach the server", and the next
+// user action starts a fresh wait). One shared poller, however many requests
+// wait, with growing pauses — an open tab never polls forever.
 export function waitForServer() {
   if (!poller) {
     setStatus('waking')
     poller = (async () => {
-      for (;;) {
-        if (await healthOk(HEALTH_ATTEMPT_MS)) break
-        await sleep(POLL_GAP_MS)
+      const start = Date.now()
+      let up = false
+      for (let i = 0; ; i++) {
+        pokeBackend()
+        if (await healthOk(HEALTH_ATTEMPT_MS)) { up = true; break }
+        if (Date.now() - start >= POLL_GIVE_UP_MS) break
+        await sleep(POLL_GAPS_MS[Math.min(i, POLL_GAPS_MS.length - 1)])
       }
       setStatus('ok')
       poller = null
+      return up
     })()
   }
   return poller
@@ -113,7 +143,7 @@ export async function waitForServerUpTo(ms) {
   if (ms <= 0) return false
   let timer
   const up = await Promise.race([
-    waitForServer().then(() => true),
+    waitForServer(),
     new Promise((resolve) => { timer = setTimeout(() => resolve(false), ms) }),
   ])
   clearTimeout(timer)
