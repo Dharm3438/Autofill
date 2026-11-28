@@ -1,16 +1,29 @@
 from bson import ObjectId
-from fastapi import Cookie, HTTPException, status
+from fastapi import Header, HTTPException, status
 from .security import decode_token
 from .database import get_db
 
 
-async def get_current_user(access_token: str = Cookie(default=None)):
+def bearer_token(authorization: str | None) -> str | None:
+    """The token from an "Authorization: Bearer <token>" header, or None."""
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+async def get_current_user(authorization: str | None = Header(default=None)):
     """
-    Resolve the logged-in user from the JWT cookie. The user (and therefore
-    their roles) is re-read from the database on every request, so role changes
-    and deactivation take effect immediately — nothing is trusted from the token
-    beyond the user id and its session version.
+    Resolve the logged-in user from the JWT in the Authorization header (the
+    frontend keeps the token from login and sends it on every request; no
+    cookies, so it works in Safari / incognito where cross-site cookies are
+    dropped). The user (and therefore their roles) is re-read from the database
+    on every request, so role changes and deactivation take effect immediately —
+    nothing is trusted from the token beyond the user id and its session version.
     """
+    access_token = bearer_token(authorization)
     if not access_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 

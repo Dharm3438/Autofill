@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Loader2, WifiOff, RefreshCw } from 'lucide-react'
-import toast from 'react-hot-toast'
-import { getServerStatus, subscribeServerStatus } from '../api/serverWake'
+import { getSlowState, subscribeSlowRequests } from '../api/slowRequests'
 
-function useServerStatus() {
-  const [state, setState] = useState(getServerStatus)
-  useEffect(() => subscribeServerStatus(setState), [])
+function useSlowRequests() {
+  const [state, setState] = useState(getSlowState)
+  useEffect(() => subscribeSlowRequests(setState), [])
   return state
 }
 
@@ -36,33 +35,20 @@ function useElapsed(since) {
 
 const clock = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
-// Shown on every page while the backend is asleep / starting up. Whatever the
-// user just did is on hold and continues by itself once the server answers.
+// Shown while a request has been waiting more than a few seconds — usually
+// Render's free plan starting the backend after an idle spell. Render holds
+// the request and answers it once the server is up; nothing is re-sent.
 export function ServerStatusBanner() {
-  const { status, since } = useServerStatus()
+  const { slow, since } = useSlowRequests()
   const online = useOnline()
-  const elapsed = useElapsed(status === 'waking' ? since : null)
-  const shownLong = useRef(false)
+  const elapsed = useElapsed(slow ? since : null)
 
-  useEffect(() => {
-    if (status === 'waking') {
-      shownLong.current = false
-      const id = setTimeout(() => { shownLong.current = true }, 3000)
-      return () => clearTimeout(id)
-    }
-    if (shownLong.current) toast.success('Connected to the server', { id: 'server-connected' })
-    shownLong.current = false
-    return undefined
-  }, [status])
+  if (!slow) return null
 
-  if (status !== 'waking') return null
-
-  const title = online ? 'Connecting to the server…' : 'You appear to be offline'
+  const title = online ? 'Waiting for the server…' : 'You appear to be offline'
   const detail = !online
-    ? "Waiting for your internet connection. We'll carry on as soon as it's back."
-    : elapsed < 150
-      ? "The server was idle and is starting up — this can take up to 3 minutes. Please keep this page open; what you were doing will continue automatically."
-      : 'This is taking longer than usual. Still trying — please keep this page open.'
+    ? 'Please check your internet connection.'
+    : 'If the server was idle it is starting up — this can take a minute or two. Please keep this page open.'
 
   return (
     <div role="status" aria-live="polite"
@@ -82,8 +68,8 @@ export function ServerStatusBanner() {
   )
 }
 
-// Full-page fallback when the session couldn't even be checked after waiting
-// several minutes. This is not a sign-out: "Try again" re-checks the session.
+// Full-page fallback when the session couldn't be checked (no answer, or a
+// server error). This is not a sign-out: "Try again" re-checks the session.
 export function ServerUnreachable({ onRetry }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-[#0e1512] px-4">
@@ -91,8 +77,7 @@ export function ServerUnreachable({ onRetry }) {
         <WifiOff className="w-10 h-10 mx-auto text-gray-400 dark:text-gray-500" />
         <h1 className="mt-4 text-lg font-bold text-gray-900 dark:text-gray-100">Can&apos;t reach the server</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          We waited several minutes but the server didn&apos;t answer. Please check your internet connection
-          and try again.
+          The server didn&apos;t answer. Please check your internet connection and try again.
         </p>
         <button type="button" onClick={onRetry}
           className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1a3a2a] text-white text-sm font-semibold hover:bg-[#2d5a3d] transition-colors">

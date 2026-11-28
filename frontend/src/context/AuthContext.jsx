@@ -1,13 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { getMe } from '../api/auth'
+import { getToken } from '../api/token'
 import { hasPerm } from '../utils/access'
 
 const AuthContext = createContext(null)
 
-// Only a 401 means "not signed in". Anything else (server asleep for longer
-// than the app waits, a 500, …) says nothing about the session, so the user is
-// NOT treated as signed out — that used to bounce people with a valid login to
-// the login screen whenever the backend was waking up.
+// Only a 401 means "not signed in". Anything else (no answer, a 500, …) says
+// nothing about the session, so the user is NOT treated as signed out — that
+// used to bounce people with a valid login to the login screen.
 const isSignedOut = (err) => err?.response?.status === 401
 
 export function AuthProvider({ children }) {
@@ -20,6 +20,13 @@ export function AuthProvider({ children }) {
   const [unreachable, setUnreachable] = useState(false)
 
   const loadUser = useCallback(async () => {
+    // No token = signed out. Don't ask the server: if it's asleep, the login
+    // page would otherwise wait for it to start just to learn that.
+    if (!getToken()) {
+      setUser(null)
+      setUnreachable(false)
+      return null
+    }
     try {
       const res = await getMe()
       setUser(res.data.data)

@@ -73,9 +73,17 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - `auth_attempts` (TTL-indexed) holds rate-limit counters (`core/rate_limit.py`): 20 failed
   logins per account / 15 min (no per-IP login limit — shared IPs locked everyone out), 5 code emails per address / hour, 20 per IP.
   A 429 says the real time left ("Please wait 7 minutes") and sends `Retry-After`.
-  Client IP: the Pages Function sets X-Forwarded-For to the visitor's IP and Render's side appends
-  3 entries, so the client is `TRUSTED_PROXY_HOPS` (default 3) entries from the right. Failed logins
-  log `ip=`/`xff=` plus `auth login failed: wrong password` / `no account with that email|username`.
+  Client IP: the browser calls Render directly and Render's side appends 2 X-Forwarded-For entries
+  (its Cloudflare edge, its load balancer), so the client is `TRUSTED_PROXY_HOPS` (default 2, env
+  override) entries from the right. Failed logins log `ip=`/`xff=` plus `auth login failed: wrong password` / `no account with that email|username`.
+- **Sign-in is a Bearer token, not a cookie.** Login, `register/verify` and `change-password`
+  return `access_token` in the response body; the frontend keeps it in `localStorage`
+  (`api/token.js`) and `api/client.js` sends `Authorization: Bearer <token>` on every request
+  (and saves any `access_token` in a response). `core/deps.get_current_user` reads only that
+  header. No cookies: the frontend (Cloudflare Pages) and the API (Render) are different sites,
+  and Safari / incognito / Brave drop cross-site cookies, which caused a login loop. Logout just
+  forgets the token on this device; "log out everywhere" bumps `token_version`. A 401 clears the
+  stored token. Without a stored token the app doesn't call `/auth/me` at all.
 - Bumping `token_version` signs out every device (password reset/change, "log out everywhere").
   `get_current_user` rejects tokens whose `ver` doesn't match.
 - bcrypt always runs off the event loop (`hash_password_async` / `verify_password_async`), and
@@ -97,40 +105,19 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
 - Every endpoint uses `Depends(require(P.SOMETHING))`. `backend/tests/test_permissions.py` fails if any `/api` route lacks one (except the public allowlist). Run: `python -m unittest discover -s tests` from `backend/`.
 - Customer visibility is enforced in the Mongo query via `customer_scope()`; out-of-scope ids return 404. Responses are trimmed per role (`customer_to_out`).
 - Frontend reads `permissions` from `/auth/me` (`utils/access.js`) only to show/hide UI. Pending users get a standalone `/welcome` page with no Layout/Navbar.
-- **The browser only talks to the frontend's own domain.** The frontend is on Cloudflare
-  Pages; the Pages Function `frontend/functions/api/[[path]].js` forwards `/api/*` to Render
-  (`https://autofill-blgf.onrender.com`, or the `BACKEND_URL` Pages variable) and
-  `public/_routes.json` limits functions to `/api/*`. While Render's free plan wakes the backend
-  (non-JSON 429/502/503/504/52x/530 or a failed fetch) the function retries for up to 180s, re-sending
-  bodies up to 10 MB; our app's own JSON 5xx answers are never retried. If it gives up it answers
-  503 JSON `{code: "server_waking"}` + header `x-server-waking`. Render's health check calls `/health`, and `api/client.js` always uses
-  `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
-  cookies, which caused a login loop. Never point the app at the Render domain again; if the
-  backend URL changes, set `BACKEND_URL` in the Pages project (or update the default in the function). (The public signing page `frontend/public/signing.html`
-  uses tokens, not cookies, and still calls Render directly.)
-- **A sleeping backend must never look like an error or a sign-out.** `api/serverWake.js` +
-  `api/client.js`: a request that gets no answer / a gateway page / the proxy's `server_waking`
-  is re-sent once `/api/health` answers (up to 5 min), with a "Connecting to the server…" banner
-  (`components/ServerStatus.jsx`); a slow request (3s) triggers a quick health check so the banner
-  shows during long waits; requests made while waking wait. Only a 401 from `/auth/me` signs
-  someone out (`AuthContext`); after 5 min of no server, protected pages show a "Try again"
-  screen. The signing page has its own `apiFetch` doing the same. Never add a code path that
-  treats "no response" as "signed out" or "wrong password".
-- **Render won't wake for the proxy.** Asleep, Render's edge answers requests from the Pages
-  Function (Cloudflare's shared servers) with a bare 429 and never starts the backend (empty
-  backend logs; only a redeploy or opening `…onrender.com/health` in a browser woke it). So
-  while waking, `serverWake.js` also pings `https://autofill-blgf.onrender.com/health` straight
-  from the user's browser (`no-cors`, no cookie, ≤ every 30s) — the one allowed direct call to
-  the Render domain; keep it (and update its URL if the backend moves). The /health poller backs
-  off (3→30s) and stops after 5 min, so an open tab never hammers the free Functions quota
-  (100k/day; over it Cloudflare answers 429 "error 1027").
-- **Idempotency-Key** (`core/idempotency.py`, tests `tests/test_idempotency.py`): every
-  POST/PUT/PATCH/DELETE from the app carries one (same key on every retry of one action). The
-  first copy runs and its response is stored (encrypted, 15 min, collection `idempotency`);
-  copies replay it — so retries never double-run a write or double-count a wrong password. A
-  record left "running" by a dead process is taken over. Binary/streamed responses are GETs and
-  untouched. Moving to our own domain: see the "move to our own domain" plan doc.
-- CSRF: the auth cookie is `SameSite=None`, so `main.py` rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in `settings.allowed_origins`. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its writes will 403.
+- **The browser calls the backend on Render directly** (`VITE_API_URL`, required for production
+  builds — `vite.config.js` fails the build without it; in dev it's unset and Vite proxies `/api`).
+  There is no proxy: an earlier Cloudflare Pages Function proxy broke waking — Render's edge
+  answered requests from Cloudflare's servers with a bare 429 and never started the sleeping
+  backend. Render's free plan sleeps after ~15 idle minutes; a direct request from a browser is
+  held by Render while it starts and then answered, so nothing is retried or re-sent (and writes
+  carry no Idempotency-Key). A request pending over 5s shows a "Waiting for the server…" banner
+  (`api/slowRequests.js`, `components/ServerStatus.jsx`); the signing page shows a similar notice.
+  Render's health check calls `/health`.
+- Only a 401 from `/auth/me` signs someone out (`AuthContext`); any other failure shows a "Can't
+  reach the server — Try again" screen. Never add a code path that treats "no response" as
+  "signed out" or "wrong password".
+- CORS + cross-site guard: the API answers only `settings.allowed_origins` (CORS, no credentials), and `main.py` also rejects POST/PUT/PATCH/DELETE whose `Origin` isn't in that list. Add any new frontend domain to `FRONTEND_URL`/`allowed_origins` or its requests will fail.
 - User search text is `re.escape`d before Mongo `$regex`.
 
 ### CatalogItem (`catalog_items` — admin-managed customer-form dropdowns)
@@ -260,7 +247,7 @@ plain numbers (`3.3` — the templates carry the unit text), guarantees `10 YEAR
 ## Key Conventions
 
 - All API responses follow `{ success: bool, data: ..., message: str }` format
-- JWT tokens stored in httpOnly first-party cookies (not localStorage), via the `/api` proxy
+- JWT sent as `Authorization: Bearer` from `localStorage` (no cookies — see Authentication)
 - Generated docs folder: `generated_docs/{mongo_id}_{sanitized_consumer_name}/`
 - Signing links: `/sign/{unique_token}` — token expires in 72 hours
 - OTP / account codes: 6-digit, valid for 10 minutes
@@ -285,7 +272,11 @@ BASE_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:5173
 ```
 
-Frontend: no env vars needed (`VITE_API_URL` is no longer read — `/api` is proxied).
+Frontend (Cloudflare Pages project settings, Production + Preview; build fails without it):
+```
+VITE_API_URL=https://autofill-blgf.onrender.com
+```
+Leave it unset locally: `npm run dev` proxies `/api` to the local backend.
 
 ---
 
@@ -299,4 +290,4 @@ Frontend: no env vars needed (`VITE_API_URL` is no longer read — `/api` is pro
 - Generated files stored in Cloudflare R2 (S3-compatible). Never commit customer data.
 - Templates in `DOCS/` are committed to the repo (no customer data in them).
 - MongoDB Atlas free tier (M0) supports up to 512 MB — sufficient for metadata. Files stored in R2, not MongoDB.
-- Deployment: Frontend → Cloudflare Pages (+ one Pages Function for `/api`), Backend → Render web service, DB → MongoDB Atlas.
+- Deployment: Frontend → Cloudflare Pages (static, no Functions), Backend → Render web service, DB → MongoDB Atlas.
