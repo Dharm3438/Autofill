@@ -1,7 +1,7 @@
 import base64
 import io
 import asyncio
-from PIL import Image
+from PIL import Image, ImageOps
 import random
 import string
 from datetime import datetime, timedelta, timezone
@@ -369,11 +369,19 @@ def _compress_signature(raw: bytes, max_bytes: int = 5 * 1024 * 1024) -> bytes:
     return out.getvalue()
 
 
+# Aadhaar photos are printed 2.8 inches wide in the Aadhaar declaration, so
+# 1000 px on the long side is still ~350 dpi there, at about a third of the
+# bytes of the old 1200 px / quality 85 (smaller uploads, PDFs and zips).
+AADHAAR_PHOTO_MAX_PX = 1000
+AADHAAR_PHOTO_QUALITY = 75
+
+
 def _compress_photo(raw: bytes, max_bytes: int = 5 * 1024 * 1024) -> bytes:
-    """Resize photo to max 1200×1600 px and re-encode as JPEG, reducing quality until under max_bytes."""
-    img = Image.open(io.BytesIO(raw)).convert("RGB")
-    img.thumbnail((1200, 1600), Image.LANCZOS)
-    quality = 85
+    """Resize photo to at most AADHAAR_PHOTO_MAX_PX on its long side and
+    re-encode as JPEG, reducing quality until under max_bytes."""
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
+    img.thumbnail((AADHAAR_PHOTO_MAX_PX, AADHAAR_PHOTO_MAX_PX), Image.LANCZOS)
+    quality = AADHAAR_PHOTO_QUALITY
     while quality >= 50:
         out = io.BytesIO()
         img.save(out, format="JPEG", quality=quality, optimize=True)

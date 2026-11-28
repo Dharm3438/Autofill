@@ -13,7 +13,7 @@ regeneration (which wipes generated PDFs) never deletes them.
 """
 import io
 import asyncio
-from PIL import Image
+from PIL import Image, ImageOps
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from fastapi.responses import StreamingResponse
 from bson import ObjectId
@@ -56,16 +56,28 @@ async def _read_limited(file: UploadFile) -> bytes:
     return data
 
 
+# The installation photo is shown on screen and printed at most page-size, so a
+# full phone photo (4000 px, ~1.2 MB as a PDF) only costs bandwidth and storage
+# every time it is saved, previewed or zipped. 1600 px is plenty for A4.
+INSTALLATION_PHOTO_MAX_PX = 1600
+INSTALLATION_PHOTO_QUALITY = 80
+
+
 def _image_to_pdf(raw: bytes) -> bytes:
-    """Convert a single image to a one-page PDF."""
+    """Convert a single image to a one-page PDF, shrunk to at most
+    INSTALLATION_PHOTO_MAX_PX on its long side."""
     try:
         img = Image.open(io.BytesIO(raw))
+        # Phones store the camera's rotation as an EXIF tag; apply it so the
+        # photo isn't sideways once the tag is dropped by re-encoding.
+        img = ImageOps.exif_transpose(img)
     except Exception:
         raise HTTPException(status_code=400, detail="Could not read image. Upload a valid JPG/PNG.")
-    if img.mode in ("RGBA", "LA", "P"):
+    if img.mode != "RGB":
         img = img.convert("RGB")
+    img.thumbnail((INSTALLATION_PHOTO_MAX_PX, INSTALLATION_PHOTO_MAX_PX), Image.LANCZOS)
     out = io.BytesIO()
-    img.save(out, format="PDF")
+    img.save(out, format="PDF", quality=INSTALLATION_PHOTO_QUALITY)
     return out.getvalue()
 
 
