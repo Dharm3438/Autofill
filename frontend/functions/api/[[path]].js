@@ -27,11 +27,15 @@ const MAX_RETRY_BODY_BYTES = 10 * 1024 * 1024
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 // Gateway errors that mean "the backend isn't answering yet": Render's own
-// 502/503/504 while it starts, and Cloudflare's 52x/530 from the edge in front
-// of Render (e.g. 524 when Render held the request for 100s, 522/523 when it
-// couldn't connect). Our app always answers in JSON, so a JSON 5xx (e.g. 502
-// "couldn't send the email") is a real answer and is never retried.
-const WAKE_UP_STATUSES = new Set([502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530])
+// 502/503/504 while it starts, Cloudflare's 52x/530 from the edge in front of
+// Render (e.g. 524 when Render held the request for 100s, 522/523 when it
+// couldn't connect), and 429 from that edge (it rate-limits requests to a
+// service that's starting up — this was the "Too many attempts" people saw on
+// the first sign-in after a quiet spell). Our app always answers in JSON, so a
+// JSON 5xx or 429 (e.g. our own sign-in lockout) is a real answer and is never
+// retried.
+const WAKE_UP_STATUSES = new Set([429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530])
+const MAX_RETRY_AFTER_MS = 15_000
 
 function isWakeUpError(response) {
   if (!WAKE_UP_STATUSES.has(response.status)) return false
@@ -74,15 +78,21 @@ export async function onRequest({ request, env }) {
     try {
       response = await fetch(target, { method: request.method, headers, body, redirect: 'manual' })
       if (!isWakeUpError(response)) break
-      failure = `backend answered ${response.status}`
+      // Which edge answered: Render's routing header / Cloudflare's ray id.
+      const via = ['x-render-routing', 'server', 'cf-ray']
+        .map((h) => response.headers.get(h) && `${h}=${response.headers.get(h)}`).filter(Boolean).join(' ')
+      failure = `backend answered ${response.status}${via ? ` (${via})` : ''}`
     } catch (err) {
       response = undefined
       failure = `fetch failed: ${err}`
     }
     // Visible in Cloudflare: Pages project > Functions > Real-time logs.
     console.error(`api proxy: ${request.method} ${incoming.pathname} attempt ${attempt} -> ${failure}`)
-    if (!canRetry || Date.now() + wait > deadline) break
-    await sleep(wait)
+    // Honour the edge's Retry-After (seconds) when it gives one, within reason.
+    const retryAfter = Number(response?.headers.get('retry-after'))
+    const pause = retryAfter > 0 ? Math.min(Math.max(retryAfter * 1000, wait), MAX_RETRY_AFTER_MS) : wait
+    if (!canRetry || Date.now() + pause > deadline) break
+    await sleep(pause)
     wait = Math.min(wait * 1.5, 10_000)
   }
 

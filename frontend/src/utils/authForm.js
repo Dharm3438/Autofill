@@ -19,7 +19,10 @@ export function apiError(err, fallback = 'Something went wrong') {
   if (status >= 500) {
     return `The server didn't respond properly (error ${status}). It may be starting up — please try again in a minute.`
   }
-  if (status === 429) return 'Too many attempts. Please wait a few minutes and try again.'
+  // Our own limits (e.g. sign-in lockout) always send a sentence in `detail`,
+  // handled above. A bare 429 comes from the hosting edge, not from too many
+  // wrong passwords — so don't say "too many attempts".
+  if (status === 429) return 'The server is busy right now. Please try again in a minute.'
   return `${fallback} (error ${status})`
 }
 

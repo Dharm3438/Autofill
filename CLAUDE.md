@@ -101,7 +101,7 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
   Pages; the Pages Function `frontend/functions/api/[[path]].js` forwards `/api/*` to Render
   (`https://autofill-blgf.onrender.com`, or the `BACKEND_URL` Pages variable) and
   `public/_routes.json` limits functions to `/api/*`. While Render's free plan wakes the backend
-  (non-JSON 502/503/504/52x/530 or a failed fetch) the function retries for up to 180s, re-sending
+  (non-JSON 429/502/503/504/52x/530 or a failed fetch) the function retries for up to 180s, re-sending
   bodies up to 10 MB; our app's own JSON 5xx answers are never retried. If it gives up it answers
   503 JSON `{code: "server_waking"}` + header `x-server-waking`. Render's health check calls `/health`, and `api/client.js` always uses
   `/api`. That keeps the auth cookie first-party — Safari and incognito drop third-party
@@ -116,6 +116,14 @@ token_version (int; in every JWT as "ver"), password_changed_at, created_at, upd
   someone out (`AuthContext`); after 5 min of no server, protected pages show a "Try again"
   screen. The signing page has its own `apiFetch` doing the same. Never add a code path that
   treats "no response" as "signed out" or "wrong password".
+- **Render won't wake for the proxy.** Asleep, Render's edge answers requests from the Pages
+  Function (Cloudflare's shared servers) with a bare 429 and never starts the backend (empty
+  backend logs; only a redeploy or opening `…onrender.com/health` in a browser woke it). So
+  while waking, `serverWake.js` also pings `https://autofill-blgf.onrender.com/health` straight
+  from the user's browser (`no-cors`, no cookie, ≤ every 30s) — the one allowed direct call to
+  the Render domain; keep it (and update its URL if the backend moves). The /health poller backs
+  off (3→30s) and stops after 5 min, so an open tab never hammers the free Functions quota
+  (100k/day; over it Cloudflare answers 429 "error 1027").
 - **Idempotency-Key** (`core/idempotency.py`, tests `tests/test_idempotency.py`): every
   POST/PUT/PATCH/DELETE from the app carries one (same key on every retry of one action). The
   first copy runs and its response is stored (encrypted, 15 min, collection `idempotency`);

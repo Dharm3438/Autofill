@@ -1547,7 +1547,7 @@
   // response, or a gateway error page — our API always answers in JSON) for up
   // to 5 minutes, with a small "Connecting…" notice. POSTs carry an
   // Idempotency-Key so a retried submit / OTP check runs only once.
-  const WAKE_STATUSES = [502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530];
+  const WAKE_STATUSES = [429, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530];
   const WAKE_MAX_MS = 5 * 60 * 1000;
   let connectingTimer = null;
 
