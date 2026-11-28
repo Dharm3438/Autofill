@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .core import rate_limit
+from .core.compression import JSONGZipMiddleware
 from .core.config import settings
 from .core.database import connect_db, close_db
 from .routers import auth, catalog, customers, documents, signing, uploads, installations, inventory, users
@@ -39,6 +40,10 @@ async def reject_cross_site_writes(request: Request, call_next):
         return JSONResponse(status_code=403, content={"detail": "Cross-site request blocked"})
     return await call_next(request)
 
+# Render bills every byte sent out: gzip JSON answers (5-10x smaller), but leave
+# PDFs and zips alone — they're already compressed.
+app.add_middleware(JSONGZipMiddleware, minimum_size=1000)
+
 # Added last = outermost layer, so every answer carries CORS headers — including
 # the cross-site guard's 403. The app and the signing page call this API from the
 # frontend's domain, so without them those answers would look like a network error.
@@ -50,6 +55,10 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Every API call carries the Authorization header, so the browser first
+    # sends a CORS check (OPTIONS). Let it reuse the answer for 2 hours — the
+    # most Chrome allows — instead of Starlette's default 10 minutes.
+    max_age=7200,
 )
 
 # Plain-language wording for the common validation failures.

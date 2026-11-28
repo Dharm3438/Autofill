@@ -12,7 +12,9 @@ export default function DashboardPage() {
   const [steps, setSteps] = useState([])
 
   useEffect(() => {
-    getInstallationOverview()
+    // Only the summary counts and step list are used here. The summary covers
+    // every customer whatever the page size, so ask for one row, not 20.
+    getInstallationOverview({ limit: 1 })
       .then((res) => {
         setSummary(res.data.summary)
         setSteps(res.data.steps)

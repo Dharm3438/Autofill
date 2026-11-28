@@ -288,6 +288,12 @@ Leave it unset locally: `npm run dev` proxies `/api` to the local backend.
   converts old free-text values to the typed format.
 - PDF conversion uses LibreOffice headless (`libreoffice --headless --convert-to pdf`) — works on Windows and Linux.
 - Generated files stored in Cloudflare R2 (S3-compatible). Never commit customer data.
+- Render's free plan includes 5 GB/month of outbound bandwidth for the whole workspace (answers
+  to browsers + data the server pushes to R2/MongoDB/Brevo; incoming data is free). Keep bytes off
+  Render: `core/compression.py` gzips JSON/text answers only (PDFs and zips pass through), the CORS
+  check is cached 2 h (`max_age=7200`), the installation photo is stored at ≤1600 px and Aadhaar
+  photos at ≤1000 px. `R2_PRESIGNED_REVIEW=true` (after `python scripts/configure_r2_cors.py`) makes
+  the signing page load documents straight from R2. Tests: `backend/tests/test_bandwidth.py`.
 - Templates in `DOCS/` are committed to the repo (no customer data in them).
 - MongoDB Atlas free tier (M0) supports up to 512 MB — sufficient for metadata. Files stored in R2, not MongoDB.
 - Deployment: Frontend → Cloudflare Pages (static, no Functions), Backend → Render web service, DB → MongoDB Atlas.
