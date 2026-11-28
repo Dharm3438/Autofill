@@ -99,9 +99,20 @@ def _delete_keys(keys: list[str]):
         )
 
 
-def presigned_url(key: str, expires_seconds: int = 3600) -> str:
-    return _client().generate_presigned_url(
-        "get_object",
-        Params={"Bucket": settings.R2_BUCKET_NAME, "Key": key},
-        ExpiresIn=expires_seconds,
-    )
+def presigned_url(key: str, expires_seconds: int = 3600, *,
+                  filename: str | None = None, content_type: str | None = None) -> str:
+    """A link that lets a browser GET this object straight from R2 until it
+    expires. R2 downloads are free, so files fetched this way cost no Render
+    bandwidth. Signing is local (no request to R2).
+
+    `filename` / `content_type` make R2 answer with those headers, so a link
+    opened in a new tab shows the PDF inline under a readable name.
+    """
+    params = {"Bucket": settings.R2_BUCKET_NAME, "Key": key}
+    if content_type:
+        params["ResponseContentType"] = content_type
+    if filename:
+        # Header values must be ASCII; keep the name readable without quotes.
+        safe = filename.encode("ascii", "ignore").decode("ascii").replace('"', "").strip() or "document"
+        params["ResponseContentDisposition"] = f'inline; filename="{safe}"'
+    return _client().generate_presigned_url("get_object", Params=params, ExpiresIn=expires_seconds)

@@ -1,7 +1,11 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { Pencil, Trash2, FileText, Send, Download, Printer, ClipboardList, ChevronDown, ChevronUp, Loader2, UploadCloud } from 'lucide-react'
 import { deleteCustomer, getCustomerDetailsSheet, updateCustomer } from '../api/customers'
-import { generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage } from '../api/documents'
+import {
+  generateDocs, getDocStatus, sendSigningLink, downloadZip, downloadNpFirstPage,
+  getBundleLinks, getNpFirstPageLink,
+} from '../api/documents'
+import { saveBlob, zipFromLinks } from '../utils/directDownload'
 import UploadsModal from './UploadsModal'
 import MissingFieldsModal from './MissingFieldsModal'
 import toast from 'react-hot-toast'
@@ -166,16 +170,20 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
     }
   }
 
+  // Files come straight from R2 (free) and are zipped here; the server-built
+  // zip is only the fallback (it costs Render bandwidth).
   async function handleDownload(customer) {
     setLoadingId(`dl-${customer.id}`)
+    const filename = `${customer.CONSUMER_NAME}_documents.zip`
     try {
-      const res = await downloadZip(customer.id)
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${customer.CONSUMER_NAME}_documents.zip`
-      a.click()
-      URL.revokeObjectURL(url)
+      try {
+        const res = await getBundleLinks(customer.id)
+        saveBlob(await zipFromLinks(res.data.data.files), filename)
+      } catch (err) {
+        console.warn('Direct download failed; using the server zip instead.', err)
+        const res = await downloadZip(customer.id)
+        saveBlob(res.data, filename)
+      }
     } catch {
       toast.error('Failed to download documents')
     } finally {
@@ -186,11 +194,16 @@ export default function CustomerTable({ customers, onEdit, onRefresh, onRowRepla
   async function handlePrintFirstPage(customer) {
     setLoadingId(`print-${customer.id}`)
     try {
-      const res = await downloadNpFirstPage(customer.id)
-      const url = URL.createObjectURL(res.data)
+      let url
+      try {
+        url = (await getNpFirstPageLink(customer.id)).data.data.url
+      } catch (err) {
+        console.warn('No direct link; using the server copy instead.', err)
+        url = URL.createObjectURL((await downloadNpFirstPage(customer.id)).data)
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+      }
       const win = window.open(url, '_blank')
       if (!win) toast.error('Allow pop-ups to open the document for printing')
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch {
       toast.error('Failed to open NP Agreement first page')
     } finally {

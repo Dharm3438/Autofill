@@ -8,6 +8,8 @@ from ..services import storage
 from bson import ObjectId
 
 from ..services.doc_generation import (
+    DOWNLOAD_LINK_SECONDS,
+    bundle_links,
     build_customer_bundle,
     zip_bundle,
     list_customer_documents,
@@ -121,6 +123,46 @@ async def download_np_first_page(customer_id: str, _=Depends(require(P.DOCUMENTS
     )
 
 
+@router.get("/download/{customer_id}/np-first-page/link")
+async def np_first_page_link(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
+    """A short-lived direct R2 link to the NP first page (opened in a new tab
+    for printing), so the PDF doesn't pass through this server."""
+    db = get_db()
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)}, {"r2_prefix": 1})
+    if not customer or not customer.get("r2_prefix"):
+        raise HTTPException(status_code=404, detail="No documents found")
+
+    objects = await asyncio.to_thread(storage.list_objects, customer["r2_prefix"])
+    target = next((o for o in objects if o["name"].endswith(_NP_FIRST_PAGE_SUFFIX)), None)
+    if not target:
+        raise HTTPException(status_code=404, detail="NP Agreement first page not found")
+
+    url = storage.presigned_url(target["key"], DOWNLOAD_LINK_SECONDS,
+                                filename=target["name"], content_type="application/pdf")
+    return {"success": True, "data": {"url": url}}
+
+
+@router.get("/download/{customer_id}/links")
+async def download_links(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
+    """
+    The customer's document bundle as short-lived direct R2 links. The browser
+    downloads them (free from R2), puts the stamped first page in front of the
+    NP Agreement where `stamp_url` is given, and zips them itself — the same
+    files `/zip` builds here, without the bytes passing through this server.
+    """
+    db = get_db()
+    customer = await db.customers.find_one({"_id": parse_object_id(customer_id)}, {"r2_prefix": 1})
+    if not customer or not customer.get("r2_prefix"):
+        raise HTTPException(status_code=404, detail="No documents found")
+
+    files = await bundle_links(customer["r2_prefix"])
+    if not files:
+        raise HTTPException(status_code=404, detail="No documents found")
+    return {"success": True, "data": {"files": files}}
+
+
+# Server-built zip. The app now downloads through /links; this stays as the
+# fallback (and for pages opened before the switch).
 @router.get("/download/{customer_id}/zip")
 async def download_zip(customer_id: str, _=Depends(require(P.DOCUMENTS_MANAGE))):
     db = get_db()

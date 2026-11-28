@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Upload, Check, Eye, Trash2, Loader2, Image, FileText, Stamp } from 'lucide-react'
-import { getUploadStatus, uploadDocument, previewUpload, deleteUpload } from '../api/uploads'
+import { getUploadStatus, uploadDocument, previewUpload, getUploadLink, deleteUpload } from '../api/uploads'
 import toast from 'react-hot-toast'
 
 const SLOTS = [
@@ -99,11 +99,17 @@ export default function UploadsModal({ customer, onClose, onChanged }) {
     const key = `${kind}:view`
     setKey(key, true)
     try {
-      const res = await previewUpload(customer.id, kind)
-      const url = URL.createObjectURL(res.data)
+      // A direct R2 link (free); the server-streamed copy is only the fallback.
+      let url
+      try {
+        url = (await getUploadLink(customer.id, kind)).data.data.url
+      } catch (err) {
+        console.warn('No direct link; using the server copy instead.', err)
+        url = URL.createObjectURL((await previewUpload(customer.id, kind)).data)
+        setTimeout(() => URL.revokeObjectURL(url), 60000)
+      }
       const win = window.open(url, '_blank')
       if (!win) toast.error('Allow pop-ups to preview the document')
-      setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch {
       toast.error('Failed to open document')
     } finally {

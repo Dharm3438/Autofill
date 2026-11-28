@@ -13,6 +13,7 @@ from ..core.database import get_db
 from ..core.permissions import P, require, parse_object_id
 from ..services import storage
 from ..services.doc_generation import (
+    NP_STAMP_UPLOAD_KEY,
     SIGNATURE_KEY,
     AADHAR_FRONT_KEY,
     AADHAR_BACK_KEY,
@@ -69,6 +70,10 @@ async def send_signing_link(customer_id: str, _=Depends(require(P.SIGNING_SEND))
 
 # ── Public: token verification (page load) ────────────────────────────────────
 
+# Review links stay valid while the customer reads (the page can sit open).
+REVIEW_LINK_SECONDS = 6 * 3600
+
+
 @router.get("/verify/{token}")
 async def verify_token(token: str):
     db = get_db()
@@ -98,14 +103,27 @@ async def verify_token(token: str):
     # document so PDF.js fetches it straight from R2 (no backend byte-streaming).
     # The URL must be fetched directly — a backend redirect would cross origins
     # and the browser strips Origin to "null", which R2's CORS won't match. The
-    # NP Agreement (merge_stamp) has no single R2 object, so it has no url and
-    # streams through /document/{token}/{key} instead.
+    # NP Agreement (merge_stamp) is the admin's stamped first page in front of
+    # the generated agreement: with a stamp it gets `parts` (both links) for the
+    # page to join in the browser, with no url — so a page from before `parts`
+    # existed still streams it, merged, through /document/{token}/{key}.
+    # Without a stamp the agreement is a single object and gets a plain url.
     documents = []
+    stamp_url = None
+    if settings.R2_PRESIGNED_REVIEW and any(d.get("merge_stamp") for d in manifest):
+        prefix = customer.get("r2_prefix") or storage.customer_prefix(submission["customer_id"])
+        stamp_key = prefix + NP_STAMP_UPLOAD_KEY
+        if await asyncio.to_thread(storage.object_exists, stamp_key):
+            stamp_url = storage.presigned_url(stamp_key, REVIEW_LINK_SECONDS)
     for d in manifest:
-        url = None
-        if settings.R2_PRESIGNED_REVIEW and not d.get("merge_stamp"):
-            url = await asyncio.to_thread(storage.presigned_url, d["r2_key"], 21600)  # 6h
-        documents.append({"key": d["key"], "name": d["label"], "url": url})
+        doc = {"key": d["key"], "name": d["label"], "url": None}
+        if settings.R2_PRESIGNED_REVIEW:
+            url = storage.presigned_url(d["r2_key"], REVIEW_LINK_SECONDS)
+            if d.get("merge_stamp") and stamp_url:
+                doc["parts"] = {"stamp_url": stamp_url, "url": url}
+            else:
+                doc["url"] = url
+        documents.append(doc)
 
     return {"success": True, "data": {
         "customer_name": customer.get("CONSUMER_NAME"),
@@ -291,8 +309,8 @@ async def submit_signing(token: str, body: SubmitBody, background_tasks: Backgro
 
 # ── Public: download finalized documents (after signing) ─────────────────────
 
-@router.get("/download/{token}")
-async def download_signed_docs(token: str):
+async def _signed_customer(token: str) -> dict:
+    """The customer behind a signed link whose documents may be downloaded now."""
     db = get_db()
     submission = await db.signing_submissions.find_one({"token": token})
     if not submission:
@@ -310,7 +328,30 @@ async def download_signed_docs(token: str):
 
     if customer.get("doc_status") == "generating":
         raise HTTPException(status_code=425, detail="Your documents are still being finalized. Please try again in a few seconds.")
+    return customer
 
+
+@router.get("/download/{token}/links")
+async def signed_docs_links(token: str):
+    """
+    The signed bundle as short-lived direct R2 links: the signing page
+    downloads them (free from R2), puts the stamped first page in front of the
+    NP Agreement where `stamp_url` is given, and zips them itself — the same
+    files `/download/{token}` zips here, without passing through this server.
+    """
+    customer = await _signed_customer(token)
+    from ..services.doc_generation import bundle_links
+    files = await bundle_links(customer["r2_prefix"])
+    if not files:
+        raise HTTPException(status_code=404, detail="No finalized documents available")
+    return {"success": True, "data": {"files": files}}
+
+
+# Server-built zip: the fallback when the page can't fetch from R2 directly,
+# and for pages opened before /links existed.
+@router.get("/download/{token}")
+async def download_signed_docs(token: str):
+    customer = await _signed_customer(token)
     from ..services.doc_generation import build_customer_bundle, zip_bundle
     bundle = await build_customer_bundle(customer["r2_prefix"])
     if not bundle:
