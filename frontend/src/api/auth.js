@@ -1,14 +1,21 @@
 import api from './client'
+import { clearToken } from './token'
 
 // `identifier` is an email or a username.
+// The token in a successful answer is saved by api/client.js.
 export const login = (identifier, password) =>
   api.post('/auth/login', { identifier, password })
 
+// Signing out = forgetting the token on this device (even if the request fails).
 export const logout = () =>
-  api.post('/auth/logout')
+  api.post('/auth/logout').finally(clearToken)
 
+// Makes every existing token stop working, this device's included.
 export const logoutAll = () =>
-  api.post('/auth/logout-all')
+  api.post('/auth/logout-all').then((res) => {
+    clearToken()
+    return res
+  })
 
 export const getMe = () =>
   api.get('/auth/me')

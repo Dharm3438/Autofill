@@ -19,7 +19,7 @@ os.environ.setdefault("JWT_SECRET", "test")
 
 import bcrypt  # noqa: E402
 from bson import ObjectId  # noqa: E402
-from fastapi import BackgroundTasks, HTTPException, Response  # noqa: E402
+from fastapi import BackgroundTasks, HTTPException  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 from pymongo.errors import DuplicateKeyError  # noqa: E402
 from starlette.requests import Request  # noqa: E402
@@ -168,11 +168,9 @@ def request(ip="203.0.113.7"):
     return Request({"type": "http", "headers": [], "client": (ip, 1234)})
 
 
-def cookie_token(response: Response) -> str | None:
-    for header in response.headers.getlist("set-cookie"):
-        if header.startswith("access_token=") and not header.startswith('access_token="";'):
-            return header.split(";", 1)[0].split("=", 1)[1]
-    return None
+def current_user(token):
+    """What an "Authorization: Bearer <token>" request resolves to."""
+    return run(deps.get_current_user(authorization=f"Bearer {token}"))
 
 
 class AuthTestBase(unittest.TestCase):
@@ -209,9 +207,7 @@ class AuthTestBase(unittest.TestCase):
             M.RegisterStart(email=email, username=username, password=password, name=name), request()))
 
     def login(self, identifier, password, ip="203.0.113.7"):
-        resp = Response()
-        res = run(auth.login(M.UserLogin(identifier=identifier, password=password), request(ip), resp))
-        return res, resp
+        return run(auth.login(M.UserLogin(identifier=identifier, password=password), request(ip)))
 
 
 # ── Models ────────────────────────────────────────────────────────────────────
@@ -259,14 +255,13 @@ class SignupTest(AuthTestBase):
         self.assertNotIn(code, str(pending))  # only a hash is stored
         self.assertNotIn("Sunny-roof-42", str(pending))
 
-        resp = Response()
-        out = run(auth.register_verify(M.RegisterVerify(email="ASHA@example.com", code=code), resp))
+        out = run(auth.register_verify(M.RegisterVerify(email="ASHA@example.com", code=code)))
         user = self.db.users.docs[0]
         self.assertEqual((user["email"], user["username"], user["name"]), ("asha@example.com", "asha.k", "Asha K"))
         self.assertTrue(user["email_verified"])
         self.assertEqual(user["roles"], [])
         self.assertEqual(out["data"]["username"], "asha.k")
-        self.assertIsNotNone(cookie_token(resp))
+        self.assertEqual(current_user(out["access_token"])["_id"], user["_id"])  # signed in
         self.assertEqual(self.db.auth_codes.docs, [])  # code is single-use
 
     def test_wrong_code_rejected_and_limited(self):
@@ -275,14 +270,14 @@ class SignupTest(AuthTestBase):
         wrong = "000000" if code != "000000" else "111111"
         for left in (4, 3, 2, 1):
             with self.assertRaises(HTTPException) as e:
-                run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=wrong), Response()))
+                run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=wrong)))
             self.assertIn(f"{left} attempt", e.exception.detail)
         with self.assertRaises(HTTPException) as e:
-            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=wrong), Response()))
+            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=wrong)))
         self.assertIn("Too many wrong codes", e.exception.detail)
         # Even the right code no longer works; a new one must be requested.
         with self.assertRaises(HTTPException):
-            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code), Response()))
+            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code)))
         self.assertEqual(self.db.users.docs, [])
 
     def test_expired_code_rejected(self):
@@ -290,7 +285,7 @@ class SignupTest(AuthTestBase):
         code = self.last_code("send_signup_code")
         self.db.auth_codes.docs[0]["code_expires_at"] = datetime.now(timezone.utc) - timedelta(seconds=1)
         with self.assertRaises(HTTPException) as e:
-            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code), Response()))
+            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code)))
         self.assertIn("expired", e.exception.detail)
 
     def test_resend_has_cooldown_and_new_code_replaces_old(self):
@@ -305,8 +300,8 @@ class SignupTest(AuthTestBase):
         self.assertEqual(len(self.db.auth_codes.docs), 1)
         if first != second:
             with self.assertRaises(HTTPException):
-                run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=first), Response()))
-        run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=second), Response()))
+                run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=first)))
+        run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=second)))
         self.assertEqual(len(self.db.users.docs), 1)
 
     def test_existing_email_or_username_rejected(self):
@@ -334,7 +329,7 @@ class SignupTest(AuthTestBase):
         code = self.last_code("send_signup_code")
         self.add_user(email="fast@example.com", username="asha.k")
         with self.assertRaises(HTTPException) as e:
-            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code), Response()))
+            run(auth.register_verify(M.RegisterVerify(email="asha@example.com", code=code)))
         self.assertEqual(e.exception.status_code, 409)
 
 
@@ -344,9 +339,10 @@ class LoginTest(AuthTestBase):
     def test_login_by_username_or_any_case_email(self):
         self.add_user()
         for ident in ("ravi", "RAVI", "Ravi@Example.com"):
-            res, resp = self.login(ident, "Correct-horse-1")
+            res = self.login(ident, "Correct-horse-1")
             self.assertEqual(res["data"]["username"], "ravi")
-            self.assertIsNotNone(cookie_token(resp))
+            self.assertEqual(current_user(res["access_token"])["username"], "ravi")
+            self.assertNotIn("access_token", res["data"])  # the token isn't part of the user
 
     def test_wrong_password_and_unknown_user_same_message(self):
         self.add_user()
@@ -423,10 +419,10 @@ class SessionTest(AuthTestBase):
     def test_token_version_revokes_old_sessions(self):
         u = self.add_user()
         token = create_access_token(u)
-        self.assertEqual(run(deps.get_current_user(access_token=token))["_id"], u["_id"])
-        run(auth.logout_all(Response(), current_user=u))
+        self.assertEqual(current_user(token)["_id"], u["_id"])
+        run(auth.logout_all(current_user=u))
         with self.assertRaises(HTTPException) as e:
-            run(deps.get_current_user(access_token=token))
+            current_user(token)
         self.assertEqual(e.exception.status_code, 401)
 
     def test_tokens_from_before_versioning_still_work(self):
@@ -436,12 +432,24 @@ class SessionTest(AuthTestBase):
         del u_doc["token_version"]
         legacy = jwt.encode({"sub": str(u["_id"]), "exp": datetime.now(timezone.utc) + timedelta(hours=1)},
                             settings.JWT_SECRET, algorithm="HS256")
-        self.assertEqual(run(deps.get_current_user(access_token=legacy))["_id"], u["_id"])
+        self.assertEqual(current_user(legacy)["_id"], u["_id"])
 
-    def test_cookie_lifetime_follows_setting(self):
+    def test_token_lifetime_follows_setting(self):
+        from jose import jwt
         self.add_user()
-        _, resp = self.login("ravi", "Correct-horse-1")
-        self.assertIn(f"Max-Age={settings.JWT_EXPIRE_HOURS * 3600}", resp.headers["set-cookie"])
+        token = self.login("ravi", "Correct-horse-1")["access_token"]
+        exp = jwt.get_unverified_claims(token)["exp"]
+        hours = (exp - datetime.now(timezone.utc).timestamp()) / 3600
+        self.assertAlmostEqual(hours, settings.JWT_EXPIRE_HOURS, delta=0.1)
+
+    def test_only_a_bearer_header_signs_in(self):
+        u = self.add_user()
+        token = create_access_token(u)
+        self.assertEqual(run(deps.get_current_user(authorization=f"bearer  {token} "))["_id"], u["_id"])
+        for header in (None, "", "Bearer", "Bearer ", token, f"Basic {token}", "Bearer not-a-jwt"):
+            with self.assertRaises(HTTPException) as e:
+                run(deps.get_current_user(authorization=header))
+            self.assertEqual(e.exception.status_code, 401, header)
 
 
 # ── Forgot / reset / change password ──────────────────────────────────────────
@@ -474,7 +482,7 @@ class PasswordTest(AuthTestBase):
         self.assertTrue(doc["email_verified"])  # receiving the code proves the inbox
         self.assertEqual(self.sent[-1][0], "send_password_changed")
         with self.assertRaises(HTTPException):
-            run(deps.get_current_user(access_token=old_token))  # old sessions are out
+            current_user(old_token)  # old sessions are out
         self.login("ravi", "Brand-new-pass-9")
         with self.assertRaises(HTTPException):  # code can't be reused
             run(auth.reset_password(M.ResetPassword(identifier="ravi", code=code, password="Another-pass-77"),
@@ -497,14 +505,12 @@ class PasswordTest(AuthTestBase):
         old_token = create_access_token(u)
         with self.assertRaises(HTTPException):
             run(auth.change_password(M.ChangePassword(current_password="nope", new_password="Brand-new-pass-9"),
-                                     request(), Response(), BackgroundTasks(), current_user=u))
-        resp = Response()
-        run(auth.change_password(M.ChangePassword(current_password="Correct-horse-1", new_password="Brand-new-pass-9"),
-                                 request(), resp, BackgroundTasks(), current_user=u))
-        new_token = cookie_token(resp)
-        self.assertEqual(run(deps.get_current_user(access_token=new_token))["_id"], u["_id"])  # this device stays in
+                                     request(), BackgroundTasks(), current_user=u))
+        out = run(auth.change_password(M.ChangePassword(current_password="Correct-horse-1", new_password="Brand-new-pass-9"),
+                                       request(), BackgroundTasks(), current_user=u))
+        self.assertEqual(current_user(out["access_token"])["_id"], u["_id"])  # this device stays in
         with self.assertRaises(HTTPException):
-            run(deps.get_current_user(access_token=old_token))  # older tokens are out
+            current_user(old_token)  # older tokens are out
 
 
 # ── Profile ───────────────────────────────────────────────────────────────────
@@ -583,12 +589,12 @@ class DiagnosticsTest(AuthTestBase):
         from app.main import app
         u = self.add_user()
         client = TestClient(app)
-        client.cookies.set("access_token", create_access_token(u))
         out = io.StringIO()
         with redirect_stdout(out):
             r = client.post("/api/auth/me/email", json={"email": "new@example.com", "password": "nope"},
-                            headers={"Origin": "http://localhost:5173"})
-            client.get("/api/auth/me", cookies={"access_token": "bad"})
+                            headers={"Origin": "http://localhost:5173",
+                                     "Authorization": f"Bearer {create_access_token(u)}"})
+            client.get("/api/auth/me", headers={"Authorization": "Bearer bad"})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(r.json()["detail"], "Your password is incorrect")
         self.assertIn("auth POST /api/auth/me/email -> 400: Your password is incorrect", out.getvalue())
@@ -611,7 +617,7 @@ class MigrationTest(AuthTestBase):
 
 
 class ClientIpTest(unittest.TestCase):
-    """Rate limits key on the caller's IP, seen through the frontend's /api proxy (Pages Function)."""
+    """Rate limits key on the caller's IP, counted back past Render's own X-Forwarded-For entries."""
 
     def ip(self, forwarded, hops):
         from app.core import rate_limit
@@ -624,14 +630,12 @@ class ClientIpTest(unittest.TestCase):
         finally:
             settings.TRUSTED_PROXY_HOPS = old
 
-    def test_production_header_through_pages_function(self):
-        # Real header from the Render logs: Pages Function, then Render's three hops.
-        xff = "223.233.85.74,2a06:98c0:3600::103, 172.69.86.98, 10.198.213.136"
-        self.assertEqual(self.ip(xff, 3), "223.233.85.74")
+    def test_browser_calling_render_directly(self):
+        # Visitor, then Render's Cloudflare edge and internal load balancer.
+        xff = "223.233.85.74, 172.69.86.98, 10.198.213.136"
         self.assertEqual(self.ip(xff, settings.TRUSTED_PROXY_HOPS), "223.233.85.74")
 
-    def test_through_frontend_proxy_uses_the_client(self):
-        # The frontend proxy sends "client"; the backend's proxy appends the frontend proxy's address.
+    def test_one_hop(self):
         self.assertEqual(self.ip("203.0.113.7, 76.76.21.21", 1), "203.0.113.7")
 
     def test_forged_left_entries_are_ignored(self):

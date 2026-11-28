@@ -44,9 +44,9 @@ export default function LoginPage() {
   async function handleLogin(e) {
     e.preventDefault()
     setLoading(true)
-    // If the backend is asleep this waits (up to a few minutes) instead of
-    // failing; the "Connecting to the server…" banner explains the wait
-    // (api/serverWake.js), and the button stays on "Signing in…".
+    // If the backend is asleep, Render holds this request while it starts; the
+    // button stays on "Signing in…" and ServerStatusBanner explains the wait.
+    // The token in the answer is saved by api/client.js.
     try {
       const res = await login(identifier.trim(), password)
       finish(res.data.data)

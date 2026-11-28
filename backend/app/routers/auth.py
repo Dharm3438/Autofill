@@ -16,7 +16,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from email_validator import EmailUndeliverableError, validate_email
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -43,7 +43,7 @@ MAX_CODE_ATTEMPTS = 5                   # wrong guesses before a code is thrown 
 
 # (limit, window in seconds)
 # Only per account: a per-IP login limit once locked everyone out at the same
-# time (many users share an IP behind mobile CGNAT / the proxy chain).
+# time (many users share an IP behind mobile CGNAT).
 LOGIN_FAILS_PER_ACCOUNT = (20, 15 * 60)
 EMAILS_PER_ADDRESS = (5, 60 * 60)       # also protects the email provider's daily quota
 EMAILS_PER_IP = (20, 60 * 60)
@@ -80,24 +80,20 @@ def user_to_out(u: dict) -> dict:
     }
 
 
-def _set_auth_cookie(response: Response, user: dict) -> None:
-    # The frontend proxies /api through its own domain (Cloudflare Pages
-    # Function frontend/functions/api/[[path]].js),
-    # so browsers see this as a first-party cookie. Safari and private windows
-    # drop cookies from a *different* site, so never point the frontend at the
-    # API's own domain. SameSite=None keeps it working if someone does.
-    response.set_cookie(
-        key="access_token",
-        value=create_access_token(user),
-        httponly=True,
-        samesite="none",
-        secure=True,
-        max_age=settings.JWT_EXPIRE_HOURS * 3600,
-    )
-
-
-def _clear_auth_cookie(response: Response) -> None:
-    response.delete_cookie("access_token", samesite="none", secure=True)
+def _signed_in(user: dict, message: str | None = None, *, with_user: bool = True) -> dict:
+    """
+    Response for an action that signs this device in. The token goes in the body
+    and the frontend sends it back as "Authorization: Bearer <token>" (see
+    core/deps.py). No cookie: the frontend and the API are on different sites, and
+    Safari / incognito / Brave throw away cookies from another site, which kept
+    sending people back to the login screen.
+    """
+    out = {"success": True, "access_token": create_access_token(user)}
+    if with_user:
+        out["data"] = user_to_out(user)
+    if message:
+        out["message"] = message
+    return out
 
 
 def _identifier_query(identifier: str) -> dict:
@@ -224,7 +220,7 @@ async def _password_ok_or_count(db, user: dict, password: str, request: Request)
 # ── Login / logout / session ──────────────────────────────────────────────────
 
 @router.post("/login")
-async def login(body: UserLogin, request: Request, response: Response):
+async def login(body: UserLogin, request: Request):
     db = get_db()
     user = await db.users.find_one(_identifier_query(body.identifier))
     acct_key = f"login-fail:acct:{user['_id'] if user else body.identifier}"
@@ -245,21 +241,20 @@ async def login(body: UserLogin, request: Request, response: Response):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been disabled")
 
     await rate_limit.clear(db, acct_key)
-    _set_auth_cookie(response, user)
-    return {"success": True, "data": user_to_out(user)}
+    return _signed_in(user)
 
 
 @router.post("/logout")
-async def logout(response: Response):
-    _clear_auth_cookie(response)
+async def logout():
+    # The token lives in the browser; the frontend forgets it. (To make every
+    # existing token stop working, use /logout-all.)
     return {"success": True, "message": "Logged out"}
 
 
 @router.post("/logout-all")
-async def logout_all(response: Response, current_user=Depends(get_current_user)):
+async def logout_all(current_user=Depends(get_current_user)):
     """Sign out every device: tokens carrying the old version stop working."""
     await get_db().users.update_one({"_id": current_user["_id"]}, {"$inc": {"token_version": 1}})
-    _clear_auth_cookie(response)
     return {"success": True, "message": "Signed out on all devices"}
 
 
@@ -302,7 +297,7 @@ async def register(body: RegisterStart, request: Request):
 
 
 @router.post("/register/verify", status_code=status.HTTP_201_CREATED)
-async def register_verify(body: RegisterVerify, response: Response):
+async def register_verify(body: RegisterVerify):
     """Step 2 of 2. Creates the account only if the emailed code is right."""
     db = get_db()
     rec = await _consume_code(
@@ -333,8 +328,7 @@ async def register_verify(body: RegisterVerify, response: Response):
         raise HTTPException(status_code=409, detail="That email or username was just registered. Please sign up again.")
 
     user = await db.users.find_one({"_id": result.inserted_id})
-    _set_auth_cookie(response, user)
-    return {"success": True, "data": user_to_out(user), "message": "Account created"}
+    return _signed_in(user, "Account created")
 
 
 # ── Forgot / reset / change password ──────────────────────────────────────────
@@ -388,7 +382,7 @@ async def reset_password(body: ResetPassword, background: BackgroundTasks):
 
 
 @router.post("/change-password")
-async def change_password(body: ChangePassword, request: Request, response: Response,
+async def change_password(body: ChangePassword, request: Request,
                           background: BackgroundTasks, current_user=Depends(get_current_user)):
     db = get_db()
     if not await _password_ok_or_count(db, current_user, body.current_password, request):
@@ -404,9 +398,9 @@ async def change_password(body: ChangePassword, request: Request, response: Resp
          "$inc": {"token_version": 1}},
     )
     user = await db.users.find_one({"_id": current_user["_id"]})
-    _set_auth_cookie(response, user)  # keep THIS device signed in; all others are signed out
     background.add_task(_send_quietly, auth_emails.send_password_changed, user["email"], user["name"])
-    return {"success": True, "message": "Password changed. Other devices have been signed out."}
+    # A fresh token keeps THIS device signed in; all others are signed out.
+    return _signed_in(user, "Password changed. Other devices have been signed out.", with_user=False)
 
 
 # ── Profile: username and email ───────────────────────────────────────────────
