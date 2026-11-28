@@ -18,6 +18,11 @@ export const uploadDocument = (customerId, kind, file) => {
   })
 }
 
+// A short-lived direct R2 link to the uploaded PDF (free to download).
+export const getUploadLink = (customerId, kind) =>
+  api.get(`/uploads/${customerId}/${kind}/link`)
+
+// Server-streamed preview: the fallback if the link can't be had.
 export const previewUpload = (customerId, kind) =>
   api.get(`/uploads/${customerId}/${kind}`, { responseType: 'blob' })
 

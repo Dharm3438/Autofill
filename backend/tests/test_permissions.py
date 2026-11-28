@@ -174,6 +174,7 @@ PUBLIC_ROUTES = {
     ("POST", "/api/signing/verify-otp/{token}"),
     ("POST", "/api/signing/submit/{token}"),
     ("GET", "/api/signing/download/{token}"),
+    ("GET", "/api/signing/download/{token}/links"),
 }
 
 

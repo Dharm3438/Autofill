@@ -211,6 +211,12 @@ submitted_at, ip_address
 - `POST /api/documents/generate/{customer_id}`  — trigger doc generation
 - `GET  /api/documents/status/{customer_id}`    — check status
 - `GET  /api/documents/download/{customer_id}`  — zip download all docs
+- `GET  /api/documents/download/{customer_id}/links` — the same bundle as short-lived R2 links
+  (`{name, url, stamp_url?}`); the browser downloads them, puts the stamp page in front of the NP
+  Agreement (pdf-lib) and zips them (fflate) — `utils/directDownload.js`. The server-built `/zip`
+  is only the fallback. Upload previews (`/uploads/{id}/{kind}/link`) and the NP first page
+  (`.../np-first-page/link`) open R2 links too. Why: Render bills every byte the API sends out;
+  R2 downloads are free. Keep new file downloads on links, never streamed through the API.
 
 ### Signing
 - `POST /api/signing/send-link/{customer_id}`   — generate token + send email
@@ -219,6 +225,9 @@ submitted_at, ip_address
 - `POST /api/signing/verify-otp/{token}`        — verify OTP
 - `POST /api/signing/submit/{token}`            — submit signature + photos
 - `GET  /api/signing/status/{customer_id}`      — check signing status
+- `GET  /api/signing/download/{token}/links`   — signed bundle as R2 links (signing page zips them;
+  `/signing/download/{token}` is the fallback). With `R2_PRESIGNED_REVIEW` on, `verify` gives each
+  document a `url`, and the stamped NP Agreement `parts` (stamp + agreement links) to join in the page.
 
 ---
 

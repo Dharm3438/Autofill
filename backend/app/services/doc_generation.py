@@ -652,6 +652,54 @@ def list_customer_documents(prefix: str, objects: list[dict]) -> list[dict]:
     return sorted(docs, key=lambda d: d["name"])
 
 
+def bundle_plan(prefix: str, objects: list[dict]) -> tuple[list[tuple[str, str, bool]], str | None]:
+    """
+    What the delivered bundle holds, without downloading anything:
+    ([(output name, R2 key, needs the stamped first page in front)], stamp key
+    or None). Generated deliverables first (sorted by name), then the admin's
+    installation photo and DCR. Shared by the server-side zip and the
+    direct-from-R2 download links so both deliver exactly the same files.
+    """
+    keys = {o["key"] for o in objects}
+    plan: list[tuple[str, str, bool]] = []
+    for o in sorted(objects, key=lambda o: o["name"]):
+        if not _is_deliverable(prefix, o):
+            continue
+        plan.append((o["name"], o["key"], o["name"].endswith(NP_AGREEMENT_SUFFIX)))
+    for upload_key, out_name in ((prefix + INSTALLATION_UPLOAD_KEY, INSTALLATION_OUT_NAME),
+                                 (prefix + DCR_UPLOAD_KEY, DCR_OUT_NAME)):
+        if upload_key in keys:
+            plan.append((out_name, upload_key, False))
+    stamp_key = prefix + NP_STAMP_UPLOAD_KEY
+    return plan, (stamp_key if stamp_key in keys else None)
+
+
+# Download links only need to outlive the downloads started right away.
+DOWNLOAD_LINK_SECONDS = 600
+
+
+async def bundle_links(prefix: str) -> list[dict]:
+    """
+    The delivered bundle as short-lived direct R2 links, for the browser to
+    download and zip itself (R2 downloads are free; streaming them through
+    Render is billed). Each item: {name, url} plus `stamp_url` when the
+    browser must put the stamped first page in front of that PDF (the NP
+    Agreement), exactly as `build_customer_bundle` does on the server.
+    """
+    loop = asyncio.get_event_loop()
+    objects = await loop.run_in_executor(None, storage.list_objects, prefix)
+    plan, stamp_key = bundle_plan(prefix, objects)
+    sign = lambda key: storage.presigned_url(key, DOWNLOAD_LINK_SECONDS)  # noqa: E731
+    stamp_url = sign(stamp_key) if stamp_key else None
+    links = []
+    for out_name, r2_key, merge in plan:
+        item = {"name": out_name, "url": sign(r2_key)}
+        if merge and stamp_url:
+            item["stamp_url"] = stamp_url
+        links.append(item)
+    return links
+
+
 async def build_customer_bundle(prefix: str) -> list[tuple[str, bytes]]:
     """
     Assemble the final set of PDFs delivered to the customer:
@@ -662,24 +710,11 @@ async def build_customer_bundle(prefix: str) -> list[tuple[str, bytes]]:
     """
     loop = asyncio.get_event_loop()
     objects = await loop.run_in_executor(None, storage.list_objects, prefix)
-    keys = {o["key"] for o in objects}
+    plan, stamp_key = bundle_plan(prefix, objects)
 
-    stamp_key = prefix + NP_STAMP_UPLOAD_KEY
     stamp_bytes = None
-    if stamp_key in keys:
+    if stamp_key:
         stamp_bytes = await loop.run_in_executor(None, storage.download_bytes, stamp_key)
-
-    # Plan the bundle first — (output name, R2 key, needs stamp merge) — in a
-    # stable order, then download every file concurrently and assemble.
-    plan: list[tuple[str, str, bool]] = []
-    for o in sorted(objects, key=lambda o: o["name"]):
-        if not _is_deliverable(prefix, o):
-            continue
-        plan.append((o["name"], o["key"], o["name"].endswith(NP_AGREEMENT_SUFFIX)))
-    for upload_key, out_name in ((prefix + INSTALLATION_UPLOAD_KEY, INSTALLATION_OUT_NAME),
-                                 (prefix + DCR_UPLOAD_KEY, DCR_OUT_NAME)):
-        if upload_key in keys:
-            plan.append((out_name, upload_key, False))
 
     async def _fetch(out_name: str, r2_key: str, merge: bool) -> tuple[str, bytes]:
         data = await loop.run_in_executor(None, storage.download_bytes, r2_key)

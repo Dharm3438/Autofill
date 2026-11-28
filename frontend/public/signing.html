@@ -1573,6 +1573,78 @@
     }
   }
 
+  // ── Documents straight from R2 ─────────────────────────
+  // R2 downloads are free; the API server's are billed per byte. The server
+  // hands out short-lived links, and this page fetches the files, puts the
+  // stamped first page in front of the NP Agreement, and zips them itself.
+  // pdf-lib and fflate load only when needed (pinned + integrity-checked).
+  const LIBS = {
+    pdfLib: {
+      src: 'https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js',
+      integrity: 'sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI',
+      global: 'PDFLib',
+    },
+    fflate: {
+      src: 'https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js',
+      integrity: 'sha384-DT0Ls0mO7JmjTnT+oBuMhEJzYJO1zUqzuuMXNdnOmOQRIpN2BgSjvBV/j50NngIT',
+      global: 'fflate',
+    },
+  };
+  const libLoads = {};
+  function loadLib(name) {
+    const lib = LIBS[name];
+    if (window[lib.global]) return Promise.resolve(window[lib.global]);
+    if (!libLoads[name]) {
+      libLoads[name] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = lib.src;
+        s.integrity = lib.integrity;
+        s.crossOrigin = 'anonymous';
+        s.onload = () => window[lib.global] ? resolve(window[lib.global]) : reject(new Error(name + ' did not load'));
+        s.onerror = () => { delete libLoads[name]; reject(new Error(name + ' failed to load')); };
+        document.head.appendChild(s);
+      });
+    }
+    return libLoads[name];
+  }
+
+  async function fetchBytes(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Storage answered ' + res.status);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  // The stamped first page(s), then the agreement — as the server merges them.
+  async function stampInFront(stamp, base) {
+    const { PDFDocument } = await loadLib('pdfLib');
+    const out = await PDFDocument.create();
+    for (const bytes of [stamp, base]) {
+      const src = await PDFDocument.load(bytes, { ignoreEncryption: true });
+      const pages = await out.copyPages(src, src.getPageIndices());
+      pages.forEach(p => out.addPage(p));
+    }
+    return out.save();
+  }
+
+  // files: [{name, url, stamp_url?}] from /signing/download/{token}/links.
+  async function zipFromLinks(files) {
+    const { zipSync } = await loadLib('fflate');
+    const stamps = {};
+    const entries = await Promise.all(files.map(async f => {
+      let data = await fetchBytes(f.url);
+      if (f.stamp_url) {
+        stamps[f.stamp_url] = stamps[f.stamp_url] || fetchBytes(f.stamp_url);
+        data = await stampInFront(await stamps[f.stamp_url], data);
+      }
+      return [f.name, data];
+    }));
+    // PDFs are already compressed: store them as they are, like the server zip.
+    return new Blob([zipSync(Object.fromEntries(entries), { level: 0 })], { type: 'application/zip' });
+  }
+
+  // Merged NP Agreement per document key, so reopening it doesn't refetch.
+  const mergedDocs = {};
+
   // PDF.js worker (renders document pages to canvas — reliable on mobile and
   // lets us detect scroll-to-end for the review gate).
   if (window.pdfjsLib) {
@@ -1586,7 +1658,7 @@
     signatureDataURL: null,
     aadhar:     { front: null, back: null },   // cropped data URLs (submitted)
     aadharOrig: { front: null, back: null },   // original uploads (for re-fit)
-    documents: [],                             // [{key, name, url?}] from the backend (url = direct R2 link)
+    documents: [],                             // [{key, name, url?, parts?}] from the backend (url = direct R2 link; parts = NP Agreement as stamp + agreement links)
     viewedDocs: new Set(),                     // keys scrolled through to the end
     reviewedDocs: new Set(),                   // keys the customer ticked as read
     sessionId: Math.random().toString(36).substr(2,9).toUpperCase(),
@@ -2365,8 +2437,25 @@
     try {
       // Prefer a direct (presigned) R2 URL from the backend so PDF.js loads the
       // file straight from R2; otherwise stream it through the backend endpoint.
-      const url = doc.url || `${API_BASE}/signing/document/${TOKEN}/${key}`;
-      const pdf = await pdfjsLib.getDocument({ url }).promise;
+      // `parts` = the NP Agreement as two R2 links, joined here; the server's
+      // merged copy (the streaming endpoint) is the fallback.
+      const streamUrl = `${API_BASE}/signing/document/${TOKEN}/${key}`;
+      let pdf;
+      if (doc.parts) {
+        try {
+          if (!mergedDocs[key]) {
+            const [stamp, base] = await Promise.all([fetchBytes(doc.parts.stamp_url), fetchBytes(doc.parts.url)]);
+            mergedDocs[key] = await stampInFront(stamp, base);
+          }
+          // PDF.js takes ownership of the bytes it's given: hand it a copy.
+          pdf = await pdfjsLib.getDocument({ data: mergedDocs[key].slice() }).promise;
+        } catch (e) {
+          console.warn('Direct NP Agreement failed; using the server copy.', e);
+          pdf = await pdfjsLib.getDocument({ url: streamUrl }).promise;
+        }
+      } else {
+        pdf = await pdfjsLib.getDocument({ url: doc.url || streamUrl }).promise;
+      }
       pdfViewer.pdf = pdf;
       body.innerHTML = '';
 
@@ -2526,13 +2615,27 @@
     const original = btn ? btn.innerHTML : '';
     if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing...'; }
     try {
-      const res = await apiFetch(`${API_BASE}/signing/download/${TOKEN}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
+      // Links to the signed files on R2, zipped here. The server-built zip is the
+      // fallback (also while a server without /links is still deployed).
+      const res = await apiFetch(`${API_BASE}/signing/download/${TOKEN}/links`);
+      const d = await res.json().catch(() => ({}));
+      let blob = null;
+      if (res.ok) {
+        try { blob = await zipFromLinks(d.data.files); }
+        catch (e) { console.warn('Direct download failed; using the server zip.', e); }
+      } else if (!(res.status === 404 && d.detail === 'Not Found')) {
         alert(d.detail || 'Your documents are still being finalized. Please try again in a few seconds.');
         return;
       }
-      const blob = await res.blob();
+      if (!blob) {
+        const legacy = await apiFetch(`${API_BASE}/signing/download/${TOKEN}`);
+        if (!legacy.ok) {
+          const ld = await legacy.json().catch(() => ({}));
+          alert(ld.detail || 'Your documents are still being finalized. Please try again in a few seconds.');
+          return;
+        }
+        blob = await legacy.blob();
+      }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

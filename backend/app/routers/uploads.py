@@ -22,6 +22,7 @@ from ..core.database import get_db
 from ..core.permissions import P, require, parse_object_id
 from ..services import storage
 from ..services.doc_generation import (
+    DOWNLOAD_LINK_SECONDS,
     INSTALLATION_UPLOAD_KEY,
     DCR_UPLOAD_KEY,
     NP_STAMP_UPLOAD_KEY,
@@ -146,6 +147,20 @@ async def preview_upload(customer_id: str, kind: str, _=Depends(require(P.UPLOAD
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{kind}.pdf"'},
     )
+
+
+@router.get("/{customer_id}/{kind}/link")
+async def preview_upload_link(customer_id: str, kind: str, _=Depends(require(P.UPLOADS_MANAGE))):
+    """A short-lived direct R2 link to an uploaded document, opened in a new
+    tab, so the file doesn't pass through this server (R2 downloads are free)."""
+    if kind not in UPLOAD_KINDS:
+        raise HTTPException(status_code=404, detail="Unknown upload type")
+    key_suffix, _flag = UPLOAD_KINDS[kind]
+    key = storage.customer_prefix(customer_id) + key_suffix
+    if not await asyncio.to_thread(storage.object_exists, key):
+        raise HTTPException(status_code=404, detail="Not uploaded yet")
+    url = storage.presigned_url(key, DOWNLOAD_LINK_SECONDS, filename=f"{kind}.pdf", content_type="application/pdf")
+    return {"success": True, "data": {"url": url}}
 
 
 @router.delete("/{customer_id}/{kind}")
