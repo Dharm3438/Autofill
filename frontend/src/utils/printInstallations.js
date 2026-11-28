@@ -4,6 +4,11 @@
 // The caller passes the already-filtered & sorted rows (exactly what the user
 // sees in the UI) plus a description of the active filters, so the printout
 // matches the on-screen list one-to-one.
+//
+// The report does not open the print dialog by itself: the window is opened and
+// written by the Installations page, so the browser runs both in one process,
+// and an open print dialog froze that page too (Print stuck on its spinner).
+// The report has its own Print button instead.
 
 // ₹ with Indian thousands grouping, no decimals (e.g. ₹50,000).
 const fmtINR = (n) =>
@@ -133,7 +138,18 @@ export function printInstallations(rows, opts = {}) {
   tfoot td { padding: 8px; font-weight: 700; border-top: 2px solid #1a3a2a; }
   tfoot td.amt.received { color: #1f7a4d; }
   tfoot td.amt.due { color: #b45309; }
+  .toolbar {
+    position: sticky; top: 0; z-index: 1; display: flex; justify-content: flex-end; align-items: center;
+    gap: 12px; margin: -24px -24px 16px; padding: 10px 24px; background: #fff; border-bottom: 1px solid #e4ebe7;
+  }
+  .toolbar span { font-size: 11px; color: #5a6b62; }
+  .toolbar button {
+    font: inherit; font-size: 13px; font-weight: 600; color: #fff; background: #1a3a2a;
+    border: 0; border-radius: 8px; padding: 8px 18px; cursor: pointer;
+  }
+  .toolbar button:hover { background: #2d5a3d; }
   @media print {
+    .toolbar { display: none; }
     body { margin: 0; }
     thead { display: table-header-group; }
     tr { page-break-inside: avoid; }
@@ -141,6 +157,11 @@ export function printInstallations(rows, opts = {}) {
 </style>
 </head>
 <body>
+  <div class="toolbar">
+    <span>Print, or choose “Save as PDF” in the print dialog</span>
+    <button type="button" onclick="window.print()">Print</button>
+  </div>
+
   <div class="head">
     <div>
       <h1>Installation Payment Report</h1>
@@ -186,13 +207,6 @@ export function printInstallations(rows, opts = {}) {
         : ''
     }
   </table>
-
-  <script>
-    window.onload = function () {
-      window.focus();
-      window.print();
-    };
-  </script>
 </body>
 </html>`
 
