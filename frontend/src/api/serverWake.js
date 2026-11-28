@@ -63,6 +63,12 @@ function pokeBackend() {
   fetch(directWakeUrl, { mode: 'no-cors', credentials: 'omit', cache: 'no-store' }).catch(() => {})
 }
 
+// Render's own address, to open in a new tab from the banner's "Wake the
+// server" button — a real page visit, which has always woken it.
+export function serverWakePageUrl() {
+  return directWakeUrl
+}
+
 export function getServerStatus() {
   return { status, since: wakingSince }
 }

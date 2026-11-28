@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Loader2, WifiOff, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { getServerStatus, subscribeServerStatus } from '../api/serverWake'
+import { getServerStatus, serverWakePageUrl, subscribeServerStatus } from '../api/serverWake'
 
 function useServerStatus() {
   const [state, setState] = useState(getServerStatus)
@@ -76,6 +76,16 @@ export function ServerStatusBanner() {
             {title} <span className="font-normal tabular-nums text-amber-700 dark:text-amber-300">{clock(elapsed)}</span>
           </p>
           <p className="text-xs text-amber-800 dark:text-amber-200/90 mt-0.5">{detail}</p>
+          {online && elapsed >= 40 && serverWakePageUrl() && (
+            <p className="text-xs text-amber-800 dark:text-amber-200/90 mt-2">
+              Taking long?{' '}
+              <a href={serverWakePageUrl()} target="_blank" rel="noopener noreferrer"
+                className="font-semibold underline text-amber-900 dark:text-amber-100">
+                Wake the server
+              </a>{' '}
+              — it opens in a new tab; come back here once it shows “ok”.
+            </p>
+          )}
         </div>
       </div>
     </div>

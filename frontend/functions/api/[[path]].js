@@ -72,6 +72,7 @@ export async function onRequest({ request, env }) {
   let wait = 2000
   let attempt = 0
   let response
+  let lastUpstream = null // what Render last answered, for the give-up reply
   for (;;) {
     attempt += 1
     let failure
@@ -82,6 +83,7 @@ export async function onRequest({ request, env }) {
       const via = ['x-render-routing', 'server', 'cf-ray']
         .map((h) => response.headers.get(h) && `${h}=${response.headers.get(h)}`).filter(Boolean).join(' ')
       failure = `backend answered ${response.status}${via ? ` (${via})` : ''}`
+      lastUpstream = { status: response.status, via }
     } catch (err) {
       response = undefined
       failure = `fetch failed: ${err}`
@@ -90,7 +92,10 @@ export async function onRequest({ request, env }) {
     console.error(`api proxy: ${request.method} ${incoming.pathname} attempt ${attempt} -> ${failure}`)
     // Honour the edge's Retry-After (seconds) when it gives one, within reason.
     const retryAfter = Number(response?.headers.get('retry-after'))
-    const pause = retryAfter > 0 ? Math.min(Math.max(retryAfter * 1000, wait), MAX_RETRY_AFTER_MS) : wait
+    // A 429 means "slow down": re-asking every couple of seconds can keep us
+    // throttled, so wait at least 5s after one.
+    const floor = response?.status === 429 ? Math.max(wait, 5_000) : wait
+    const pause = retryAfter > 0 ? Math.min(Math.max(retryAfter * 1000, floor), MAX_RETRY_AFTER_MS) : floor
     if (!canRetry || Date.now() + pause > deadline) break
     await sleep(pause)
     wait = Math.min(wait * 1.5, 10_000)
@@ -101,7 +106,9 @@ export async function onRequest({ request, env }) {
     // app knows the server is still waking (it then keeps waiting and retries
     // by itself; Idempotency-Key keeps a retried write from running twice).
     return Response.json(
-      { detail: 'The server is still starting up. Please wait a moment.', code: 'server_waking' },
+      // `upstream` says what Render last answered (status + its routing headers):
+      // visible in the browser's network tab, for diagnosing a server that won't wake.
+      { detail: 'The server is still starting up. Please wait a moment.', code: 'server_waking', upstream: lastUpstream },
       { status: 503, headers: { 'x-server-waking': '1', 'retry-after': '5' } },
     )
   }
